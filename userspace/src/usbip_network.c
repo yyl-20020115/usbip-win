@@ -64,7 +64,7 @@ void pack_usb_interface(int pack, struct usbip_usb_interface *udev)
 }
 
 
-static ssize_t usbip_xmit(int sockfd, void *buff, size_t bufflen, int sending)
+static ssize_t usbip_xmit(SOCKET sockfd, void *buff, size_t bufflen, int sending)
 {
 	ssize_t total = 0;
 
@@ -106,17 +106,17 @@ static ssize_t usbip_xmit(int sockfd, void *buff, size_t bufflen, int sending)
 	return total;
 }
 
-ssize_t usbip_recv(int sockfd, void *buff, size_t bufflen)
+ssize_t usbip_recv(SOCKET sockfd, void *buff, size_t bufflen)
 {
 	return usbip_xmit(sockfd, buff, bufflen, 0);
 }
 
-ssize_t usbip_send(int sockfd, void *buff, size_t bufflen)
+ssize_t usbip_send(SOCKET sockfd, void *buff, size_t bufflen)
 {
 	return usbip_xmit(sockfd, buff, bufflen, 1);
 }
 
-int usbip_send_op_common(int sockfd, uint32_t code, uint32_t status)
+int usbip_send_op_common(SOCKET sockfd, uint32_t code, uint32_t status)
 {
 	int ret;
 	struct op_common op_common;
@@ -138,7 +138,7 @@ int usbip_send_op_common(int sockfd, uint32_t code, uint32_t status)
 	return 0;
 }
 
-int usbip_recv_op_common(int sockfd, uint16_t *code)
+int usbip_recv_op_common(SOCKET sockfd, uint16_t *code)
 {
 	int ret;
 	struct op_common op_common;
@@ -181,7 +181,7 @@ err:
 }
 
 
-int usbip_set_reuseaddr(int sockfd)
+int usbip_set_reuseaddr(SOCKET sockfd)
 {
 	const int val = 1;
 	int ret;
@@ -193,7 +193,7 @@ int usbip_set_reuseaddr(int sockfd)
 	return ret;
 }
 
-int usbip_set_nodelay(int sockfd)
+int usbip_set_nodelay(SOCKET sockfd)
 {
 	const int val = 1;
 	int ret;
@@ -205,7 +205,7 @@ int usbip_set_nodelay(int sockfd)
 	return ret;
 }
 
-int usbip_set_keepalive(int sockfd)
+int usbip_set_keepalive(SOCKET sockfd)
 {
 	const int val = 1;
 	int ret;

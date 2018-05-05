@@ -186,13 +186,13 @@ void pack_uint16_t(int pack, uint16_t *num);
 void pack_usb_device(int pack, struct usbip_usb_device *udev);
 void pack_usb_interface(int pack, struct usbip_usb_interface *uinf);
 
-ssize_t usbip_recv(int sockfd, void *buff, size_t bufflen);
-ssize_t usbip_send(int sockfd, void *buff, size_t bufflen);
-int usbip_send_op_common(int sockfd, uint32_t code, uint32_t status);
-int usbip_recv_op_common(int sockfd, uint16_t *code);
-int usbip_set_reuseaddr(int sockfd);
-int usbip_set_nodelay(int sockfd);
-int usbip_set_keepalive(int sockfd);
+ssize_t usbip_recv(SOCKET sockfd, void *buff, size_t bufflen);
+ssize_t usbip_send(SOCKET sockfd, void *buff, size_t bufflen);
+int usbip_send_op_common(SOCKET sockfd, uint32_t code, uint32_t status);
+int usbip_recv_op_common(SOCKET sockfd, uint16_t *code);
+int usbip_set_reuseaddr(SOCKET sockfd);
+int usbip_set_nodelay(SOCKET sockfd);
+int usbip_set_keepalive(SOCKET sockfd);
 
 int usbip_net_tcp_connect(char *hostname, char *port);
 

@@ -707,7 +707,7 @@ void usbip_vbus_forward(SOCKET sockfd, HANDLE devfd)
 }
 
 
-static int import_device(int sockfd, struct usbip_usb_device *udev,
+static int import_device(SOCKET sockfd, struct usbip_usb_device *udev,
 		struct usbip_usb_interface *uinf0,
 		HANDLE *devfd)
 {
@@ -742,7 +742,7 @@ static int import_device(int sockfd, struct usbip_usb_device *udev,
 	return port;
 }
 
-static int query_import_device(int sockfd, char *busid,
+static int query_import_device(SOCKET sockfd, char *busid,
 		struct usbip_usb_interface *uinf0, HANDLE * fd)
 {
 	int ret;
