@@ -50,7 +50,7 @@ Routine Description:
         // required to allow others to access this device.
         // Power up the device.
         //
-        DeviceData->DevicePowerState = PowerDeviceD0;
+        DeviceData->common.DevicePowerState = PowerDeviceD0;
         SET_NEW_PNP_STATE(DeviceData, Started);
 	status = IoRegisterDeviceInterface (
                 DeviceObject,
@@ -103,7 +103,7 @@ Routine Description:
         // cancel-stop.
         //
 
-        if (StopPending == DeviceData->DevicePnPState)
+        if (StopPending == DeviceData->common.DevicePnPState)
         {
             //
             // We did receive a query-stop, so restore.
@@ -146,7 +146,7 @@ Routine Description:
         // subsequent cancel-remove.
         //
 
-        if (RemovePending == DeviceData->DevicePnPState)
+        if (RemovePending == DeviceData->common.DevicePnPState)
         {
             //
             // We did receive a query-remove, so restore.
@@ -237,7 +237,7 @@ Routine Description:
 
         // Query the IDs of the device
 
-        Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
                 ("\tQueryId Type: %d %s\n",
 		 IrpStack->Parameters.QueryId.IdType,
                 DbgDeviceIDString(IrpStack->Parameters.QueryId.IdType)));
@@ -248,7 +248,7 @@ Routine Description:
 
     case IRP_MN_QUERY_DEVICE_RELATIONS:
 
-        Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
             ("\tQueryDeviceRelation Type: %s\n",DbgDeviceRelationString(\
                     IrpStack->Parameters.QueryDeviceRelations.Type)));
 
@@ -437,7 +437,7 @@ Return Value:
         FDO_FROM_PDO(DeviceData)->NextLowerDriver, &parentCapabilities);
     if (!NT_SUCCESS(status)) {
 
-        Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
             ("\tQueryDeviceCaps failed\n"));
         return status;
 
@@ -597,7 +597,6 @@ Return Value:
     PWCHAR                  buffer;
     ULONG                   length;
     NTSTATUS                status = STATUS_SUCCESS;
-    ULONG_PTR               result;
 
     PAGED_CODE ();
 
@@ -638,7 +637,7 @@ Return Value:
            break;
         }
         RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"%02d", DeviceData->SerialNo);
-        Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_INFO,
+        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_INFO,
                      ("\tInstanceID: %ws\n", buffer));
         Irp->IoStatus.Information = (ULONG_PTR) buffer;
         break;
@@ -759,7 +758,7 @@ Return Value:
 #endif
                 RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"USB Device Over IP");
 
-                Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+                Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
                     ("\tDeviceTextDescription :%ws\n", buffer));
 
                 Irp->IoStatus.Information = (ULONG_PTR) buffer;
@@ -782,7 +781,7 @@ Return Value:
 
                 RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"on USB/IP Enumerator");
 
-                Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+                Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
                     ("\tDeviceTextLocationInformation :%ws\n", buffer));
 
                 Irp->IoStatus.Information = (ULONG_PTR) buffer;
@@ -791,7 +790,7 @@ Return Value:
 	break;
 
     default:
-        Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,
+        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
             ("\tWarning Query what? %d\n",
 		stack->Parameters.QueryDeviceText.DeviceTextType));
 
@@ -835,6 +834,8 @@ Return Value:
     ULONG  resourceListSize;
 #endif
     PAGED_CODE ();
+
+	UNREFERENCED_PARAMETER(DeviceData);
 
     return Irp->IoStatus.Status;
 
@@ -918,6 +919,9 @@ Return Value:
     NTSTATUS status;
 
     PAGED_CODE ();
+
+	UNREFERENCED_PARAMETER(DeviceData);
+	UNREFERENCED_PARAMETER(Irp);
 
     //
     // Reporting a I/O port resource may lead to code 12
@@ -1061,8 +1065,8 @@ Return Value:
         //
 
         deviceRelations->Count = 1;
-        deviceRelations->Objects[0] = DeviceData->Self;
-        ObReferenceObject(DeviceData->Self);
+        deviceRelations->Objects[0] = DeviceData->common.Self;
+        ObReferenceObject(DeviceData->common.Self);
 
         status = STATUS_SUCCESS;
         Irp->IoStatus.Information = (ULONG_PTR) deviceRelations;
@@ -1105,6 +1109,8 @@ Return Value:
     PPNP_BUS_INFORMATION busInfo;
 
     PAGED_CODE ();
+
+	UNREFERENCED_PARAMETER(DeviceData);
 
     busInfo = ExAllocatePoolWithTag (PagedPool, sizeof(PNP_BUS_INFORMATION),
                                         BUSENUM_POOL_TAG);
@@ -1150,6 +1156,12 @@ NTSTATUS USB_BUSIFFN QueryBusInformation(
     IN OUT PULONG BusInformationBufferLength,
     OUT PULONG BusInformationActualLength
     ){
+	UNREFERENCED_PARAMETER(BusContext);
+	UNREFERENCED_PARAMETER(Level);
+	UNREFERENCED_PARAMETER(BusInformationBuffer);
+	UNREFERENCED_PARAMETER(BusInformationBufferLength);
+	UNREFERENCED_PARAMETER(BusInformationActualLength);
+
 	KdPrint(("QueryBusInformation called\n"));
 	return STATUS_UNSUCCESSFUL;
 }
@@ -1158,6 +1170,9 @@ NTSTATUS USB_BUSIFFN SubmitIsoOutUrb (
         IN PVOID context,
         IN PURB urb
 ){
+	UNREFERENCED_PARAMETER(context);
+	UNREFERENCED_PARAMETER(urb);
+
 	KdPrint(("SubmitIsoOutUrb called\n"));
 	return STATUS_UNSUCCESSFUL;
 }
@@ -1167,6 +1182,9 @@ NTSTATUS USB_BUSIFFN QueryBusTime(
     IN OUT PULONG currentusbframe
 )
 {
+	UNREFERENCED_PARAMETER(context);
+	UNREFERENCED_PARAMETER(currentusbframe);
+
 	KdPrint(("QueryBusTime called\n"));
 	return STATUS_UNSUCCESSFUL;
 }
@@ -1176,6 +1194,8 @@ VOID USB_BUSIFFN GetUSBDIVersion (
         IN OUT PUSBD_VERSION_INFORMATION inf,
         IN OUT PULONG HcdCapabilities
 ){
+	UNREFERENCED_PARAMETER(context);
+
 	KdPrint(("GetUSBDIVersion called\n"));
 	*HcdCapabilities = 0;
 	inf->USBDI_Version=0x500; /* Windows XP */
@@ -1275,7 +1295,7 @@ Return Value:
     // to PDO's device extension. You can store some kind
     // of signature in the PDO for this purpose
     //
-    Bus_KdPrint ((PPDO_DEVICE_DATA)Context, BUS_DBG_PNP_TRACE,
+    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
                                     ("GetCrispinessLevel\n"));
     *Level = 10;
     return TRUE;
@@ -1303,7 +1323,9 @@ Return Value:
 
 --*/
 {
-    Bus_KdPrint ((PPDO_DEVICE_DATA)Context, BUS_DBG_PNP_TRACE,
+	UNREFERENCED_PARAMETER(Level);
+
+    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
                                     ("SetCrispinessLevel\n"));
     return TRUE;
 }
@@ -1328,7 +1350,7 @@ Return Value:
 
 --*/
 {
-    Bus_KdPrint ((PPDO_DEVICE_DATA)Context, BUS_DBG_PNP_TRACE,
+    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
                                     ("IsSafetyLockEnabled\n"));
     return TRUE;
 }
@@ -1414,8 +1436,8 @@ Return Value:
     RtlZeroMemory( DeviceCapabilities, sizeof(DEVICE_CAPABILITIES) );
     DeviceCapabilities->Size = sizeof(DEVICE_CAPABILITIES);
     DeviceCapabilities->Version = 1;
-    DeviceCapabilities->Address = -1;
-    DeviceCapabilities->UINumber = -1;
+    DeviceCapabilities->Address = (ULONG)-1;
+    DeviceCapabilities->UINumber = (ULONG)-1;
 
     //
     // Initialize the event

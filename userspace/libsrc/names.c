@@ -301,15 +301,17 @@ static int new_vendor(const char *name, u_int16_t vendorid)
 {
 	struct vendor *v;
 	unsigned int h = hashnum(vendorid);
+	size_t	namelen;
 
 	v = vendors[h];
 	for (; v; v = v->next)
 		if (v->vendorid == vendorid)
 			return -1;
-	v = my_malloc(sizeof(struct vendor) + strlen(name));
+	namelen = strlen(name);
+	v = my_malloc(sizeof(struct vendor) + namelen);
 	if (!v)
 		return -1;
-	strcpy(v->name, name);
+	strcpy_s(v->name, namelen + 1, name);
 	v->vendorid = vendorid;
 	v->next = vendors[h];
 	vendors[h] = v;
@@ -320,15 +322,17 @@ static int new_product(const char *name, u_int16_t vendorid, u_int16_t productid
 {
 	struct product *p;
 	unsigned int h = hashnum((vendorid << 16) | productid);
+	size_t	namelen;
 
 	p = products[h];
 	for (; p; p = p->next)
 		if (p->vendorid == vendorid && p->productid == productid)
 			return -1;
-	p = my_malloc(sizeof(struct product) + strlen(name));
+	namelen = strlen(name);
+	p = my_malloc(sizeof(struct product) + namelen);
 	if (!p)
 		return -1;
-	strcpy(p->name, name);
+	strcpy_s(p->name, namelen + 1, name);
 	p->vendorid = vendorid;
 	p->productid = productid;
 	p->next = products[h];
@@ -340,15 +344,17 @@ static int new_class(const char *name, u_int8_t classid)
 {
 	struct class *c;
 	unsigned int h = hashnum(classid);
+	size_t	namelen;
 
 	c = classes[h];
 	for (; c; c = c->next)
 		if (c->classid == classid)
 			return -1;
-	c = my_malloc(sizeof(struct class) + strlen(name));
+	namelen = strlen(name);
+	c = my_malloc(sizeof(struct class) + namelen);
 	if (!c)
 		return -1;
-	strcpy(c->name, name);
+	strcpy_s(c->name, namelen + 1, name);
 	c->classid = classid;
 	c->next = classes[h];
 	classes[h] = c;
@@ -359,15 +365,17 @@ static int new_subclass(const char *name, u_int8_t classid, u_int8_t subclassid)
 {
 	struct subclass *s;
 	unsigned int h = hashnum((classid << 8) | subclassid);
+	size_t	namelen;
 
 	s = subclasses[h];
 	for (; s; s = s->next)
 		if (s->classid == classid && s->subclassid == subclassid)
 			return -1;
-	s = my_malloc(sizeof(struct subclass) + strlen(name));
+	namelen = strlen(name);
+	s = my_malloc(sizeof(struct subclass) + namelen);
 	if (!s)
 		return -1;
-	strcpy(s->name, name);
+	strcpy_s(s->name, namelen + 1, name);
 	s->classid = classid;
 	s->subclassid = subclassid;
 	s->next = subclasses[h];
@@ -379,15 +387,17 @@ static int new_protocol(const char *name, u_int8_t classid, u_int8_t subclassid,
 {
 	struct protocol *p;
 	unsigned int h = hashnum((classid << 16) | (subclassid << 8) | protocolid);
+	size_t	namelen;
 
 	p = protocols[h];
 	for (; p; p = p->next)
 		if (p->classid == classid && p->subclassid == subclassid && p->protocolid == protocolid)
 			return -1;
-	p = my_malloc(sizeof(struct protocol) + strlen(name));
+	namelen = strlen(name);
+	p = my_malloc(sizeof(struct protocol) + namelen);
 	if (!p)
 		return -1;
-	strcpy(p->name, name);
+	strcpy_s(p->name, namelen + 1, name);
 	p->classid = classid;
 	p->subclassid = subclassid;
 	p->protocolid = protocolid;
@@ -400,15 +410,17 @@ static int new_audioterminal(const char *name, u_int16_t termt)
 {
 	struct audioterminal *at;
 	unsigned int h = hashnum(termt);
+	size_t	namelen;
 
 	at = audioterminals[h];
 	for (; at; at = at->next)
 		if (at->termt == termt)
 			return -1;
-	at = my_malloc(sizeof(struct audioterminal) + strlen(name));
+	namelen = strlen(name);
+	at = my_malloc(sizeof(struct audioterminal) + namelen);
 	if (!at)
 		return -1;
-	strcpy(at->name, name);
+	strcpy_s(at->name, namelen + 1, name);
 	at->termt = termt;
 	at->next = audioterminals[h];
 	audioterminals[h] = at;
@@ -417,20 +429,22 @@ static int new_audioterminal(const char *name, u_int16_t termt)
 
 static int new_genericstrtable(struct genericstrtable *t[HASHSZ], const char *name, unsigned int index)
 {
-        struct genericstrtable *g;
+	struct genericstrtable *g;
 	unsigned int h = hashnum(index);
+	size_t	namelen;
 
-        for (g = t[h]; g; g = g->next)
-                if (g->num == index)
-                        return -1;
-        g = my_malloc(sizeof(struct genericstrtable) + strlen(name));
-        if (!g)
-                return -1;
-        strcpy(g->name, name);
-        g->num = index;
-        g->next = t[h];
-        t[h] = g;
-        return 0;
+	for (g = t[h]; g; g = g->next)
+		if (g->num == index)
+			return -1;
+	namelen = strlen(name);
+	g = my_malloc(sizeof(struct genericstrtable) + namelen);
+	if (!g)
+		return -1;
+	strcpy_s(g->name, namelen + 1, name);
+	g->num = index;
+	g->next = t[h];
+	t[h] = g;
+	return 0;
 }
 
 static int new_hid(const char *name, u_int8_t hidd)
@@ -791,8 +805,10 @@ static void parse(FILE *f)
 int names_init(char *n)
 {
 	FILE *f;
+	int	errno;
 
-	if (!(f = fopen(n, "r"))) {
+	errno = fopen_s(&f, n, "r");
+	if (errno != 0) {
 		return errno;
 	}
 	parse(f);

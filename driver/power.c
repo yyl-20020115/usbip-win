@@ -115,7 +115,7 @@ Return Value:
     // If the device is not stated yet, just pass it down.
     //
 
-    if (Data->DevicePnPState == NotStarted) {
+    if (Data->common.DevicePnPState == NotStarted) {
         PoStartNextPowerIrp(Irp);
         IoSkipCurrentIrpStackLocation(Irp);
         status = PoCallDriver(Data->NextLowerDriver, Irp);
@@ -125,7 +125,7 @@ Return Value:
     }
 
     if (stack->MinorFunction == IRP_MN_SET_POWER) {
-        Bus_KdPrint_Cont(Data, BUS_DBG_POWER_TRACE,
+        Bus_KdPrint_Cont(&Data->common, BUS_DBG_POWER_TRACE,
                      ("\tRequest to set %s state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
@@ -177,7 +177,7 @@ Return Value:
     switch (stack->MinorFunction) {
     case IRP_MN_SET_POWER:
 
-        Bus_KdPrint_Cont(PdoData, BUS_DBG_POWER_TRACE,
+        Bus_KdPrint_Cont(&PdoData->common, BUS_DBG_POWER_TRACE,
                      ("\tSetting %s power state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
@@ -186,13 +186,13 @@ Return Value:
 
         switch (powerType) {
             case DevicePowerState:
-                PoSetPowerState (PdoData->Self, powerType, powerState);
-                PdoData->DevicePowerState = powerState.DeviceState;
+                PoSetPowerState (PdoData->common.Self, powerType, powerState);
+                PdoData->common.DevicePowerState = powerState.DeviceState;
                 status = STATUS_SUCCESS;
                 break;
 
             case SystemPowerState:
-                PdoData->SystemPowerState = powerState.SystemState;
+                PdoData->common.SystemPowerState = powerState.SystemState;
                 status = STATUS_SUCCESS;
                 break;
 

@@ -155,7 +155,7 @@ static char * usbip_vbus_dev_node_name(char *buf, unsigned long buf_len)
 	}
 
 	// Copy the device path to the buffer.
-	len = _snprintf(buf, buf_len, "%s", dev_interface_detail->DevicePath);
+	len = _snprintf_s(buf, buf_len, buf_len, "%s", dev_interface_detail->DevicePath);
 	if (len>=buf_len) {
 		goto end;
 	}
@@ -760,7 +760,7 @@ static int query_import_device(int sockfd, char *busid,
 		return -1;
 	}
 
-	strncpy(request.busid, busid, sizeof(request.busid));
+	strncpy_s(request.busid, SYSFS_BUS_ID_SIZE, busid, sizeof(request.busid));
 	request.busid[sizeof(request.busid)-1]=0;
 
 	PACK_OP_IMPORT_REQUEST(0, &request);

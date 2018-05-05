@@ -86,7 +86,7 @@ typedef struct _ioctl_usbvbus_get_ports_status
 		signed char max_used_port; /* then it can not be bigger than 127 */
 		unsigned char port_status[128];
 		/* 128 bytes */
-	};
+	} u;
 } ioctl_usbvbus_get_ports_status;
 
 typedef struct _ioctl_usbvbus_unplug

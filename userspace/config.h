@@ -24,7 +24,7 @@
 #define PACKAGE_VERSION "1.0.0"
 
 /* numeric version number */
-#define USBIP_VERSION 0x000100
+#define USBIP_VERSION 0x000111
 
 /* Version number of package */
 #define VERSION "1.0.0"

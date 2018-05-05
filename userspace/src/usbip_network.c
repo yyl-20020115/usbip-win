@@ -75,9 +75,9 @@ static ssize_t usbip_xmit(int sockfd, void *buff, size_t bufflen, int sending)
 		ssize_t nbytes;
 
 		if (sending)
-			nbytes = send(sockfd, buff, bufflen, 0);
+			nbytes = send(sockfd, buff, (int)bufflen, 0);
 		else
-			nbytes = recv(sockfd, buff, bufflen, 0);
+			nbytes = recv(sockfd, buff, (int)bufflen, 0);
 
 		if (nbytes <= 0) {
 #ifndef __linux__
@@ -240,7 +240,7 @@ int usbip_net_tcp_connect(char *hostname, char *port)
 
 	/* try the addresses */
 	for (rp = res; rp; rp = rp->ai_next) {
-		sockfd = socket(rp->ai_family, rp->ai_socktype,
+		sockfd = (int)socket(rp->ai_family, rp->ai_socktype,
 				rp->ai_protocol);
 		if (sockfd < 0)
 			continue;
@@ -250,7 +250,7 @@ int usbip_net_tcp_connect(char *hostname, char *port)
 		/* TODO: write code for heartbeat */
 		usbip_set_keepalive(sockfd);
 
-		if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0)
+		if (connect(sockfd, rp->ai_addr, (int)rp->ai_addrlen) == 0)
 			break;
 
 #ifdef __linux__

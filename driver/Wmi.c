@@ -59,7 +59,7 @@ Routine Description
     // Register with WMI
     //
 
-    status = IoWMIRegistrationControl(FdoData->Self,
+    status = IoWMIRegistrationControl(FdoData->common.Self,
                              WMIREG_ACTION_REGISTER
                              );
 
@@ -90,7 +90,7 @@ Routine Description
 
     PAGED_CODE();
 
-    return IoWMIRegistrationControl(FdoData->Self,
+    return IoWMIRegistrationControl(FdoData->common.Self,
                                  WMIREG_ACTION_DEREGISTER
                                  );
 
@@ -138,12 +138,12 @@ Routine Description
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
-    Bus_KdPrint (fdoData, BUS_DBG_WMI_TRACE,
+    Bus_KdPrint (&fdoData->common, BUS_DBG_WMI_TRACE,
              ("FDO: %s\n", WMIMinorFunctionString(stack->MinorFunction)));
 
     Bus_IncIoCount (fdoData);
 
-    if (fdoData->DevicePnPState == Deleted) {
+    if (fdoData->common.DevicePnPState == Deleted) {
         Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
         IoCompleteRequest (Irp, IO_NO_INCREMENT);
         Bus_DecIoCount (fdoData);
@@ -253,6 +253,8 @@ Return Value:
 
     PAGED_CODE();
 
+	UNREFERENCED_PARAMETER(InstanceIndex);
+
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
     switch(GuidIndex) {
@@ -337,6 +339,8 @@ Return Value:
     ULONG requiredSize = 0;
 
     PAGED_CODE();
+
+	UNREFERENCED_PARAMETER(InstanceIndex);
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
@@ -527,6 +531,8 @@ Return Value:
     PFDO_DEVICE_DATA fdoData;
 
     PAGED_CODE();
+
+	UNREFERENCED_PARAMETER(InstanceName);
 
     fdoData = (PFDO_DEVICE_DATA)DeviceObject->DeviceExtension;
 

@@ -205,7 +205,7 @@ typedef struct _COMMON_DEVICE_DATA
 
 typedef struct _PDO_DEVICE_DATA
 {
-    COMMON_DEVICE_DATA;
+    COMMON_DEVICE_DATA	common;
 
     // A back pointer to the bus
 
@@ -242,7 +242,7 @@ typedef struct _PDO_DEVICE_DATA
     // Used to track the intefaces handed out to other drivers.
     // If this value is non-zero, we fail query-remove.
     //
-    ULONG       InterfaceRefCount;
+    LONG       InterfaceRefCount;
     PIRP	pending_read_irp;
     LIST_ENTRY  ioctl_q;
     KSPIN_LOCK	q_lock;
@@ -281,7 +281,7 @@ typedef struct _PDO_DEVICE_DATA
 
 typedef struct _FDO_DEVICE_DATA
 {
-    COMMON_DEVICE_DATA;
+    COMMON_DEVICE_DATA	common;
 
     PDEVICE_OBJECT  UnderlyingPDO;
 
@@ -306,7 +306,7 @@ typedef struct _FDO_DEVICE_DATA
     // The number of IRPs sent from the bus to the underlying device object
     //
 
-    ULONG           OutstandingIO; // Biased to 1
+    LONG           OutstandingIO; // Biased to 1
 
     //
     // On remove device plug & play request we must wait until all outstanding
@@ -348,15 +348,15 @@ struct urb_req {
           ((PFDO_DEVICE_DATA) (pdoData)->ParentFdo->DeviceExtension)
 
 #define INITIALIZE_PNP_STATE(_Data_)    \
-        (_Data_)->DevicePnPState =  NotStarted;\
-        (_Data_)->PreviousPnPState = NotStarted;
+        (_Data_)->common.DevicePnPState =  NotStarted;\
+        (_Data_)->common.PreviousPnPState = NotStarted;
 
 #define SET_NEW_PNP_STATE(_Data_, _state_) \
-        (_Data_)->PreviousPnPState =  (_Data_)->DevicePnPState;\
-        (_Data_)->DevicePnPState = (_state_);
+        (_Data_)->common.PreviousPnPState =  (_Data_)->common.DevicePnPState;\
+        (_Data_)->common.DevicePnPState = (_state_);
 
 #define RESTORE_PREVIOUS_PNP_STATE(_Data_)   \
-        (_Data_)->DevicePnPState =   (_Data_)->PreviousPnPState;\
+        (_Data_)->common.DevicePnPState =   (_Data_)->common.PreviousPnPState;\
 
 //
 // Prototypes of functions defined in busenum.c

@@ -227,7 +227,8 @@ void try_save_config(PPDO_DEVICE_DATA pdodata, struct _URB_CONTROL_DESCRIPTOR_RE
 #define EOVERFLOW 75
 #define EREMOTEIO 121
 
-unsigned int tran_usb_status(int linux_status,int in, int type)
+static USBD_STATUS
+tran_usb_status(int linux_status,int in, int type)
 {
 	switch(linux_status){
 		case 0:
@@ -244,7 +245,6 @@ unsigned int tran_usb_status(int linux_status,int in, int type)
 				in, type));
 			return USBD_STATUS_ERROR;
 	}
-	return USBD_STATUS_SUCCESS;
 }
 
 #define INLINE __inline
@@ -258,22 +258,22 @@ static USBD_PIPE_HANDLE INLINE make_pipe(unsigned char ep,
 
 static unsigned char INLINE pipe2direct(USBD_PIPE_HANDLE handle)
 {
-	return ((unsigned long)handle & 0x80)?USBIP_DIR_IN:USBIP_DIR_OUT;
+	return ((INT_PTR)handle & 0x80)?USBIP_DIR_IN:USBIP_DIR_OUT;
 }
 
 static unsigned char INLINE pipe2addr(USBD_PIPE_HANDLE handle)
 {
-	return (unsigned char)((unsigned long)handle & 0x7f);
+	return (unsigned char)((INT_PTR)handle & 0x7f);
 }
 
 static unsigned char INLINE pipe2type(USBD_PIPE_HANDLE handle)
 {
-	return (unsigned char)(((unsigned long)handle & 0xff0000)>>16);
+	return (unsigned char)(((INT_PTR)handle & 0xff0000)>>16);
 }
 
 static unsigned char INLINE pipe2interval(USBD_PIPE_HANDLE handle)
 {
-	return (unsigned char)(((unsigned long)handle & 0xff00)>>8);
+	return (unsigned char)(((INT_PTR)handle & 0xff00)>>8);
 }
 int post_select_interface(PPDO_DEVICE_DATA pdodata,
 		struct _URB_SELECT_INTERFACE * req);
@@ -328,9 +328,9 @@ int process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
     struct _URB_ISOCH_TRANSFER *urb;
     struct usbip_iso_packet_descriptor * ip_desc;
     NTSTATUS ioctl_status = STATUS_INVALID_PARAMETER;
-    int found=0, iso_len=0, send;
+    int found=0, iso_len=0, send = 0;
 	ULONG in_len=0;
-    struct urb_req * urb_r;
+    struct urb_req * urb_r = NULL;
 
     irpstack = IoGetCurrentIrpStackLocation (irp);
     len = irpstack->Parameters.Write.Length;
@@ -433,7 +433,7 @@ int process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
     if(in)
 		in_len= h->u.ret_submit.actual_length;
     if(type == USB_ENDPOINT_TYPE_ISOCHRONOUS){
-	    if(h->u.ret_submit.number_of_packets !=
+	    if((ULONG)h->u.ret_submit.number_of_packets !=
 		urb->NumberOfPackets){
 		    KdPrint(("Warning, number of packets not same:%d %d\n",
 			h->u.ret_submit.number_of_packets,
@@ -547,7 +547,7 @@ Bus_Write (
 
     Bus_IncIoCount (fdoData);
 
-    if (fdoData->DevicePnPState == Deleted){
+    if (fdoData->common.DevicePnPState == Deleted){
         status = STATUS_NO_SUCH_DEVICE;
 	goto END;
     }
@@ -642,7 +642,6 @@ int prepare_reset_dev(char *buf, int len,  ULONG_PTR *copied, unsigned long seqn
 {
 	struct usbip_header * h = (struct usbip_header * ) buf;
 	struct usb_ctrl_setup * setup=(struct usb_ctrl_setup *)h->u.cmd_submit.setup;
-	int in=0;
 	*copied = 0;
 
 	CHECK_SIZE_READ
@@ -663,14 +662,15 @@ int prepare_reset_dev(char *buf, int len,  ULONG_PTR *copied, unsigned long seqn
 	return  STATUS_SUCCESS;
 }
 
-int prepare_select_config_urb(struct _URB_SELECT_CONFIGURATION  *req,
+int prepare_select_config_urb(struct _URB_SELECT_CONFIGURATION *req,
 		char *buf, int len,  ULONG_PTR *copied, unsigned long seqnum,
 		unsigned int devid)
 {
 	struct usbip_header * h = (struct usbip_header * ) buf;
 	struct usb_ctrl_setup * setup=(struct usb_ctrl_setup *)h->u.cmd_submit.setup;
-	int in=0;
 	*copied = 0;
+
+	UNREFERENCED_PARAMETER(req);
 
 	CHECK_SIZE_READ
 
@@ -695,7 +695,6 @@ int prepare_select_interface_urb(struct _URB_SELECT_INTERFACE  *req,
 {
 	struct usbip_header * h = (struct usbip_header * ) buf;
 	struct usb_ctrl_setup * setup=(struct usb_ctrl_setup * )h->u.cmd_submit.setup;
-	int in=0;
 	*copied = 0;
 
 	CHECK_SIZE_READ
@@ -721,7 +720,7 @@ int prepare_class_vendor_urb(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST  *req,
 {
 	struct usbip_header * h = (struct usbip_header * ) buf;
 	struct usb_ctrl_setup * setup=(struct usb_ctrl_setup *)h->u.cmd_submit.setup;
-	char in=req->TransferFlags & USBD_TRANSFER_DIRECTION_IN, type, recip;
+	char in=req->TransferFlags & USBD_TRANSFER_DIRECTION_IN, type = 0, recip = 0;
 	*copied = 0;
 
 	KdPrint(("flag:%d pbuf:%p len:%d RequestTypeReservedBits:%02x"
@@ -870,12 +869,11 @@ int prepare_iso_urb(struct _URB_ISOCH_TRANSFER * req,
 	int in = pipe2direct(req->PipeHandle);
 	int type = pipe2type(req->PipeHandle);
 	ULONG i, offset;
-	int last_len;
 	char *p;
 
 	*copied = 0;
 
-	KdPrint(("PipeHandle %08x\n", (unsigned long)req->PipeHandle));
+	KdPrint(("PipeHandle %08x\n", (ULONG_PTR)req->PipeHandle));
 
 	if(type!=USB_ENDPOINT_TYPE_ISOCHRONOUS){
 		KdPrint(("Error, not a iso pipe\n"));
@@ -956,7 +954,7 @@ int prepare_bulk_urb(struct _URB_BULK_OR_INTERRUPT_TRANSFER * req,
 	CHECK_SIZE_RW
 
 
-	KdPrint(("PipeHandle %08x\n", (unsigned long)req->PipeHandle));
+	KdPrint(("PipeHandle %08x\n", (ULONG_PTR)req->PipeHandle));
 	if(type!=USB_ENDPOINT_TYPE_BULK&&type!=USB_ENDPOINT_TYPE_INTERRUPT){
 		KdPrint(("Error, not a bulk pipe\n"));
 		return STATUS_INVALID_PARAMETER;
@@ -1055,10 +1053,9 @@ int process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
     NTSTATUS status = STATUS_PENDING;
     KIRQL oldirql;
     PIRP ioctl_irp = NULL;
-    struct urb_req *urb_r;
+    struct urb_req *urb_r = NULL;
     PLIST_ENTRY le;
-    unsigned long seq_num, old_seq_num;
-    int found=0;
+    unsigned long seq_num = 0, old_seq_num = 0;
     KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
     for (le = pdodata->ioctl_q.Flink;
 		    le !=&pdodata->ioctl_q;
@@ -1106,7 +1103,6 @@ Bus_Read (
     __in  PIRP            Irp
     )
 {
-    PIO_STACK_LOCATION  irpStack;
     NTSTATUS            status;
     PFDO_DEVICE_DATA    fdoData;
     PPDO_DEVICE_DATA	pdodata;
@@ -1133,7 +1129,7 @@ Bus_Read (
     // Check to see whether the bus is removed
     //
 
-    if (fdoData->DevicePnPState == Deleted){
+    if (fdoData->common.DevicePnPState == Deleted){
         status = STATUS_NO_SUCH_DEVICE;
 	goto END;
     }
@@ -1164,11 +1160,9 @@ Bus_Create (
     __in  PIRP            Irp
     )
 {
-    PIO_STACK_LOCATION  irpStack;
     NTSTATUS            status;
     PFDO_DEVICE_DATA    fdoData;
     PCOMMON_DEVICE_DATA     commonData;
-    PIO_STACK_LOCATION iostackirp = NULL;
 
     PAGED_CODE ();
 
@@ -1188,7 +1182,7 @@ Bus_Create (
     // Check to see whether the bus is removed
     //
 
-    if (fdoData->DevicePnPState == Deleted) {
+    if (fdoData->common.DevicePnPState == Deleted) {
         Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
         IoCompleteRequest (Irp, IO_NO_INCREMENT);
         return status;
@@ -1235,7 +1229,7 @@ Bus_Cleanup (
     // Check to see whether the bus is removed
     //
 
-    if (fdodata->DevicePnPState == Deleted) {
+    if (fdodata->common.DevicePnPState == Deleted) {
         irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
         IoCompleteRequest (irp, IO_NO_INCREMENT);
         return status;
@@ -1262,7 +1256,6 @@ Bus_Close (
     __in  PIRP            Irp
     )
 {
-    PIO_STACK_LOCATION  irpStack;
     NTSTATUS            status;
     PFDO_DEVICE_DATA    fdoData;
     PCOMMON_DEVICE_DATA     commonData;
@@ -1289,7 +1282,7 @@ Bus_Close (
     // Check to see whether the bus is removed
     //
 
-    if (fdoData->DevicePnPState == Deleted) {
+    if (fdoData->common.DevicePnPState == Deleted) {
         Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
         IoCompleteRequest (Irp, IO_NO_INCREMENT);
         return status;
@@ -1462,6 +1455,8 @@ int post_select_interface(PPDO_DEVICE_DATA pdodata,
 int proc_get_frame(PPDO_DEVICE_DATA pdodata,
 		struct  _URB_GET_CURRENT_FRAME_NUMBER * req)
 {
+	UNREFERENCED_PARAMETER(pdodata);
+
 	req->FrameNumber = 0;
 	return STATUS_SUCCESS;
 }
@@ -1469,6 +1464,8 @@ int proc_get_frame(PPDO_DEVICE_DATA pdodata,
 int proc_reset_pipe(PPDO_DEVICE_DATA pdodata,
 		struct  _URB_PIPE_REQUEST * req)
 {
+	UNREFERENCED_PARAMETER(pdodata);
+
 	KdPrint(("reset pipe handle 0x%08x\n", req->PipeHandle));
 	return STATUS_SUCCESS;
 }
@@ -1622,7 +1619,7 @@ void cancel_irp(PDEVICE_OBJECT pdo, PIRP Irp)
 {
 	PLIST_ENTRY le = NULL;
 	int found=0;
-	struct urb_req * urb_r;
+	struct urb_req * urb_r = NULL;
 	PPDO_DEVICE_DATA pdodata;
 	KIRQL oldirql = Irp->CancelIrql;
 
@@ -1656,7 +1653,7 @@ int try_addq(PPDO_DEVICE_DATA pdodata, PIRP Irp)
     KIRQL oldirql;
     PIRP read_irp;
     NTSTATUS status = STATUS_PENDING;
-    unsigned long seq_num;
+    unsigned long seq_num = 0;
     struct urb_req * urb_r;
 
     urb_r = ExAllocateFromNPagedLookasideList(&g_lookaside);
@@ -1829,7 +1826,7 @@ Return Value:
     // Check to see whether the bus is removed
     //
 
-    if (fdoData->DevicePnPState == Deleted) {
+    if (fdoData->common.DevicePnPState == Deleted) {
         status = STATUS_NO_SUCH_DEVICE;
         goto END;
     }
@@ -1845,7 +1842,7 @@ Return Value:
     switch (irpStack->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_USBVBUS_PLUGIN_HARDWARE:
         if (sizeof(ioctl_usbvbus_plugin) == inlen ) {
-            Bus_KdPrint(fdoData, BUS_DBG_IOCTL_TRACE, ("PlugIn called\n"));
+            Bus_KdPrint(&fdoData->common, BUS_DBG_IOCTL_TRACE, ("PlugIn called\n"));
 
             status= bus_plugin_dev((ioctl_usbvbus_plugin *)buffer, fdoData,
 			    irpStack->FileObject);
@@ -1854,7 +1851,7 @@ Return Value:
 
    case IOCTL_USBVBUS_GET_PORTS_STATUS:
         if (sizeof(ioctl_usbvbus_get_ports_status) == outlen ) {
-            Bus_KdPrint(fdoData, BUS_DBG_IOCTL_TRACE, ("get ports status called\n"));
+            Bus_KdPrint(&fdoData->common, BUS_DBG_IOCTL_TRACE, ("get ports status called\n"));
 
             status= bus_get_ports_status((ioctl_usbvbus_get_ports_status *)buffer, fdoData, &info);
         }
@@ -1864,7 +1861,7 @@ Return Value:
 
         if (sizeof (ioctl_usbvbus_unplug) == inlen){
 
-            Bus_KdPrint(fdoData, BUS_DBG_IOCTL_TRACE, ("UnPlug called\n"));
+            Bus_KdPrint(&fdoData->common, BUS_DBG_IOCTL_TRACE, ("UnPlug called\n"));
 
             status= bus_unplug_dev(((ioctl_usbvbus_unplug *)buffer)->addr, fdoData);
 
@@ -1876,7 +1873,7 @@ Return Value:
         if ((sizeof (BUSENUM_EJECT_HARDWARE) == inlen) &&
             (((PBUSENUM_EJECT_HARDWARE)buffer)->Size == inlen)) {
 
-            Bus_KdPrint(fdoData, BUS_DBG_IOCTL_TRACE, ("Eject called\n"));
+            Bus_KdPrint(&fdoData->common, BUS_DBG_IOCTL_TRACE, ("Eject called\n"));
 
             status= Bus_EjectDevice((PBUSENUM_EJECT_HARDWARE)buffer, fdoData);
 
@@ -2027,7 +2024,7 @@ Return Value:
         // extra decrement is done when a remove Irp is received
         //
 
-        ASSERT(FdoData->DevicePnPState == Deleted);
+        ASSERT(FdoData->common.DevicePnPState == Deleted);
 
         //
         // Set the remove event, so the device object can be deleted
