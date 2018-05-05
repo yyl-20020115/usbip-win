@@ -40,6 +40,22 @@ void usbip_detach_usage(void)
 	printf("usage: %s", usbip_detach_usage_string);
 }
 
+int detach_port(char *port)
+{
+	signed char addr = atoi(port);
+	HANDLE fd;
+	int ret;
+
+	fd = usbip_vbus_open();
+	if (INVALID_HANDLE_VALUE == fd) {
+		err("open vbus driver");
+		return -1;
+	}
+	ret = usbip_vbus_detach_device(fd, addr);
+	CloseHandle(fd);
+	return ret;
+}
+
 int usbip_detach(int argc, char *argv[])
 {
 	static const struct option opts[] = {
