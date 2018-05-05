@@ -16,12 +16,7 @@
 #define PACKED /* */
 #endif
 
-#ifdef __linux__
-#include <sys/types.h>
-#include <sysfs/libsysfs.h>
-#else
 #include "usbip_common.h"
-#endif
 
 #include <stdint.h>
 

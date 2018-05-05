@@ -11,8 +11,6 @@
 
 #define UNUSED(x) (void)(x)
 
-#ifndef __linux__
-
 #define _CRT_SECURE_NO_WARNINGS
 
 #define USBIDS_FILE "usb.ids"
@@ -33,13 +31,7 @@ typedef signed int ssize_t;
 #endif
 #define syslog(...) /* ... */
 
-#endif /* !__linux__ */
-
 #include "usbip_common.h"
-#ifdef __linux__
-#include "stub_driver.h"
-#include "vhci_driver.h"
-#endif
 #ifdef DMALLOC
 #include <dmalloc.h>
 #endif

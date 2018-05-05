@@ -26,9 +26,8 @@
 
 #include "usbip_common.h"
 #include "usbip.h"
-#ifndef __linux__
+
 #include "usbip_windows.h"
-#endif
 
 static int usbip_help(int argc, char *argv[]);
 static int usbip_version(int argc, char *argv[]);
@@ -82,7 +81,7 @@ static const struct command cmds[] = {
 		"List exported or local USB devices",
 		usbip_list_usage
 	},
-#ifdef __linux__
+#if 0
 	{
 		"bind",
 		usbip_bind,
@@ -149,10 +148,8 @@ int main(int argc, char *argv[])
 	int opt;
 	int i, rc = -1;
 
-#ifndef __linux__
 	if (init_socket())
 		return EXIT_FAILURE;
-#endif
 
 	opterr = 0;
 	for (;;) {
@@ -186,8 +183,6 @@ int main(int argc, char *argv[])
 err_out:
 	usbip_usage();
 out:
-#ifndef __linux__
 	cleanup_socket();
-#endif
 	return (rc > -1 ? EXIT_SUCCESS : EXIT_FAILURE);
 }

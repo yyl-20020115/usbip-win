@@ -20,16 +20,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef __linux__
-#include <unistd.h>
-#include <syslog.h>
-#include <strings.h>
-#include <sysfs/libsysfs.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#else
 #include "usbip.h"
-#endif
 
 #ifndef USBIDS_FILE
 #define USBIDS_FILE "/usr/share/hwdata/usb.ids"
@@ -147,8 +138,6 @@ struct usbip_usb_device {
 	uint8_t bNumConfigurations;
 	uint8_t bNumInterfaces;
 } PACKED;
-
-#ifndef __linux__
 
 /*
  * USB/IP request headers.
@@ -271,8 +260,6 @@ struct usbip_header {
 		struct usbip_header_ret_unlink	ret_unlink;
 	} u;
 } PACKED;
-
-#endif /* !__linux__ */
 
 #define to_string(s)	#s
 

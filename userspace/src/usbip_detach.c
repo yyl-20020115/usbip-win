@@ -24,16 +24,8 @@
 #include <string.h>
 #include <getopt.h>
 
-#ifdef __linux__
-#include <sysfs/libsysfs.h>
-#include <unistd.h>
-#endif
-
-#ifdef __linux__
-#include "vhci_driver.h"
-#else
 #include "usbip_windows.h"
-#endif
+
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip.h"
@@ -47,40 +39,6 @@ void usbip_detach_usage(void)
 {
 	printf("usage: %s", usbip_detach_usage_string);
 }
-
-#ifdef __linux__
-
-static int detach_port(char *port)
-{
-	int ret;
-	uint8_t portnum;
-
-	for (unsigned int i=0; i < strlen(port); i++)
-		if (!isdigit(port[i])) {
-			err("invalid port %s", port);
-			return -1;
-		}
-
-	/* check max port */
-
-	portnum = atoi(port);
-
-	ret = usbip_vhci_driver_open();
-	if (ret < 0) {
-		err("open vhci_driver");
-		return -1;
-	}
-
-	ret = usbip_vhci_detach_device(portnum);
-	if (ret < 0)
-		return -1;
-
-	usbip_vhci_driver_close();
-
-	return ret;
-}
-
-#endif /* __linux__ */
 
 int usbip_detach(int argc, char *argv[])
 {

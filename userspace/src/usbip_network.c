@@ -6,14 +6,6 @@
 
 #include <string.h>
 
-#ifdef __linux__
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
-#include <unistd.h>
-#endif
-
 #ifndef EAI_SYSTEM
 #define EAI_SYSTEM -11
 #endif
@@ -80,7 +72,6 @@ static ssize_t usbip_xmit(SOCKET sockfd, void *buff, size_t bufflen, int sending
 			nbytes = recv(sockfd, buff, (int)bufflen, 0);
 
 		if (nbytes <= 0) {
-#ifndef __linux__
 			LPTSTR lpMsgBuf;
 
 			// Get error information.
@@ -92,7 +83,6 @@ static ssize_t usbip_xmit(SOCKET sockfd, void *buff, size_t bufflen, int sending
 			} else {
 				fprintf(stderr, "[usbip_xmit] recv() returned %d - error %d\n", nbytes, err);
 			}
-#endif
 			return -1;
 		}
 
@@ -101,7 +91,6 @@ static ssize_t usbip_xmit(SOCKET sockfd, void *buff, size_t bufflen, int sending
 		total	+= nbytes;
 
 	} while (bufflen > 0);
-
 
 	return total;
 }
@@ -253,11 +242,7 @@ int usbip_net_tcp_connect(char *hostname, char *port)
 		if (connect(sockfd, rp->ai_addr, (int)rp->ai_addrlen) == 0)
 			break;
 
-#ifdef __linux__
-		close(sockfd);
-#else
 		closesocket(sockfd);
-#endif
 	}
 
 	if (!rp)

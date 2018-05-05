@@ -25,27 +25,18 @@
 #include <string.h>
 #include <getopt.h>
 
-#ifdef __linux__
-#include <netdb.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sysfs/libsysfs.h>
-#endif
-
 #include "usbip_common.h"
 #include "usbip_network.h"
-#ifndef __linux__
+
 #include "usbip_windows.h"
-#endif
+
 #include "usbip.h"
 
 static const char usbip_list_usage_string[] =
 	"usbip list [-p|--parsable] <args>\n"
 	"    -p, --parsable         Parsable list format\n"
 	"    -r, --remote=<host>    List the exported USB devices on <host>\n"
-#ifdef __linux__
 	"    -l, --local            List the local USB devices\n"
-#endif
 	;
 
 void usbip_list_usage(void)
@@ -153,124 +144,16 @@ static int show_exported_devices(char *host)
 		return -1;
 	}
 
-#ifdef __linux__
-	close(sockfd);
-#else
 	closesocket(sockfd);
-#endif
 	return 0;
 }
-
-#ifdef __linux__
-
-static void print_device(char *busid, char *vendor, char *product,
-			 bool parsable)
-{
-	if (parsable)
-		printf("busid=%s#usbid=%.4s:%.4s#", busid, vendor, product);
-	else
-		printf(" - busid %s (%.4s:%.4s)\n", busid, vendor, product);
-}
-
-static void print_interface(char *busid, char *driver, bool parsable)
-{
-	if (parsable)
-		printf("%s=%s#", busid, driver);
-	else
-		printf("%9s%s -> %s\n", "", busid, driver);
-}
-
-static int is_device(void *x)
-{
-	struct sysfs_attribute *devpath;
-	struct sysfs_device *dev = x;
-	int ret = 0;
-
-	devpath = sysfs_get_device_attr(dev, "devpath");
-	if (devpath && *devpath->value != '0')
-		ret = 1;
-
-	return ret;
-}
-
-static int devcmp(void *a, void *b)
-{
-	return strcmp(a, b);
-}
-
-static int list_devices(bool parsable)
-{
-	char bus_type[] = "usb";
-	char busid[SYSFS_BUS_ID_SIZE];
-	struct sysfs_bus *ubus;
-	struct sysfs_device *dev;
-	struct sysfs_device *intf;
-	struct sysfs_attribute *idVendor;
-	struct sysfs_attribute *idProduct;
-	struct sysfs_attribute *bConfValue;
-	struct sysfs_attribute *bNumIntfs;
-	struct dlist *devlist;
-	int i;
-	int ret = -1;
-
-	ubus = sysfs_open_bus(bus_type);
-	if (!ubus) {
-		err("sysfs_open_bus: %s", strerror(errno));
-		return -1;
-	}
-
-	devlist = sysfs_get_bus_devices(ubus);
-	if (!devlist) {
-		err("sysfs_get_bus_devices: %s", strerror(errno));
-		goto err_out;
-	}
-
-	/* remove interfaces and root hubs from device list */
-	dlist_filter_sort(devlist, is_device, devcmp);
-
-	if (!parsable) {
-		printf("Local USB devices\n");
-		printf("=================\n");
-	}
-	dlist_for_each_data(devlist, dev, struct sysfs_device) {
-		idVendor   = sysfs_get_device_attr(dev, "idVendor");
-		idProduct  = sysfs_get_device_attr(dev, "idProduct");
-		bConfValue = sysfs_get_device_attr(dev, "bConfigurationValue");
-		bNumIntfs  = sysfs_get_device_attr(dev, "bNumInterfaces");
-		if (!idVendor || !idProduct || !bConfValue || !bNumIntfs)
-			goto err_out;
-
-		print_device(dev->bus_id, idVendor->value, idProduct->value,
-			     parsable);
-
-		for (i = 0; i < atoi(bNumIntfs->value); i++) {
-			snprintf(busid, sizeof(busid), "%s:%.1s.%d",
-				 dev->bus_id, bConfValue->value, i);
-			intf = sysfs_open_device(bus_type, busid);
-			if (!intf)
-				goto err_out;
-			print_interface(busid, intf->driver_name, parsable);
-			sysfs_close_device(intf);
-		}
-		printf("\n");
-	}
-
-	ret = 0;
-
-err_out:
-	sysfs_close_bus(ubus);
-
-	return ret;
-}
-
-#endif /* __linux__ */
 
 int usbip_list(int argc, char *argv[])
 {
 	static const struct option opts[] = {
 		{ "parsable", no_argument, NULL, 'p' },
 		{ "remote", required_argument, NULL, 'r' },
-#ifdef __linux__
+#if 0
 		{ "local", no_argument, NULL, 'l' },
 #endif
 		{ NULL, 0, NULL, 0 }
@@ -295,7 +178,7 @@ int usbip_list(int argc, char *argv[])
 		case 'r':
 			ret = show_exported_devices(optarg);
 			goto out;
-#ifdef __linux__
+#if 0
 		case 'l':
 			ret = list_devices(parsable);
 			goto out;
