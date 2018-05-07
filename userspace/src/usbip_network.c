@@ -209,7 +209,7 @@ int usbip_set_keepalive(SOCKET sockfd)
 /*
  * IPv6 Ready
  */
-int usbip_net_tcp_connect(char *hostname, char *port)
+int usbip_net_tcp_connect(const char *hostname, const char *port)
 {
 	struct addrinfo hints, *res, *rp;
 	int sockfd;

@@ -73,11 +73,9 @@ typedef struct _ioctl_usbvbus_plugin
 	unsigned char speed;
 	unsigned char inum;
 	/* 12 bytes */
-	unsigned char int0_class;
-	unsigned char int0_subclass;
-	unsigned char int0_protocol;
+	unsigned char dummy_class;
 	signed char addr;  /* then it can not be bigger then 127 */
-	/* 16 bytes */
+	/* 14 bytes */
 } ioctl_usbvbus_plugin;
 
 typedef struct _ioctl_usbvbus_get_ports_status

@@ -189,7 +189,7 @@ int usbip_set_reuseaddr(SOCKET sockfd);
 int usbip_set_nodelay(SOCKET sockfd);
 int usbip_set_keepalive(SOCKET sockfd);
 
-int usbip_net_tcp_connect(char *hostname, char *port);
+int usbip_net_tcp_connect(const char *hostname, const char *port);
 
 #ifdef __GNUC__
 #else

@@ -1251,11 +1251,9 @@ NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin * plugin, PFDO_DEVICE_DATA  fdodata
     RtlZeroMemory(pdodata->compatible_ids, len);
 
     pdodata->compatible_ids_len = len;
-    RtlStringCchPrintfW(pdodata->compatible_ids, len/sizeof(wchar_t),
-		(plugin->inum>1)?COMPATIBLE_COMPOSITE_IDS_TPL:COMPATIBLE_IDS_TPL,
-	        plugin->int0_class, plugin->int0_subclass, plugin->int0_protocol,
-		plugin->int0_class, plugin->int0_subclass,
-		plugin->int0_class);
+	RtlStringCchPrintfW(pdodata->compatible_ids, len / sizeof(wchar_t),
+		(plugin->inum > 1) ? COMPATIBLE_COMPOSITE_IDS_TPL : COMPATIBLE_IDS_TPL,
+		224, 1, 1, 224, 1, 224);
     for(i=0;i<len/sizeof(wchar_t);i++){
 	    if('Z'==pdodata->compatible_ids[i])
 		    pdodata->compatible_ids[i]=0;

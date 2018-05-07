@@ -91,24 +91,28 @@
     <OutDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\$(ProjectName)\</IntDir>
     <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+    <Inf2CatVerbose>true</Inf2CatVerbose>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\$(ProjectName)\</IntDir>
     <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+    <Inf2CatVerbose>true</Inf2CatVerbose>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\$(ProjectName)\</IntDir>
     <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+    <Inf2CatVerbose>true</Inf2CatVerbose>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)$(ConfigurationName)\$(Platform)\$(ProjectName)\</IntDir>
     <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+    <Inf2CatVerbose>true</Inf2CatVerbose>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

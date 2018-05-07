@@ -229,8 +229,7 @@ int usbip_vbus_detach_device(HANDLE fd, int port)
 	return -1;
 }
 
-int usbip_vbus_attach_device(HANDLE fd, int port, struct usbip_usb_device *udev,
-		struct usbip_usb_interface *uinf0)
+int usbip_vbus_attach_device(HANDLE fd, int port, struct usbip_usb_device *udev)
 {
 	int ret;
 	ioctl_usbvbus_plugin  plugin;
@@ -242,9 +241,6 @@ int usbip_vbus_attach_device(HANDLE fd, int port, struct usbip_usb_device *udev,
 	plugin.version = udev->bcdDevice;
 	plugin.speed = udev->speed;
 	plugin.inum = udev->bNumInterfaces;
-	plugin.int0_class = uinf0->bInterfaceClass;
-	plugin.int0_subclass = uinf0->bInterfaceSubClass;
-	plugin.int0_protocol = uinf0->bInterfaceProtocol;
 	plugin.addr = port;
 
 	ret = DeviceIoControl(fd, IOCTL_USBVBUS_PLUGIN_HARDWARE,

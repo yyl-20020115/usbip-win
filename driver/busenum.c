@@ -46,8 +46,7 @@ Return Value:
 
 --*/
 {
-
-    Bus_KdPrint_Def (BUS_DBG_SS_TRACE, ("Driver Entry \n"));
+	Bus_KdPrint_Def(BUS_DBG_SS_TRACE, ("Driver Entry\n"));
 
     ExInitializeNPagedLookasideList(&g_lookaside, NULL,NULL,0,
 		    sizeof(struct urb_req), 'USBV', 0);

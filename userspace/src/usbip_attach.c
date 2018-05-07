@@ -39,9 +39,7 @@ void usbip_attach_usage(void)
 	printf("usage: %s", usbip_attach_usage_string);
 }
 
-static int import_device(SOCKET sockfd, struct usbip_usb_device *udev,
-	struct usbip_usb_interface *uinf0,
-	HANDLE *devfd)
+static int import_device(SOCKET sockfd, struct usbip_usb_device *udev, HANDLE *devfd)
 {
 	HANDLE fd;
 	int port, ret;
@@ -60,7 +58,7 @@ static int import_device(SOCKET sockfd, struct usbip_usb_device *udev,
 	}
 
 	dbg("call from attch here\n");
-	ret = usbip_vbus_attach_device(fd, port, udev, uinf0);
+	ret = usbip_vbus_attach_device(fd, port, udev);
 	dbg("return from attch here\n");
 
 	if (ret < 0) {
@@ -74,8 +72,7 @@ static int import_device(SOCKET sockfd, struct usbip_usb_device *udev,
 	return port;
 }
 
-static int query_import_device(SOCKET sockfd, char *busid,
-	struct usbip_usb_interface *uinf0, HANDLE * fd)
+static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *fd)
 {
 	int ret;
 	struct op_import_request request;
@@ -125,114 +122,22 @@ static int query_import_device(SOCKET sockfd, char *busid,
 	}
 
 	/* import a device */
-	return import_device(sockfd, &reply.udev, uinf0, fd);
+	return import_device(sockfd, &reply.udev, fd);
 }
 
-static int query_interface0(SOCKET sockfd, char * busid, struct usbip_usb_interface * uinf0)
+static int
+attach_device(const char *host, const char *busid)
 {
-	int ret;
-	struct op_devlist_reply rep;
-	uint16_t code = OP_REP_DEVLIST;
-	uint32_t i, j;
-	char product_name[100];
-	char class_name[100];
-	struct usbip_usb_device udev;
-	struct usbip_usb_interface uinf;
-	int found = 0;
-
-	memset(&rep, 0, sizeof(rep));
-
-	ret = usbip_send_op_common(sockfd, OP_REQ_DEVLIST, 0);
-	if (ret < 0) {
-		err("send op_common");
-		return -1;
-	}
-
-	ret = usbip_recv_op_common(sockfd, &code);
-	if (ret < 0) {
-		err("recv op_common");
-		return -1;
-	}
-
-	ret = usbip_recv(sockfd, (void *)&rep, sizeof(rep));
-	if (ret < 0) {
-		err("recv op_devlist");
-		return -1;
-	}
-
-	PACK_OP_DEVLIST_REPLY(0, &rep);
-	dbg("exportable %d devices", rep.ndev);
-
-	for (i = 0; i < rep.ndev; i++) {
-
-		memset(&udev, 0, sizeof(udev));
-
-		ret = usbip_recv(sockfd, (void *)&udev, sizeof(udev));
-		if (ret < 0) {
-			err("recv usbip_usb_device[%d]", i);
-			return -1;
-		}
-		pack_usb_device(0, &udev);
-		usbip_names_get_product(product_name, sizeof(product_name),
-			udev.idVendor, udev.idProduct);
-		usbip_names_get_class(class_name, sizeof(class_name), udev.bDeviceClass,
-			udev.bDeviceSubClass, udev.bDeviceProtocol);
-
-		dbg("%8s: %s", udev.busid, product_name);
-		dbg("%8s: %s", " ", udev.path);
-		dbg("%8s: %s", " ", class_name);
-
-		for (j = 0; j < udev.bNumInterfaces; j++) {
-
-			ret = usbip_recv(sockfd, (void *)&uinf, sizeof(uinf));
-			if (ret < 0) {
-				err("recv usbip_usb_interface[%d]", j);
-				return -1;
-			}
-
-			pack_usb_interface(0, &uinf);
-			if (!strcmp(udev.busid, busid) && j == 0) {
-				memcpy(uinf0, &uinf, sizeof(uinf));
-				found = 1;
-			}
-			usbip_names_get_class(class_name, sizeof(class_name),
-				uinf.bInterfaceClass,
-				uinf.bInterfaceSubClass,
-				uinf.bInterfaceProtocol);
-
-			dbg("%8s: %2d - %s", " ", j, class_name);
-		}
-
-		dbg(" ");
-	}
-	if (found)
-		return 0;
-	return -1;
-}
-
-static int attach_device(char * host, char * busid)
-{
-	SOCKET sockfd;
-	int rhport;
-	HANDLE devfd = INVALID_HANDLE_VALUE;
-	struct usbip_usb_interface uinf;
+	SOCKET	sockfd;
+	int		rhport;
+	HANDLE	devfd = INVALID_HANDLE_VALUE;
 
 	sockfd = usbip_net_tcp_connect(host, USBIP_PORT_STRING);
 	if (INVALID_SOCKET == sockfd) {
 		err("tcp connect");
 		return 0;
 	}
-	if (query_interface0(sockfd, busid, &uinf)) {
-		err("cannot find device");
-		return 0;
-	}
-	closesocket(sockfd);
-	sockfd = usbip_net_tcp_connect(host, USBIP_PORT_STRING);
-	if (INVALID_SOCKET == sockfd) {
-		err("tcp connect");
-		return 0;
-	}
-	rhport = query_import_device(sockfd, busid, &uinf, &devfd);
+	rhport = query_import_device(sockfd, busid, &devfd);
 	if (rhport < 0) {
 		err("query");
 		return 0;
