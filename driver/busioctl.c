@@ -21,15 +21,15 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 	unsigned int	offset = 0;
 
 	if (pdodata->dev_config == NULL) {
-		Bus_KdPrint(&pdodata->common, BUS_DBG_IOCTL_INFO, ("Warning, select config when have no get config\n"));
+		DBGW(DBG_IOCTL, "select config when have no get config\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 	if (urb_sel->ConfigurationDescriptor == NULL) {
-		Bus_KdPrint(&pdodata->common, BUS_DBG_IOCTL_INFO, ("Device unconfigured"));
+		DBGI(DBG_IOCTL, "Device unconfigured\n");
 		return STATUS_SUCCESS;
 	}
 	if (!RtlEqualMemory(pdodata->dev_config, urb_sel->ConfigurationDescriptor, sizeof(*urb_sel->ConfigurationDescriptor))) {
-		Bus_KdPrint(&pdodata->common, BUS_DBG_IOCTL_INFO, ("Warning, not the same config desc\n"));
+		DBGW(DBG_IOCTL, "Warning, not the same config desc\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
@@ -41,29 +41,28 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 		unsigned int	j;
 
 		if ((char *)intf + sizeof(*intf) - sizeof(intf->Pipes[0]) - (char *)urb_sel > urb_sel->Hdr.Length) {
-			KdPrint(("Warning, not all interface select\n"));
+			DBGW(DBG_IOCTL, "not all interface select\n");
 			return STATUS_SUCCESS;
 		}
 		intf_desc = seek_to_one_intf_desc((PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
 			&offset, intf->InterfaceNumber, intf->AlternateSetting);
 		if (intf_desc == NULL) {
-			KdPrint(("Warning, no interface desc\n"));
+			DBGW(DBG_IOCTL, "no interface desc\n");
 			return STATUS_INVALID_DEVICE_REQUEST;
 		}
 		if (intf_desc->bNumEndpoints != intf->NumberOfPipes) {
-			KdPrint(("Warning, number of pipes is no same%d %d\n", intf_desc->bNumEndpoints, intf->NumberOfPipes));
+			DBGW(DBG_IOCTL, "number of pipes is no same%d %d\n", intf_desc->bNumEndpoints, intf->NumberOfPipes);
 			return STATUS_INVALID_DEVICE_REQUEST;
 		}
 		if (intf->NumberOfPipes > 0) {
-			if ((char *)intf + sizeof(*intf) + (intf->NumberOfPipes - 1) * sizeof(intf->Pipes[0])
-				- (char *)urb_sel
-				> urb_sel->Hdr.Length) {
-				KdPrint(("Warning, small for select config\n"));
+			if ((char *)intf + sizeof(*intf) + (intf->NumberOfPipes - 1) * sizeof(intf->Pipes[0]) - (char *)urb_sel
+			    > urb_sel->Hdr.Length) {
+				DBGW(DBG_IOCTL, "small for select config\n");
 				return STATUS_INVALID_PARAMETER;
 			}
 		}
 		if (intf->InterfaceNumber != i || intf->AlternateSetting != 0) {
-			KdPrint(("Warning, I don't expect this"));
+			DBGW(DBG_IOCTL, "Warning, I don't expect this");
 			return STATUS_INVALID_PARAMETER;
 		}
 		intf->Class = intf_desc->bInterfaceClass;
@@ -81,7 +80,7 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 				&offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
 
 			if (ep_desc == NULL) {
-				KdPrint(("Warning, no ep desc\n"));
+				DBGW(DBG_IOCTL, "no ep desc\n");
 				return STATUS_INVALID_DEVICE_REQUEST;
 			}
 
@@ -98,8 +97,10 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 static NTSTATUS
 process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
 {
+	UNREFERENCED_PARAMETER(pdodata);
+
 	////TODO need to check
-	Bus_KdPrint(&pdodata->common, BUS_DBG_IOCTL_INFO, ("reset_pipe:\n"));
+	DBGI(DBG_IOCTL, "reset_pipe:\n");
 	return STATUS_SUCCESS;
 }
 
@@ -123,7 +124,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_SELECT_CONFIGURATION:
-		KdPrint(("select configuration\n"));
+		DBGI(DBG_IOCTL, "select configuration\n");
 		return process_urb_select_config(pdodata, urb);
 	case URB_FUNCTION_RESET_PIPE:
 		return process_urb_reset_pipe(pdodata);
@@ -144,7 +145,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	case URB_FUNCTION_SELECT_INTERFACE:
 		return submit_urb_req(pdodata, irp);
 	default:
-		KdPrint(("Warning function:%x %d\n", urb->UrbHeader.Function, urb->UrbHeader.Length));
+		DBGW(DBG_IOCTL, "Unknown function:%x %d\n", urb->UrbHeader.Function, urb->UrbHeader.Length);
 		return STATUS_INVALID_PARAMETER;
 	}
 }
@@ -160,15 +161,15 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-	Bus_KdPrint(commonData, BUS_DBG_SS_TRACE | BUS_DBG_IOCTL_TRACE, ("Bus_Internal_Ioctl: Enter\n"));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Enter\n");
 
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
 
-	Bus_KdPrint(commonData, BUS_DBG_IOCTL_TRACE, ("ioctl code: %s\n", code2name(ioctl_code)));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", code2name(ioctl_code));
 
 	if (commonData->IsFDO) {
-		Bus_KdPrint(commonData, BUS_DBG_IOCTL_ERROR, ("internal ioctl for fdo is not allowed\n"));
+		DBGW(DBG_IOCTL, "internal ioctl for fdo is not allowed\n");
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
@@ -177,7 +178,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	pdoData = (PPDO_DEVICE_DATA)DeviceObject->DeviceExtension;
 
 	if (!pdoData->Present) {
-		Bus_KdPrint(commonData, BUS_DBG_IOCTL_INFO, ("device is not connected\n"));
+		DBGW(DBG_IOCTL, "device is not connected\n");
 		Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return STATUS_DEVICE_NOT_CONNECTED;
@@ -195,7 +196,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = submit_urb_req(pdoData, Irp);
 		break;
 	default:
-		Bus_KdPrint(commonData, BUS_DBG_IOCTL_INFO, ("unknown ioctl code: %x", ioctl_code));
+		DBGE(DBG_IOCTL, "unknown ioctl code: %x", ioctl_code);
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
@@ -206,7 +207,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	}
 
-	Bus_KdPrint(commonData, BUS_DBG_SS_TRACE | BUS_DBG_IOCTL_TRACE, ("Bus_Internal_Ioctl: Leave: %08x\n", status));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Leave: %08x\n", status);
 	return status;
 }
 
@@ -226,14 +227,14 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-	Bus_KdPrint(commonData, BUS_DBG_SS_TRACE | BUS_DBG_IOCTL_TRACE, ("Bus_Ioctl: Enter\n"));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Ioctl: Enter\n");
 
 	//
 	// We only allow create/close requests for the FDO.
 	// That is the bus itself.
 	//
 	if (!commonData->IsFDO) {
-		Bus_KdPrint(commonData, BUS_DBG_IOCTL_INFO, ("ioctl for fdo is not allowed\n"));
+		DBGE(DBG_IOCTL, "ioctl for fdo is not allowed\n");
 
 		Irp->IoStatus.Status = status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -244,7 +245,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
-	Bus_KdPrint(commonData, BUS_DBG_IOCTL_TRACE, ("ioctl code: %s\n", code2name(ioctl_code)));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", code2name(ioctl_code));
 
 	Bus_IncIoCount(fdoData);
 

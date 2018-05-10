@@ -16,8 +16,7 @@ NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, 
 
 	PAGED_CODE();
 
-	Bus_KdPrint(&fdodata->common, BUS_DBG_PNP_INFO,
-		("Exposing PDO: addr: %d, vendor:product: %04x:%04x\n", plugin->addr, plugin->vendor, plugin->product));
+	DBGI(DBG_PNP, "Exposing PDO: addr: %d, vendor:product: %04x:%04x\n", plugin->addr, plugin->vendor, plugin->product);
 
 	if (plugin->addr <= 0)
 		return STATUS_INVALID_PARAMETER;
@@ -37,7 +36,7 @@ NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, 
 
 	// Create the PDO
 	//
-	Bus_KdPrint(&fdodata->common, BUS_DBG_PNP_NOISE, ("fdodata->NextLowerDriver = 0x%p\n", fdodata->NextLowerDriver));
+	DBGI(DBG_PNP, "fdodata->NextLowerDriver = 0x%p\n", fdodata->NextLowerDriver);
 
 	//
 	// PDO must have a name. You should let the system auto generate a
@@ -105,7 +104,7 @@ NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, 
 	}
 	old_pdodata = (PPDO_DEVICE_DATA)InterlockedCompareExchangePointer(&(fo->FsContext), pdodata, 0);
 	if (old_pdodata) {
-		KdPrint(("you can't plugin again"));
+		DBGI(DBG_GENERAL, "you can't plugin again");
 		ExFreePool(pdodata->HardwareIDs);
 		ExFreePool(pdodata->compatible_ids);
 		IoDeleteDevice(pdo);

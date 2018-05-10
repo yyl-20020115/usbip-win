@@ -62,7 +62,7 @@ cancel_irp(PDEVICE_OBJECT pdo, PIRP Irp)
 
 	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
 	//	IoReleaseCancelSpinLock(DISPATCH_LEVEL);
-	KdPrint(("Cancle Irp %p called\n", Irp));
+	DBGI(DBG_GENERAL, "Cancel Irp %p called\n", Irp);
 	KeAcquireSpinLockAtDpcLevel(&pdodata->q_lock);
 	for (le = pdodata->ioctl_q.Flink;
 		le != &pdodata->ioctl_q;
@@ -79,7 +79,7 @@ cancel_irp(PDEVICE_OBJECT pdo, PIRP Irp)
 		ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
 	}
 	else {
-		KdPrint(("Warning, why we can't found it?\n"));
+		DBGW(DBG_GENERAL, "why we can't found it?\n");
 	}
 	Irp->IoStatus.Status = STATUS_CANCELLED;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);

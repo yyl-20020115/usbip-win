@@ -3,75 +3,48 @@
 
 
 NTSTATUS
-Bus_Power (
-    __in PDEVICE_OBJECT DeviceObject,
-    __in PIRP Irp
-    )
-/*++
-    Handles power Irps sent to both FDO and child PDOs.
-    Note: Currently we do not implement full power handling
-          for the FDO.
-
-Arguments:
-
-    DeviceObject - Pointer to the device object.
-    Irp          - Pointer to the irp.
-
-Return Value:
-
-    NT status is returned.
-
---*/
+Bus_Power(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
-    PIO_STACK_LOCATION  irpStack;
-    NTSTATUS            status;
-    PCOMMON_DEVICE_DATA commonData;
+	PIO_STACK_LOCATION  irpStack;
+	NTSTATUS            status;
+	PCOMMON_DEVICE_DATA commonData;
 
+	DBGI(DBG_GENERAL | DBG_POWER, "Bus_Power: Enter\n");
 
-    KdPrint(("Bus_Power\r\n"));
+	status = STATUS_SUCCESS;
+	irpStack = IoGetCurrentIrpStackLocation (Irp);
+	ASSERT (IRP_MJ_POWER == irpStack->MajorFunction);
 
-    status = STATUS_SUCCESS;
-    irpStack = IoGetCurrentIrpStackLocation (Irp);
-    ASSERT (IRP_MJ_POWER == irpStack->MajorFunction);
+	commonData = (PCOMMON_DEVICE_DATA) DeviceObject->DeviceExtension;
 
-    commonData = (PCOMMON_DEVICE_DATA) DeviceObject->DeviceExtension;
+	//
+	// If the device has been removed, the driver should
+	// not pass the IRP down to the next lower driver.
+	//
+	if (commonData->DevicePnPState == Deleted) {
+		PoStartNextPowerIrp (Irp);
+		Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
+		IoCompleteRequest (Irp, IO_NO_INCREMENT);
+		return status;
+	}
 
-    //
-    // If the device has been removed, the driver should
-    // not pass the IRP down to the next lower driver.
-    //
+	if (commonData->IsFDO) {
+		DBGI(DBG_POWER, "FDO: minor: %s IRP:0x%p %s %s\n",
+		     PowerMinorFunctionString(irpStack->MinorFunction), Irp,
+		     DbgSystemPowerString(commonData->SystemPowerState),
+		     DbgDevicePowerString(commonData->DevicePowerState));
 
-    if (commonData->DevicePnPState == Deleted) {
-        PoStartNextPowerIrp (Irp);
-        Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
-        IoCompleteRequest (Irp, IO_NO_INCREMENT);
-        return status;
-    }
+		status = Bus_FDO_Power((PFDO_DEVICE_DATA)DeviceObject->DeviceExtension, Irp);
+	} else {
+		DBGI(DBG_POWER, "PDO: minor: %s IRP:0x%p %s %s\n",
+		     PowerMinorFunctionString(irpStack->MinorFunction), Irp,
+		     DbgSystemPowerString(commonData->SystemPowerState),
+		     DbgDevicePowerString(commonData->DevicePowerState));
 
-    if (commonData->IsFDO) {
+		status = Bus_PDO_Power ((PPDO_DEVICE_DATA)DeviceObject->DeviceExtension, Irp);
+	}
 
-        Bus_KdPrint (commonData, BUS_DBG_POWER_TRACE,
-            ("FDO %s IRP:0x%p %s %s\n",
-            PowerMinorFunctionString(irpStack->MinorFunction), Irp,
-            DbgSystemPowerString(commonData->SystemPowerState),
-            DbgDevicePowerString(commonData->DevicePowerState)));
-
-
-        status = Bus_FDO_Power ((PFDO_DEVICE_DATA)DeviceObject->DeviceExtension,
-                                Irp);
-    } else {
-
-        Bus_KdPrint (commonData, BUS_DBG_POWER_TRACE,
-            ("PDO %s IRP:0x%p %s %s\n",
-            PowerMinorFunctionString(irpStack->MinorFunction), Irp,
-            DbgSystemPowerString(commonData->SystemPowerState),
-            DbgDevicePowerString(commonData->DevicePowerState)));
-
-        status = Bus_PDO_Power ((PPDO_DEVICE_DATA)DeviceObject->DeviceExtension,
-                                Irp);
-    }
-
-    return status;
+	return status;
 }
 
 
@@ -125,12 +98,11 @@ Return Value:
     }
 
     if (stack->MinorFunction == IRP_MN_SET_POWER) {
-        Bus_KdPrint_Cont(&Data->common, BUS_DBG_POWER_TRACE,
-                     ("\tRequest to set %s state to %s\n",
+        DBGI(DBG_POWER, "\tRequest to set %s state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
                         DbgSystemPowerString(powerState.SystemState) :\
-                        DbgDevicePowerString(powerState.DeviceState))));
+                        DbgDevicePowerString(powerState.DeviceState)));
     }
 
     PoStartNextPowerIrp (Irp);
@@ -177,12 +149,11 @@ Return Value:
     switch (stack->MinorFunction) {
     case IRP_MN_SET_POWER:
 
-        Bus_KdPrint_Cont(&PdoData->common, BUS_DBG_POWER_TRACE,
-                     ("\tSetting %s power state to %s\n",
+        DBGI(DBG_POWER, "\tSetting %s power state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
                         DbgSystemPowerString(powerState.SystemState) : \
-                        DbgDevicePowerString(powerState.DeviceState))));
+                        DbgDevicePowerString(powerState.DeviceState)));
 
         switch (powerType) {
             case DevicePowerState:

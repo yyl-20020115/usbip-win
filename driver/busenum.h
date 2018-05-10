@@ -48,8 +48,6 @@ enum usb_device_speed {
                DbgPrint _x_; \
             } while (0)
 
-extern ULONG BusEnumDebugLevel;
-
 extern NPAGED_LOOKASIDE_LIST g_lookaside;
 
 //
@@ -95,13 +93,6 @@ typedef struct _USBIP_BUS_WMI_STD_DATA {
     // The error Count
     //
     UINT32   ErrorCount;
-
-    //
-    // Debug Print Level
-    //
-
-    UINT32  DebugPrintLevel;
-
 } USBIP_BUS_WMI_STD_DATA, * PUSBIP_BUS_WMI_STD_DATA;
 
 
@@ -122,22 +113,14 @@ typedef struct _COMMON_DEVICE_DATA
     // We track the state of the device with every PnP Irp
     // that affects the device through these two variables.
 
-    DEVICE_PNP_STATE DevicePnPState;
-
-    DEVICE_PNP_STATE PreviousPnPState;
-
-
-    ULONG           DebugLevel;
+    DEVICE_PNP_STATE	DevicePnPState;
+    DEVICE_PNP_STATE	PreviousPnPState;
 
     // Stores the current system power state
-
-    SYSTEM_POWER_STATE  SystemPowerState;
+    SYSTEM_POWER_STATE	SystemPowerState;
 
     // Stores current device power state
-
-    DEVICE_POWER_STATE  DevicePowerState;
-
-
+    DEVICE_POWER_STATE	DevicePowerState;
 } COMMON_DEVICE_DATA, *PCOMMON_DEVICE_DATA;
 
 //

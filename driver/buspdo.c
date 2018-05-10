@@ -217,8 +217,8 @@ Routine Description:
             status = STATUS_SUCCESS;
         } else {
            //ASSERT(DeviceData->Present);
-	    KdPrint(("Error! why we are not present\n"));
-            status = STATUS_SUCCESS;
+		DBGE(DBG_GENERAL, "why we are not present\n");
+		status = STATUS_SUCCESS;
         }
         break;
 
@@ -237,20 +237,16 @@ Routine Description:
 
         // Query the IDs of the device
 
-        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-                ("\tQueryId Type: %d %s\n",
-		 IrpStack->Parameters.QueryId.IdType,
-                DbgDeviceIDString(IrpStack->Parameters.QueryId.IdType)));
+        DBGI(DBG_PNP, "\tQueryId Type: %d %s\n", IrpStack->Parameters.QueryId.IdType,
+                DbgDeviceIDString(IrpStack->Parameters.QueryId.IdType));
 
         status = Bus_PDO_QueryDeviceId(DeviceData, Irp);
 
         break;
 
     case IRP_MN_QUERY_DEVICE_RELATIONS:
-
-        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-            ("\tQueryDeviceRelation Type: %s\n",DbgDeviceRelationString(\
-                    IrpStack->Parameters.QueryDeviceRelations.Type)));
+		DBGI(DBG_PNP, "\tQueryDeviceRelation Type: %s\n",
+			DbgDeviceRelationString(IrpStack->Parameters.QueryDeviceRelations.Type));
 
         status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
 
@@ -437,8 +433,7 @@ Return Value:
         FDO_FROM_PDO(DeviceData)->NextLowerDriver, &parentCapabilities);
     if (!NT_SUCCESS(status)) {
 
-        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-            ("\tQueryDeviceCaps failed\n"));
+        DBGI(DBG_PNP, "\tQueryDeviceCaps failed\n");
         return status;
 
     }
@@ -621,7 +616,7 @@ Return Value:
     }
     RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
 	*(unsigned short *)((char *)buffer+length -2)=0;
-	KdPrint(("dev id:%LS\r\n", buffer));
+	DBGI(DBG_GENERAL, "dev id:%LS\r\n", buffer);
         Irp->IoStatus.Information = (ULONG_PTR) buffer;
         break;
 
@@ -637,8 +632,7 @@ Return Value:
            break;
         }
         RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"%02d", DeviceData->SerialNo);
-        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_INFO,
-                     ("\tInstanceID: %ws\n", buffer));
+        DBGI(DBG_PNP, "\tInstanceID: %ws\n", buffer);
         Irp->IoStatus.Information = (ULONG_PTR) buffer;
         break;
 
@@ -654,7 +648,7 @@ Return Value:
 			break;
 		}
 		RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
-		KdPrint(("hid:%LS\r\n", buffer));
+		DBGI(DBG_GENERAL, "hid:%LS\r\n", buffer);
 		Irp->IoStatus.Information = (ULONG_PTR) buffer;
 		break;
 
@@ -672,7 +666,7 @@ Return Value:
         }
         RtlCopyMemory (buffer, DeviceData->compatible_ids,
 		DeviceData->compatible_ids_len);
-		KdPrint(("cid:%LS\r\n", buffer));
+	DBGI(DBG_GENERAL, "cid:%LS\r\n", buffer);
         Irp->IoStatus.Information = (ULONG_PTR) buffer;
         break;
 	case BusQueryContainerID:
@@ -689,9 +683,7 @@ Return Value:
 }
 
 NTSTATUS
-Bus_PDO_QueryDeviceText(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+Bus_PDO_QueryDeviceText(__in PPDO_DEVICE_DATA DeviceData, __in  PIRP Irp )
 /*++
 
 Routine Description:
@@ -719,6 +711,8 @@ Return Value:
     USHORT  length;
     PIO_STACK_LOCATION   stack;
     NTSTATUS    status;
+
+	UNREFERENCED_PARAMETER(DeviceData);
 
     PAGED_CODE ();
 
@@ -758,8 +752,7 @@ Return Value:
 #endif
                 RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"USB Device Over IP");
 
-                Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-                    ("\tDeviceTextDescription :%ws\n", buffer));
+                DBGI(DBG_PNP, "\tDeviceTextDescription :%ws\n", buffer);
 
                 Irp->IoStatus.Information = (ULONG_PTR) buffer;
             }
@@ -781,8 +774,7 @@ Return Value:
 
                 RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"on USB/IP Enumerator");
 
-                Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-                    ("\tDeviceTextLocationInformation :%ws\n", buffer));
+                DBGI(DBG_PNP, "\tDeviceTextLocationInformation :%ws\n", buffer);
 
                 Irp->IoStatus.Information = (ULONG_PTR) buffer;
             }
@@ -790,9 +782,7 @@ Return Value:
 	break;
 
     default:
-        Bus_KdPrint_Cont (&DeviceData->common, BUS_DBG_PNP_TRACE,
-            ("\tWarning Query what? %d\n",
-		stack->Parameters.QueryDeviceText.DeviceTextType));
+        DBGI(DBG_PNP, "\tWarning Query what? %d\n", stack->Parameters.QueryDeviceText.DeviceTextType);
 
         status = STATUS_SUCCESS;
         break;
@@ -1141,9 +1131,10 @@ Return Value:
     return STATUS_SUCCESS;
 }
 
-BOOLEAN USB_BUSIFFN IsDeviceHighSpeed(PVOID context){
+BOOLEAN USB_BUSIFFN IsDeviceHighSpeed(PVOID context)
+{
 	PPDO_DEVICE_DATA pdodata = context;
-	KdPrint(("IsDeviceHighSpeed called, it is %d\n", pdodata->speed));
+	DBGI(DBG_GENERAL, "IsDeviceHighSpeed called, it is %d\n", pdodata->speed);
 	if(pdodata->speed == USB_SPEED_HIGH)
 		return TRUE;
 	return FALSE;
@@ -1162,7 +1153,7 @@ NTSTATUS USB_BUSIFFN QueryBusInformation(
 	UNREFERENCED_PARAMETER(BusInformationBufferLength);
 	UNREFERENCED_PARAMETER(BusInformationActualLength);
 
-	KdPrint(("QueryBusInformation called\n"));
+	DBGI(DBG_GENERAL, "QueryBusInformation called\n");
 	return STATUS_UNSUCCESSFUL;
 }
 
@@ -1173,7 +1164,7 @@ NTSTATUS USB_BUSIFFN SubmitIsoOutUrb (
 	UNREFERENCED_PARAMETER(context);
 	UNREFERENCED_PARAMETER(urb);
 
-	KdPrint(("SubmitIsoOutUrb called\n"));
+	DBGI(DBG_GENERAL, "SubmitIsoOutUrb called\n");
 	return STATUS_UNSUCCESSFUL;
 }
 
@@ -1185,7 +1176,7 @@ NTSTATUS USB_BUSIFFN QueryBusTime(
 	UNREFERENCED_PARAMETER(context);
 	UNREFERENCED_PARAMETER(currentusbframe);
 
-	KdPrint(("QueryBusTime called\n"));
+	DBGI(DBG_GENERAL, "QueryBusTime called\n");
 	return STATUS_UNSUCCESSFUL;
 }
 
@@ -1196,7 +1187,7 @@ VOID USB_BUSIFFN GetUSBDIVersion (
 ){
 	UNREFERENCED_PARAMETER(context);
 
-	KdPrint(("GetUSBDIVersion called\n"));
+	DBGI(DBG_GENERAL, "GetUSBDIVersion called\n");
 	*HcdCapabilities = 0;
 	inf->USBDI_Version=0x500; /* Windows XP */
 	inf->Supported_USB_Version=0x200; /* USB 2.0 */
@@ -1227,21 +1218,21 @@ Bus_PDO_QueryInterface(
    for(i=0;i<sizeof(GUID);i++){
 		RtlStringCchPrintfA(buf+2*i, 3, "%02X", *((unsigned char *)interfaceType+i));
    }
-   KdPrint(("Query GUID: %s\n",buf));
+   DBGI(DBG_GENERAL, "Query GUID: %s\n",buf);
 
    if (!IsEqualGUID(interfaceType, (PVOID) &USB_BUS_INTERFACE_USBDI_GUID)){
-	KdPrint(("Query unknown interface GUID:\n"));
-        return Irp->IoStatus.Status;
+	   DBGI(DBG_GENERAL, "Query unknown interface GUID:\n");
+	   return Irp->IoStatus.Status;
    }
    size = irpStack->Parameters.QueryInterface.Size;
    version = irpStack->Parameters.QueryInterface.Version;
    if(version > USB_BUSIF_USBDI_VERSION_1){
-	KdPrint(("unsupported usbdi interface version now %d", version));
-        return STATUS_INVALID_PARAMETER;
+	   DBGW(DBG_GENERAL, "unsupported usbdi interface version now %d", version);
+	   return STATUS_INVALID_PARAMETER;
    }
    if(size<valid_size[version]){
-	KdPrint(("unsupported usbdi interface version now %d", version));
-        return STATUS_INVALID_PARAMETER;
+	   DBGW(DBG_GENERAL, "unsupported usbdi interface version now %d", version);
+	   return STATUS_INVALID_PARAMETER;
    }
 
    bus_intf = (USB_BUS_INTERFACE_USBDI_V1 *)
@@ -1261,7 +1252,7 @@ Bus_PDO_QueryInterface(
 		   bus_intf->BusContext = DeviceData;
 		   break;
            default:
-		   KdPrint(("Error, never go here\n"));
+		   DBGE(DBG_GENERAL, "never go here\n");
 		   return STATUS_INVALID_PARAMETER;
    }
    InterfaceReference(DeviceData);
@@ -1269,10 +1260,7 @@ Bus_PDO_QueryInterface(
 }
 
 BOOLEAN
-Bus_GetCrispinessLevel(
-    __in   PVOID Context,
-    __out  PUCHAR Level
-    )
+Bus_GetCrispinessLevel(__in PVOID Context, __out PUCHAR Level)
 /*++
 
 Routine Description:
@@ -1290,22 +1278,19 @@ Return Value:
 
 --*/
 {
+	UNREFERENCED_PARAMETER(Context);
     //
     // Validate the context to see if it's really a pointer
     // to PDO's device extension. You can store some kind
     // of signature in the PDO for this purpose
     //
-    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
-                                    ("GetCrispinessLevel\n"));
-    *Level = 10;
-    return TRUE;
+	DBGI(DBG_PNP, "GetCrispinessLevel\n");
+	*Level = 10;
+	return TRUE;
 }
 
 BOOLEAN
-Bus_SetCrispinessLevel(
-    __in   PVOID Context,
-    __in   UCHAR Level
-    )
+Bus_SetCrispinessLevel(__in PVOID Context, __in UCHAR Level)
 /*++
 
 Routine Description:
@@ -1323,17 +1308,15 @@ Return Value:
 
 --*/
 {
+	UNREFERENCED_PARAMETER(Context);
 	UNREFERENCED_PARAMETER(Level);
 
-    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
-                                    ("SetCrispinessLevel\n"));
-    return TRUE;
+	DBGI(DBG_PNP, "SetCrispinessLevel\n");
+	return TRUE;
 }
 
 BOOLEAN
-Bus_IsSafetyLockEnabled(
-    __in PVOID Context
-    )
+Bus_IsSafetyLockEnabled(__in PVOID Context)
 /*++
 
 Routine Description:
@@ -1350,9 +1333,10 @@ Return Value:
 
 --*/
 {
-    Bus_KdPrint (&((PPDO_DEVICE_DATA)Context)->common, BUS_DBG_PNP_TRACE,
-                                    ("IsSafetyLockEnabled\n"));
-    return TRUE;
+	UNREFERENCED_PARAMETER(Context);
+
+	DBGI(DBG_GENERAL | DBG_PNP, "IsSafetyLockEnabled\n");
+	return TRUE;
 }
 
 VOID

@@ -31,7 +31,7 @@ to_usbd_status(int linux_status)
 	case -EREMOTEIO:
 		return USBD_STATUS_ERROR_SHORT_TRANSFER;
 	default:
-		KdPrint(("linux status: %d\n", linux_status));
+		DBGE(DBG_WRITE, "linux status: %d\n", linux_status);
 		return USBD_STATUS_ERROR;
 	}
 }
@@ -49,18 +49,18 @@ try_save_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 	cfg = (PUSB_CONFIGURATION_DESCRIPTOR)urb_desc->TransferBuffer;
 	len = urb_desc->TransferBufferLength;
 	if (len < sizeof(USB_CONFIGURATION_DESCRIPTOR)) {
-		KdPrint(("not full len\n"));
+		DBGE(DBG_WRITE, "not full len\n");
 		return;
 	}
 	if (cfg->bDescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE || cfg->wTotalLength != len) {
-		KdPrint(("not full cfg\n"));
+		DBGE(DBG_WRITE, "not full cfg\n");
 		return;
 	}
 
-	KdPrint(("save config for using when select config\n"));
+	DBGI(DBG_WRITE, "save config for using when select config\n");
 	pdodata->dev_config = ExAllocatePoolWithTag(NonPagedPool, len, BUSENUM_POOL_TAG);
 	if (pdodata->dev_config == NULL) {
-		KdPrint(("Warning, can't malloc %d bytes\n", len));
+		DBGE(DBG_WRITE, "can't malloc %d bytes\n", len);
 		return;
 	}
 
@@ -74,8 +74,8 @@ save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descripto
 
 	for (i = 0; i < urb->NumberOfPackets; i++) {
 		if (iso_desc->offset > urb->IsoPacket[i].Offset) {
-			KdPrint(("Warning, why offset changed?%d %d %d %d\n",
-				 i, iso_desc->offset, iso_desc->actual_length, urb->IsoPacket[i].Offset));
+			DBGW(DBG_WRITE, "why offset changed?%d %d %d %d\n",
+			     i, iso_desc->offset, iso_desc->actual_length, urb->IsoPacket[i].Offset);
 			return False;
 		}
 		urb->IsoPacket[i].Length = iso_desc->actual_length;
@@ -92,7 +92,7 @@ get_buf(PVOID buf, PMDL bufMDL)
 		if (bufMDL != NULL)
 			buf = MmGetSystemAddressForMdlSafe(bufMDL, NormalPagePriority);
 		if (buf == NULL) {
-			KdPrint(("No transfer buffer\n"));
+			DBGW(DBG_WRITE, "No transfer buffer\n");
 		}
 	}
 	return buf;
@@ -109,18 +109,18 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 			continue;
 
 		if (urb->IsoPacket[i].Offset + urb->IsoPacket[i].Length	> dest_len) {
-			KdPrint(("Warning, why this?"));
+			DBGW(DBG_WRITE, "Warning, why this?");
 			break;
 		}
 		if (offset + urb->IsoPacket[i].Length > src_len) {
-			KdPrint(("Warning, why that?"));
+			DBGW(DBG_WRITE, "Warning, why that?");
 			break;
 		}
 		RtlCopyMemory(dest + urb->IsoPacket[i].Offset, src + offset, urb->IsoPacket[i].Length);
 		offset += urb->IsoPacket[i].Length;
 	}
 	if (offset != src_len) {
-		KdPrint(("Warning, why not equal offset:%d src_len:%d",	offset, src_len));
+		DBGW(DBG_WRITE, "why not equal offset:%d src_len:%d", offset, src_len);
 	}
 }
 
@@ -135,32 +135,32 @@ post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 	unsigned int offset = 0;
 
 	if (pdodata->dev_config == NULL) {
-		KdPrint(("Warning, select interface when have no get config\n"));
+		DBGW(DBG_WRITE, "select interface when have no get config\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
 	intf = &urb_sel->Interface;
 	if (intf->Length < sizeof(*intf) - sizeof(intf->Pipes[0])) {
-		KdPrint(("Warning, intf is too small\n"));
+		DBGW(DBG_WRITE, "Warning, intf is too small\n");
 		return STATUS_INVALID_PARAMETER;
 	}
-	KdPrint(("config handle:%08x\n", urb_sel->ConfigurationHandle));
-	KdPrint(("interface: len:%d int num:%d "
-		"AlternateSetting:%d "
-		"class:%d subclass:%d "
-		"protocol:%d handle:%08x # pipes:%d\n",
-		intf->Length,
-		intf->InterfaceNumber,
-		intf->AlternateSetting,
-		intf->Class,
-		intf->SubClass,
-		intf->Protocol,
-		intf->InterfaceHandle,
-		intf->NumberOfPipes));
+	DBGI(DBG_WRITE, "config handle:%08x\n", urb_sel->ConfigurationHandle);
+	DBGI(DBG_WRITE, "interface: len:%d int num:%d "
+	     "AlternateSetting:%d "
+	     "class:%d subclass:%d "
+	     "protocol:%d handle:%08x # pipes:%d\n",
+	     intf->Length,
+	     intf->InterfaceNumber,
+	     intf->AlternateSetting,
+	     intf->Class,
+	     intf->SubClass,
+	     intf->Protocol,
+	     intf->InterfaceHandle,
+	     intf->NumberOfPipes);
 
 	i = (intf->Length + sizeof(intf->Pipes[0]) - sizeof(*intf)) / sizeof(intf->Pipes[0]);
 	if (i < intf->NumberOfPipes) {
-		KdPrint(("Warning, why space is so small?"));
+		DBGW(DBG_WRITE, "why space is so small?");
 		return STATUS_INVALID_PARAMETER;
 	}
 	/* FIXME  do we need set the other info in intf ? */
@@ -172,13 +172,13 @@ post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 		intf->AlternateSetting);
 	/* FIXME if alternatesetting, we sound send out a ctrl urb ? */
 	if (intf_desc == NULL) {
-		KdPrint(("Warning, can't select this interface\n"));
+		DBGW(DBG_WRITE, "can't select this interface\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 	if (intf->NumberOfPipes != intf_desc->bNumEndpoints) {
-		KdPrint(("Warning, endpoints num no same: can hold:%d have %d\n",
-			intf->NumberOfPipes,
-			intf_desc->bNumEndpoints));
+		DBGW(DBG_WRITE, "endpoints num no same: can hold:%d have %d\n",
+		     intf->NumberOfPipes,
+		     intf_desc->bNumEndpoints);
 		return STATUS_INVALID_PARAMETER;
 	}
 	for (i = 0; i < intf->NumberOfPipes; i++) {
@@ -193,7 +193,7 @@ post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 			(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
 			&offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
 		if (NULL == ep_desc) {
-			KdPrint(("Warning, no ep desc\n"));
+			DBGW(DBG_WRITE, "no ep desc\n");
 			return STATUS_INVALID_DEVICE_REQUEST;
 		}
 		set_pipe(&intf->Pipes[i], ep_desc, pdodata->speed);
@@ -397,14 +397,14 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 
 	hdr = get_usbip_hdr_from_write_irp(irp);
 	if (hdr == NULL) {
-		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_ERROR, ("small write irp\n"));
+		DBGE(DBG_WRITE, "small write irp\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
 	urb_r = find_urb_req(pdodata, hdr);
 	if (urb_r == NULL) {
 		// Might have been cancelled before, so return STATUS_SUCCESS
-		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_TRACE, ("no urb: seqnum: %d\n", hdr->base.seqnum));
+		DBGE(DBG_WRITE, "no urb: seqnum: %d\n", hdr->base.seqnum);
 		return STATUS_SUCCESS;
 	}
 
@@ -412,7 +412,7 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		status = process_urb_res(pdodata, urb_r, hdr);
 	}
 	else {
-		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_INFO, ("not sent: seqnum: %d\n", hdr->base.seqnum));
+		DBGE(DBG_WRITE, "not sent: seqnum: %d\n", hdr->base.seqnum);
 		status = STATUS_INVALID_PARAMETER;
 	}
 
@@ -444,10 +444,10 @@ Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Write: Enter\n"));
+	DBGI(DBG_GENERAL | DBG_WRITE, "Bus_Write: Enter\n");
 
 	if (!commonData->IsFDO) {
-		Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("write for fdo is not allowed\n"));
+		DBGE(DBG_WRITE, "write for fdo is not allowed\n");
 
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -471,7 +471,7 @@ Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	Irp->IoStatus.Information = 0;
 	status = process_write_irp(pdodata, Irp);
 END:
-	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Write: Leave: %08x\n", status));
+	DBGI(DBG_WRITE, "Bus_Write: Leave: %08x\n", status);
 	Irp->IoStatus.Status = status;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	Bus_DecIoCount(fdoData);

@@ -9,21 +9,21 @@
 void
 show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)
 {
-	KdPrint(("pipe num %d:\n"
-		"MaximumPacketSize: %d\n"
-		"EndpointAddress: 0x%02x\n"
-		"Interval: %d\n"
-		"PipeType: %d\n"
-		"PiPeHandle: 0x%08x\n"
-		"MaximumTransferSize %d\n"
-		"PipeFlags 0x%08x\n", num,
-		pipe->MaximumPacketSize,
-		pipe->EndpointAddress,
-		pipe->Interval,
-		pipe->PipeType,
-		pipe->PipeHandle,
-		pipe->MaximumTransferSize,
-		pipe->PipeFlags));
+	DBGI(DBG_GENERAL, "pipe num %d:\n"
+	     "MaximumPacketSize: %d\n"
+	     "EndpointAddress: 0x%02x\n"
+	     "Interval: %d\n"
+	     "PipeType: %d\n"
+	     "PiPeHandle: 0x%08x\n"
+	     "MaximumTransferSize %d\n"
+	     "PipeFlags 0x%08x\n", num,
+	     pipe->MaximumPacketSize,
+	     pipe->EndpointAddress,
+	     pipe->Interval,
+	     pipe->PipeType,
+	     pipe->PipeHandle,
+	     pipe->MaximumTransferSize,
+	     pipe->PipeFlags);
 }
 
 void

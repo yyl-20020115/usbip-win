@@ -60,7 +60,7 @@ get_buf(PVOID buf, PMDL bufMDL)
 		if (bufMDL != NULL)
 			buf = MmGetSystemAddressForMdlSafe(bufMDL, LowPagePriority);
 		if (buf == NULL) {
-			KdPrint(("No transfer buffer\n"));
+			DBGE(DBG_READ, "No transfer buffer\n");
 		}
 	}
 	return buf;
@@ -284,7 +284,7 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urb_r)
 	}
 
 	if (type != USB_ENDPOINT_TYPE_BULK && type != USB_ENDPOINT_TYPE_INTERRUPT) {
-		KdPrint(("Error, not a bulk pipe\n"));
+		DBGE(DBG_READ, "Error, not a bulk pipe\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
@@ -317,7 +317,7 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urb_r)
 	in = PIPE2DIRECT(urb_iso->PipeHandle);
 	type = PIPE2TYPE(urb_iso->PipeHandle);
 	if (type != USB_ENDPOINT_TYPE_ISOCHRONOUS) {
-		KdPrint(("Error, not a iso pipe\n"));
+		DBGE(DBG_READ, "Error, not a iso pipe\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
@@ -349,7 +349,7 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urb_r)
 	offset = 0;
 	for (i = 0; i < urb_iso->NumberOfPackets; i++) {
 		if (urb_iso->IsoPacket[i].Offset < offset) {
-			KdPrint(("Warning strange iso packet offset:%d %d", offset, urb_iso->IsoPacket[i].Offset));
+			DBGW(DBG_READ, "strange iso packet offset:%d %d", offset, urb_iso->IsoPacket[i].Offset);
 			return STATUS_INVALID_PARAMETER;
 		}
 		iso_desc->offset = RtlUlongByteSwap(urb_iso->IsoPacket[i].Offset);
@@ -447,7 +447,8 @@ process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
 		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
 		return status;
 	}
-	Bus_KdPrint(&pdodata->common, BUS_DBG_SS_TRACE, ("process_read_irp: seq:%d, %p\n", urb_r->seq_num, urb_r->irp));
+
+	DBGI(DBG_READ, "process_read_irp: seq:%d, %p\n", urb_r->seq_num, urb_r->irp);
 
 	status = process_urb_req(read_irp, urb_r);
 	if (status == STATUS_SUCCESS || !IoSetCancelRoutine(urb_r->irp, NULL)) {
@@ -478,10 +479,10 @@ Bus_Read(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Read: Enter\n"));
+	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Enter\n");
 
 	if (!commonData->IsFDO) {
-		Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("read for fdo is not allowed\n"));
+		DBGE(DBG_READ, "read for fdo is not allowed\n");
 
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -511,7 +512,7 @@ Bus_Read(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = process_read_irp(pdodata, Irp);
 	}
 END:
-	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Read: Leave: 0x%08x\n", status));
+	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Leave: 0x%08x\n", status);
 	if (status != STATUS_PENDING) {
 		Irp->IoStatus.Status = status;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);

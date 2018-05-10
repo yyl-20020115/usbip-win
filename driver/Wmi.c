@@ -68,7 +68,6 @@ Routine Description
     //
 
     FdoData->StdUSBIPBusData.ErrorCount = 0;
-    FdoData->StdUSBIPBusData.DebugPrintLevel = BusEnumDebugLevel;
 
     return status;
 
@@ -119,7 +118,7 @@ Routine Description
 
     PAGED_CODE();
 
-    KdPrint(("Bus SystemControl\r\n"));
+    DBGI(DBG_WMI, "Bus SystemControl\r\n");
 
     stack = IoGetCurrentIrpStackLocation (Irp);
 
@@ -129,8 +128,7 @@ Routine Description
         //
         // The PDO, just complete the request with the current status
         //
-        Bus_KdPrint (commonData, BUS_DBG_WMI_TRACE,
-            ("PDO %s\n", WMIMinorFunctionString(stack->MinorFunction)));
+	    DBGI(DBG_WMI, "PDO %s\n", WMIMinorFunctionString(stack->MinorFunction));
         status = Irp->IoStatus.Status;
         IoCompleteRequest (Irp, IO_NO_INCREMENT);
         return status;
@@ -138,8 +136,7 @@ Routine Description
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
-    Bus_KdPrint (&fdoData->common, BUS_DBG_WMI_TRACE,
-             ("FDO: %s\n", WMIMinorFunctionString(stack->MinorFunction)));
+    DBGI(DBG_WMI, "FDO: %s\n", WMIMinorFunctionString(stack->MinorFunction));
 
     Bus_IncIoCount (fdoData);
 
@@ -254,6 +251,7 @@ Return Value:
     PAGED_CODE();
 
 	UNREFERENCED_PARAMETER(InstanceIndex);
+	UNREFERENCED_PARAMETER(Buffer);
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
@@ -270,8 +268,6 @@ Return Value:
                 break;
            }
 
-           BusEnumDebugLevel = fdoData->StdUSBIPBusData.DebugPrintLevel =
-                                    *((PULONG)Buffer);
            status = STATUS_SUCCESS;
         }
         else {
@@ -341,6 +337,7 @@ Return Value:
     PAGED_CODE();
 
 	UNREFERENCED_PARAMETER(InstanceIndex);
+	UNREFERENCED_PARAMETER(Buffer);
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
@@ -354,12 +351,6 @@ Return Value:
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
-
-        //
-        // We will update only writable elements.
-        //
-        BusEnumDebugLevel = fdoData->StdUSBIPBusData.DebugPrintLevel =
-                    ((PUSBIP_BUS_WMI_STD_DATA)Buffer)->DebugPrintLevel;
 
         status = STATUS_SUCCESS;
 

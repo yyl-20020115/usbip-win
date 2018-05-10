@@ -9,9 +9,6 @@
 // Global Debug Level
 //
 
-ULONG BusEnumDebugLevel = BUS_DEFAULT_DEBUG_OUTPUT_LEVEL;
-
-
 GLOBALS Globals;
 
 NPAGED_LOOKASIDE_LIST g_lookaside;
@@ -25,73 +22,47 @@ NPAGED_LOOKASIDE_LIST g_lookaside;
 #endif
 
 NTSTATUS
-DriverEntry (
-    __in  PDRIVER_OBJECT  DriverObject,
-    __in  PUNICODE_STRING RegistryPath
-    )
-/*++
-Routine Description:
-
-    Initialize the driver dispatch table.
-
-Arguments:
-
-    DriverObject - pointer to the driver object
-
-    RegistryPath - pointer to a unicode string representing the path,
-                   to driver-specific key in the registry.
-
-Return Value:
-
-  NT Status Code
-
---*/
+DriverEntry(__in  PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING RegistryPath)
 {
-	Bus_KdPrint_Def(BUS_DBG_SS_TRACE, ("Driver Entry\n"));
+	DBGI(DBG_GENERAL, "DriverEntry: Enter\n");
 
-    ExInitializeNPagedLookasideList(&g_lookaside, NULL,NULL,0,
-		    sizeof(struct urb_req), 'USBV', 0);
+	ExInitializeNPagedLookasideList(&g_lookaside, NULL,NULL, 0, sizeof(struct urb_req), 'USBV', 0);
 
-    //
-    // Save the RegistryPath for WMI.
-    //
+	//
+	// Save the RegistryPath for WMI.
+	//
 
-    Globals.RegistryPath.MaximumLength = RegistryPath->Length +
-                                          sizeof(UNICODE_NULL);
-    Globals.RegistryPath.Length = RegistryPath->Length;
-    Globals.RegistryPath.Buffer = ExAllocatePoolWithTag(
-                                       PagedPool,
-                                       Globals.RegistryPath.MaximumLength,
-                                       BUSENUM_POOL_TAG
-                                       );
+	Globals.RegistryPath.MaximumLength = RegistryPath->Length + sizeof(UNICODE_NULL);
+	Globals.RegistryPath.Length = RegistryPath->Length;
+	Globals.RegistryPath.Buffer = ExAllocatePoolWithTag(PagedPool, Globals.RegistryPath.MaximumLength, BUSENUM_POOL_TAG);
 
-    if (!Globals.RegistryPath.Buffer) {
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
+	if (!Globals.RegistryPath.Buffer) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
 
+	DBGI(DBG_GENERAL, "RegistryPath %p\r\n", RegistryPath);
 
-    KdPrint(("RegistryPath %p\r\n", RegistryPath));
-    RtlCopyUnicodeString(&Globals.RegistryPath, RegistryPath);
+	RtlCopyUnicodeString(&Globals.RegistryPath, RegistryPath);
 
-    //
-    // Set entry points into the driver
-    //
-    DriverObject->MajorFunction [IRP_MJ_CREATE] = Bus_Create;
-    DriverObject->MajorFunction [IRP_MJ_CLEANUP] = Bus_Cleanup;
-    DriverObject->MajorFunction [IRP_MJ_CLOSE] = Bus_Close;
-    DriverObject->MajorFunction [IRP_MJ_READ] = Bus_Read;
-    DriverObject->MajorFunction [IRP_MJ_WRITE] = Bus_Write;
-    DriverObject->MajorFunction [IRP_MJ_PNP] = Bus_PnP;
-    DriverObject->MajorFunction [IRP_MJ_POWER] = Bus_Power;
-    DriverObject->MajorFunction [IRP_MJ_DEVICE_CONTROL] = Bus_IoCtl;
-    DriverObject->MajorFunction [IRP_MJ_INTERNAL_DEVICE_CONTROL] = Bus_Internal_IoCtl;
-    DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = Bus_SystemControl;
-    DriverObject->DriverUnload = Bus_DriverUnload;
-    DriverObject->DriverExtension->AddDevice = Bus_AddDevice;
+	//
+	// Set entry points into the driver
+	//
+	DriverObject->MajorFunction [IRP_MJ_CREATE] = Bus_Create;
+	DriverObject->MajorFunction [IRP_MJ_CLEANUP] = Bus_Cleanup;
+	DriverObject->MajorFunction [IRP_MJ_CLOSE] = Bus_Close;
+	DriverObject->MajorFunction [IRP_MJ_READ] = Bus_Read;
+	DriverObject->MajorFunction [IRP_MJ_WRITE] = Bus_Write;
+	DriverObject->MajorFunction [IRP_MJ_PNP] = Bus_PnP;
+	DriverObject->MajorFunction [IRP_MJ_POWER] = Bus_Power;
+	DriverObject->MajorFunction [IRP_MJ_DEVICE_CONTROL] = Bus_IoCtl;
+	DriverObject->MajorFunction [IRP_MJ_INTERNAL_DEVICE_CONTROL] = Bus_Internal_IoCtl;
+	DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = Bus_SystemControl;
+	DriverObject->DriverUnload = Bus_DriverUnload;
+	DriverObject->DriverExtension->AddDevice = Bus_AddDevice;
 
-    KdPrint(("load ok"));
+	DBGI(DBG_GENERAL, "DriverEntry: Leave\n");
 
-    return STATUS_SUCCESS;
+	return STATUS_SUCCESS;
 }
 
 #include "usbip_proto.h"
@@ -237,40 +208,23 @@ Bus_Close (
     return status;
 }
 
-void show_iso_urb(struct _URB_ISOCH_TRANSFER * iso)
+void
+show_iso_urb(struct _URB_ISOCH_TRANSFER *iso)
 {
-	ULONG i;
-	KdPrint(("iso_num:%d len:%d",
-				iso->NumberOfPackets,
-				iso->TransferBufferLength));
-	for(i=0; i<iso->NumberOfPackets; i++){
-		KdPrint(("num: %d len:%d off:%d\n",
-					i,
-					iso->IsoPacket[i].Length,
-				iso->IsoPacket[i].Offset));
+	ULONG	i;
+
+	DBGI(DBG_GENERAL, "iso_num:%d len:%d", iso->NumberOfPackets, iso->TransferBufferLength);
+	for (i = 0; i < iso->NumberOfPackets; i++) {
+		DBGI(DBG_GENERAL, "num: %d len:%d off:%d\n", i, iso->IsoPacket[i].Length, iso->IsoPacket[i].Offset);
 	}
 }
 
 VOID
-Bus_DriverUnload (
-    __in PDRIVER_OBJECT DriverObject
-    )
-/*++
-Routine Description:
-    Clean up everything we did in driver entry.
-
-Arguments:
-
-   DriverObject - pointer to this driverObject.
-
-
-Return Value:
-
---*/
+Bus_DriverUnload(__in PDRIVER_OBJECT DriverObject)
 {
     PAGED_CODE ();
 
-    Bus_KdPrint_Def (BUS_DBG_SS_TRACE, ("Unload\n"));
+    DBGI(DBG_GENERAL, "Unload\n");
 
     ExDeleteNPagedLookasideList(&g_lookaside);
 
