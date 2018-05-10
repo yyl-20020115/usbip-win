@@ -1,3 +1,5 @@
+#include "busenum.h"
+
 #include <usbdi.h>
 
 #define K_V(a) {#a, a},
@@ -88,21 +90,23 @@ K_V( URB_FUNCTION_GET_INTERFACE                  )
 K_V( URB_FUNCTION_LAST                           )
 {0,0}};
 
-const char * code2name(unsigned int code)
+const char *
+code2name(unsigned int code)
 {
 	int i;
-	for(i=0;usb_io_ctrls[i].name;i++){
-		if(code==usb_io_ctrls[i].code)
+	for(i = 0; usb_io_ctrls[i].name; i++) {
+		if (code == usb_io_ctrls[i].code)
 			return usb_io_ctrls[i].name;
 	}
 	return "Unknown ioctl code";
 }
 
-const char * func2name(unsigned int func)
+const char *
+func2name(unsigned int func)
 {
 	int i;
-	for(i=0;usb_funcs[i].name;i++){
-		if(func==usb_funcs[i].code)
+	for ( i = 0; usb_funcs[i].name; i++) {
+		if (func == usb_funcs[i].code)
 			return usb_funcs[i].name;
 	}
 	return "Unknown func code";

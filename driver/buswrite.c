@@ -1,0 +1,480 @@
+#include "busenum.h"
+
+#include <usbdi.h>
+
+#include "usbip_proto.h"
+#include "code2name.h"
+#include "usbreq.h"
+
+#ifdef ALLOC_PRAGMA
+#pragma alloc_text (PAGE, Bus_Write)
+#endif
+
+extern struct urb_req *
+find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
+
+#define EPIPE 32
+#define EOVERFLOW 75
+#define EREMOTEIO 121
+
+static USBD_STATUS
+to_usbd_status(int linux_status)
+{
+	switch (linux_status) {
+	case 0:
+		return USBD_STATUS_SUCCESS;
+		/* I guess it */
+	case -EPIPE:
+		return USBD_STATUS_ENDPOINT_HALTED;
+	case -EOVERFLOW:
+		return USBD_STATUS_DATA_OVERRUN;
+	case -EREMOTEIO:
+		return USBD_STATUS_ERROR_SHORT_TRANSFER;
+	default:
+		KdPrint(("linux status: %d\n", linux_status));
+		return USBD_STATUS_ERROR;
+	}
+}
+
+static void
+try_save_config(PPDO_DEVICE_DATA pdodata, PURB urb)
+{
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_desc = (struct _URB_CONTROL_DESCRIPTOR_REQUEST *)urb;
+	PUSB_CONFIGURATION_DESCRIPTOR	cfg;
+	int	len;
+
+	if (urb_desc->DescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE)
+		return;
+
+	cfg = (PUSB_CONFIGURATION_DESCRIPTOR)urb_desc->TransferBuffer;
+	len = urb_desc->TransferBufferLength;
+	if (len < sizeof(USB_CONFIGURATION_DESCRIPTOR)) {
+		KdPrint(("not full len\n"));
+		return;
+	}
+	if (cfg->bDescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE || cfg->wTotalLength != len) {
+		KdPrint(("not full cfg\n"));
+		return;
+	}
+
+	KdPrint(("save config for using when select config\n"));
+	pdodata->dev_config = ExAllocatePoolWithTag(NonPagedPool, len, BUSENUM_POOL_TAG);
+	if (pdodata->dev_config == NULL) {
+		KdPrint(("Warning, can't malloc %d bytes\n", len));
+		return;
+	}
+
+	RtlCopyMemory(pdodata->dev_config, urb_desc->TransferBuffer, len);
+}
+
+static BOOL_t
+save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
+{
+	ULONG	i;
+
+	for (i = 0; i < urb->NumberOfPackets; i++) {
+		if (iso_desc->offset > urb->IsoPacket[i].Offset) {
+			KdPrint(("Warning, why offset changed?%d %d %d %d\n",
+				 i, iso_desc->offset, iso_desc->actual_length, urb->IsoPacket[i].Offset));
+			return False;
+		}
+		urb->IsoPacket[i].Length = iso_desc->actual_length;
+		urb->IsoPacket[i].Status = to_usbd_status(iso_desc->status);
+		iso_desc++;
+	}
+	return True;
+}
+
+static PVOID
+get_buf(PVOID buf, PMDL bufMDL)
+{
+	if (buf == NULL) {
+		if (bufMDL != NULL)
+			buf = MmGetSystemAddressForMdlSafe(bufMDL, NormalPagePriority);
+		if (buf == NULL) {
+			KdPrint(("No transfer buffer\n"));
+		}
+	}
+	return buf;
+}
+
+static void
+copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_ISOCH_TRANSFER *urb)
+{
+	ULONG	i;
+	ULONG	offset = 0;
+
+	for (i = 0; i < urb->NumberOfPackets; i++) {
+		if (urb->IsoPacket[i].Length == 0)
+			continue;
+
+		if (urb->IsoPacket[i].Offset + urb->IsoPacket[i].Length	> dest_len) {
+			KdPrint(("Warning, why this?"));
+			break;
+		}
+		if (offset + urb->IsoPacket[i].Length > src_len) {
+			KdPrint(("Warning, why that?"));
+			break;
+		}
+		RtlCopyMemory(dest + urb->IsoPacket[i].Offset, src + offset, urb->IsoPacket[i].Length);
+		offset += urb->IsoPacket[i].Length;
+	}
+	if (offset != src_len) {
+		KdPrint(("Warning, why not equal offset:%d src_len:%d",	offset, src_len));
+	}
+}
+
+static NTSTATUS
+post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
+{
+	struct _URB_SELECT_INTERFACE	*urb_sel = &urb->UrbSelectInterface;
+	USBD_INTERFACE_INFORMATION		*intf;
+	PUSB_INTERFACE_DESCRIPTOR intf_desc;
+	PUSB_ENDPOINT_DESCRIPTOR ep_desc;
+	unsigned int	i;
+	unsigned int offset = 0;
+
+	if (pdodata->dev_config == NULL) {
+		KdPrint(("Warning, select interface when have no get config\n"));
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	intf = &urb_sel->Interface;
+	if (intf->Length < sizeof(*intf) - sizeof(intf->Pipes[0])) {
+		KdPrint(("Warning, intf is too small\n"));
+		return STATUS_INVALID_PARAMETER;
+	}
+	KdPrint(("config handle:%08x\n", urb_sel->ConfigurationHandle));
+	KdPrint(("interface: len:%d int num:%d "
+		"AlternateSetting:%d "
+		"class:%d subclass:%d "
+		"protocol:%d handle:%08x # pipes:%d\n",
+		intf->Length,
+		intf->InterfaceNumber,
+		intf->AlternateSetting,
+		intf->Class,
+		intf->SubClass,
+		intf->Protocol,
+		intf->InterfaceHandle,
+		intf->NumberOfPipes));
+
+	i = (intf->Length + sizeof(intf->Pipes[0]) - sizeof(*intf)) / sizeof(intf->Pipes[0]);
+	if (i < intf->NumberOfPipes) {
+		KdPrint(("Warning, why space is so small?"));
+		return STATUS_INVALID_PARAMETER;
+	}
+	/* FIXME  do we need set the other info in intf ? */
+	intf->NumberOfPipes = i;
+
+	intf_desc = seek_to_one_intf_desc(
+		(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
+		&offset, intf->InterfaceNumber,
+		intf->AlternateSetting);
+	/* FIXME if alternatesetting, we sound send out a ctrl urb ? */
+	if (intf_desc == NULL) {
+		KdPrint(("Warning, can't select this interface\n"));
+		return STATUS_INVALID_PARAMETER;
+	}
+	if (intf->NumberOfPipes != intf_desc->bNumEndpoints) {
+		KdPrint(("Warning, endpoints num no same: can hold:%d have %d\n",
+			intf->NumberOfPipes,
+			intf_desc->bNumEndpoints));
+		return STATUS_INVALID_PARAMETER;
+	}
+	for (i = 0; i < intf->NumberOfPipes; i++) {
+		show_pipe(i, &intf->Pipes[i]);
+		/*	Removed Check AM: 20110319: check causes usbstor.sys under Windows Vista and higher to fail.
+		if(intf->Pipes[i].MaximumTransferSize > 65536)
+		{
+		KdPrint("Maximum transfer size %d larger then 65536\n",intf->Pipes[i].MaximumTransferSize);
+		return STATUS_INVALID_PARAMETER;
+		}*/
+		ep_desc = seek_to_next_desc(
+			(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
+			&offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
+		if (NULL == ep_desc) {
+			KdPrint(("Warning, no ep desc\n"));
+			return STATUS_INVALID_DEVICE_REQUEST;
+		}
+		set_pipe(&intf->Pipes[i], ep_desc, pdodata->speed);
+		show_pipe(i, &intf->Pipes[i]);
+	}
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+copy_to_transfer_buffer(PVOID buf_dst, PMDL bufMDL, int dst_len, PVOID src, int src_len)
+{
+	PVOID	buf;
+
+	if (dst_len < src_len) {
+		ERROR(("too small buffer: dest: %d, src: %d\n", dst_len, src_len));
+		return STATUS_INVALID_PARAMETER;
+	}
+	buf = get_buf(buf_dst, bufMDL);
+	if (buf == NULL)
+		return STATUS_INVALID_PARAMETER;
+
+	RtlCopyMemory(buf, src, src_len);
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_control(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST *urb_desc = &urb->UrbControlDescriptorRequest;
+	NTSTATUS	status;
+
+	status = copy_to_transfer_buffer(urb_desc->TransferBuffer, urb_desc->TransferBufferMDL,
+		urb_desc->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+	if (status == STATUS_SUCCESS)
+		urb_desc->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	return status;
+}
+
+static NTSTATUS
+store_urb_vendor_or_class(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urb->UrbControlVendorClassRequest;
+
+	if (urb_vendor_class->TransferFlags & USBD_TRANSFER_DIRECTION_IN) {
+		NTSTATUS	status;
+		status = copy_to_transfer_buffer(urb_vendor_class->TransferBuffer, urb_vendor_class->TransferBufferMDL,
+			urb_vendor_class->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+		if (status == STATUS_SUCCESS)
+			urb_vendor_class->TransferBufferLength = hdr->u.ret_submit.actual_length;
+		return status;
+	}
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_bulk_or_interrupt(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
+
+	if (PIPE2DIRECT(urb_bi->PipeHandle)) {
+		NTSTATUS	status;
+		status = copy_to_transfer_buffer(urb_bi->TransferBuffer, urb_bi->TransferBufferMDL,
+			urb_bi->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+		if (status == STATUS_SUCCESS)
+			urb_bi->TransferBufferLength = hdr->u.ret_submit.actual_length;
+		return status;
+	}
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_iso(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_ISOCH_TRANSFER	*urb_iso = &urb->UrbIsochronousTransfer;
+	struct usbip_iso_packet_descriptor	*iso_desc;
+	PVOID	buf;
+	int	in_len = 0;
+
+	if (PIPE2DIRECT(urb_iso->PipeHandle))
+		in_len = hdr->u.ret_submit.actual_length;
+	iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + in_len);
+	if (!save_iso_desc(urb_iso, iso_desc))
+		return STATUS_INVALID_PARAMETER;
+
+	urb_iso->ErrorCount = hdr->u.ret_submit.error_count;
+	buf = get_buf(urb_iso->TransferBuffer, urb_iso->TransferBufferMDL);
+	if (buf == NULL)
+		return STATUS_INVALID_PARAMETER;
+	copy_iso_data(buf, urb_iso->TransferBufferLength, (char *)(hdr + 1), hdr->u.ret_submit.actual_length, urb_iso);
+	urb_iso->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_data(PURB urb, struct usbip_header *hdr)
+{
+	NTSTATUS	status;
+
+	switch (urb->UrbHeader.Function) {
+	case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
+	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
+		status = store_urb_control(urb, hdr);
+		break;
+	case URB_FUNCTION_CLASS_DEVICE:
+	case URB_FUNCTION_CLASS_INTERFACE:
+	case URB_FUNCTION_CLASS_ENDPOINT:
+	case URB_FUNCTION_CLASS_OTHER:
+	case URB_FUNCTION_VENDOR_DEVICE:
+	case URB_FUNCTION_VENDOR_INTERFACE:
+	case URB_FUNCTION_VENDOR_ENDPOINT:
+	case URB_FUNCTION_VENDOR_OTHER:
+		status = store_urb_vendor_or_class(urb, hdr);
+		break;
+	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
+		status = store_urb_bulk_or_interrupt(urb, hdr);
+		break;
+	case URB_FUNCTION_ISOCH_TRANSFER:
+		status = store_urb_iso(urb, hdr);
+		break;
+	case URB_FUNCTION_SELECT_CONFIGURATION:
+		status = STATUS_SUCCESS;
+		break;
+	case URB_FUNCTION_SELECT_INTERFACE:
+		status = STATUS_SUCCESS;
+		break;
+	default:
+		ERROR(("Warning, not supported func: %s\n", func2name(urb->UrbHeader.Function)));
+		status = STATUS_INVALID_PARAMETER;
+		break;
+	}
+
+	if (status == STATUS_SUCCESS)
+		urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
+
+	return status;
+}
+
+static NTSTATUS
+process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *hdr)
+{
+	NTSTATUS	status;
+
+	if (urb == NULL)
+		return STATUS_INVALID_PARAMETER;
+
+	status = store_urb_data(urb, hdr);
+	if (status == STATUS_SUCCESS) {
+		switch (urb->UrbHeader.Function) {
+		case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
+			if (pdodata->dev_config == NULL)
+				try_save_config(pdodata, urb);
+			break;
+		case URB_FUNCTION_SELECT_INTERFACE:
+			status = post_select_interface(pdodata, urb);
+			break;
+		default:
+			break;
+		}
+	}
+	return status;
+}
+
+static NTSTATUS
+process_urb_res(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r, struct usbip_header *hdr)
+{
+	PIO_STACK_LOCATION	irpstack;
+
+	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
+	switch (irpstack->Parameters.DeviceIoControl.IoControlCode) {
+	case IOCTL_INTERNAL_USB_SUBMIT_URB:
+		return process_urb_res_submit(pdodata, irpstack->Parameters.Others.Argument1, hdr);
+	case IOCTL_INTERNAL_USB_RESET_PORT:
+		return STATUS_SUCCESS;
+	default:
+		return STATUS_INVALID_PARAMETER;
+	}
+}
+
+static struct usbip_header *
+get_usbip_hdr_from_write_irp(PIRP irp)
+{
+	PIO_STACK_LOCATION	irpstack;
+	ULONG	len;
+
+	irpstack = IoGetCurrentIrpStackLocation(irp);
+	len = irpstack->Parameters.Write.Length;
+	if (len < sizeof(struct usbip_header)) {
+		return NULL;
+	}
+	irp->IoStatus.Information = len;
+	return (struct usbip_header *)irp->AssociatedIrp.SystemBuffer;
+}
+
+static NTSTATUS
+process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
+{
+	struct usbip_header	*hdr;
+	struct urb_req	*urb_r;
+	KIRQL	oldirql;
+	NTSTATUS	status;
+
+	hdr = get_usbip_hdr_from_write_irp(irp);
+	if (hdr == NULL) {
+		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_ERROR, ("small write irp\n"));
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	urb_r = find_urb_req(pdodata, hdr);
+	if (urb_r == NULL) {
+		// Might have been cancelled before, so return STATUS_SUCCESS
+		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_TRACE, ("no urb: seqnum: %d\n", hdr->base.seqnum));
+		return STATUS_SUCCESS;
+	}
+
+	if (urb_r->sent) {
+		status = process_urb_res(pdodata, urb_r, hdr);
+	}
+	else {
+		Bus_KdPrint(&pdodata->common, BUS_DBG_SS_INFO, ("not sent: seqnum: %d\n", hdr->base.seqnum));
+		status = STATUS_INVALID_PARAMETER;
+	}
+
+	urb_r->irp->IoStatus.Status = status;
+
+	/* it seems windows client usb driver will think
+	* IoCompleteRequest is running at DISPATCH_LEVEL
+	* so without this it will change IRQL sometimes,
+	* and introduce to a dead of my userspace program */
+	KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+	IoCompleteRequest(urb_r->irp, IO_NO_INCREMENT);
+	KeLowerIrql(oldirql);
+
+	ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS
+Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+{
+	PIO_STACK_LOCATION	stackirp;
+	PFDO_DEVICE_DATA	fdoData;
+	PCOMMON_DEVICE_DATA	commonData;
+	PPDO_DEVICE_DATA	pdodata;
+	NTSTATUS		status;
+
+	PAGED_CODE();
+
+	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+
+	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Write: Enter\n"));
+
+	if (!commonData->IsFDO) {
+		Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("write for fdo is not allowed\n"));
+
+		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	fdoData = (PFDO_DEVICE_DATA)DeviceObject->DeviceExtension;
+
+	Bus_IncIoCount(fdoData);
+
+	if (fdoData->common.DevicePnPState == Deleted) {
+		status = STATUS_NO_SUCH_DEVICE;
+		goto END;
+	}
+	stackirp = IoGetCurrentIrpStackLocation(Irp);
+	pdodata = stackirp->FileObject->FsContext;
+	if (pdodata == NULL || !pdodata->Present) {
+		status = STATUS_INVALID_DEVICE_REQUEST;
+		goto END;
+	}
+	Irp->IoStatus.Information = 0;
+	status = process_write_irp(pdodata, Irp);
+END:
+	Bus_KdPrint(commonData, BUS_DBG_SS_INFO, ("Bus_Write: Leave: %08x\n", status));
+	Irp->IoStatus.Status = status;
+	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	Bus_DecIoCount(fdoData);
+
+	return status;
+}
