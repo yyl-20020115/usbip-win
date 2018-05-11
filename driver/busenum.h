@@ -3,7 +3,7 @@
 #include <initguid.h> // required for GUID definitions
 #include <ntintsafe.h>
 #include "driver.h"
-#include "public.h"
+#include "usbipenum_api.h"
 
 //
 // Let us use newly introduced (Windows Server 2003 DDK) safe string function to avoid

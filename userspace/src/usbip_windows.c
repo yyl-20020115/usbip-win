@@ -6,6 +6,7 @@
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip_windows.h"
+#include "usbip_proto.h"
 
 #include <windows.h>
 #include <setupapi.h>
@@ -16,8 +17,9 @@
 #ifdef __GNUC__
 #define INITGUID
 #endif
+
 #include "usbip.h"
-#include "windows/usbip_windows_kernel_api.h"
+#include "usbipenum_api.h"
 
 #define BIG_SIZE 1000000
 static char *dev_read_buf;
@@ -241,6 +243,10 @@ int usbip_vbus_attach_device(HANDLE fd, int port, struct usbip_usb_device *udev)
 	plugin.version = udev->bcdDevice;
 	plugin.speed = udev->speed;
 	plugin.inum = udev->bNumInterfaces;
+	plugin.class = udev->bDeviceClass;
+	plugin.subclass = udev->bDeviceSubClass;
+	plugin.protocol = udev->bDeviceProtocol;
+
 	plugin.addr = port;
 
 	ret = DeviceIoControl(fd, IOCTL_USBVBUS_PLUGIN_HARDWARE,

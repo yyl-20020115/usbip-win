@@ -9,6 +9,7 @@
 #define DBG_IOCTL	0x00010000
 #define DBG_POWER	0x00100000
 #define DBG_WMI		0x01000000
+#define DBG_URB		0x10000000
 
 #define DBGE(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | (part), "USBIPEnum:(EE) " fmt, ## __VA_ARGS__)
 #define DBGW(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 1), "USBIPEnum:(WW) " fmt, ## __VA_ARGS__)

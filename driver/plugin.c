@@ -97,7 +97,7 @@ NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, 
 	pdodata->compatible_ids_len = len;
 	RtlStringCchPrintfW(pdodata->compatible_ids, len / sizeof(wchar_t),
 		(plugin->inum > 1) ? COMPATIBLE_COMPOSITE_IDS_TPL : COMPATIBLE_IDS_TPL,
-		224, 1, 1, 224, 1, 224);
+		plugin->class, plugin->subclass, plugin->protocol, plugin->class, plugin->subclass, plugin->class);
 	for (i = 0; i<len / sizeof(wchar_t); i++) {
 		if ('Z' == pdodata->compatible_ids[i])
 			pdodata->compatible_ids[i] = 0;

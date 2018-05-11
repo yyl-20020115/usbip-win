@@ -92,8 +92,10 @@ create_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 	struct urb_req	*urb_r;
 
 	urb_r = ExAllocateFromNPagedLookasideList(&g_lookaside);
-	if (urb_r == NULL)
+	if (urb_r == NULL) {
+		DBGE(DBG_URB, "create_urb_req: out of memory\n");
 		return NULL;
+	}
 	RtlZeroMemory(urb_r, sizeof(*urb_r));
 	urb_r->pdodata = pdodata;
 	urb_r->irp = irp;
@@ -134,9 +136,11 @@ submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		if (!insert_urb_req(pdodata, urb_r)) {
 			KeReleaseSpinLock(&pdodata->q_lock, oldirql);
 			ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+			DBGI(DBG_URB, "submit_urb_req: urb cancelled\n");
 			return STATUS_CANCELLED;
 		}
 		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+		DBGI(DBG_URB, "submit_urb_req: urb pending\n");
 		return STATUS_PENDING;
 	}
 
@@ -159,5 +163,6 @@ submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		status = STATUS_INVALID_PARAMETER;
 	}
 	IoCompleteRequest(read_irp, IO_NO_INCREMENT);
+	DBGI(DBG_URB, "submit_urb_req: urb requested: status:%x\n", status);
 	return status;
 }

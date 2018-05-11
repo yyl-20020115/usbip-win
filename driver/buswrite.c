@@ -53,7 +53,7 @@ try_save_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 		return;
 	}
 	if (cfg->bDescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE || cfg->wTotalLength != len) {
-		DBGE(DBG_WRITE, "not full cfg\n");
+		DBGI(DBG_WRITE, "not full cfg: dropped\n");
 		return;
 	}
 

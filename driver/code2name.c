@@ -93,21 +93,27 @@ K_V( URB_FUNCTION_LAST                           )
 const char *
 code2name(unsigned int code)
 {
+	static char	buf[128];
 	int i;
+
 	for(i = 0; usb_io_ctrls[i].name; i++) {
 		if (code == usb_io_ctrls[i].code)
 			return usb_io_ctrls[i].name;
 	}
-	return "Unknown ioctl code";
+	RtlStringCchPrintfA(buf, 128, "Unknown Ioctl Code: %x", code);
+	return buf;
 }
 
 const char *
 func2name(unsigned int func)
 {
-	int i;
-	for ( i = 0; usb_funcs[i].name; i++) {
+	static char	buf[128];
+	int	i;
+
+	for (i = 0; usb_funcs[i].name; i++) {
 		if (func == usb_funcs[i].code)
 			return usb_funcs[i].name;
 	}
-	return "Unknown func code";
+	RtlStringCchPrintfA(buf, 128, "Unknown func code: %x", func);
+	return buf;
 }

@@ -29,7 +29,7 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 		return STATUS_SUCCESS;
 	}
 	if (!RtlEqualMemory(pdodata->dev_config, urb_sel->ConfigurationDescriptor, sizeof(*urb_sel->ConfigurationDescriptor))) {
-		DBGW(DBG_IOCTL, "Warning, not the same config desc\n");
+		DBGW(DBG_IOCTL, "not the same config desc\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
@@ -105,6 +105,18 @@ process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
 }
 
 static NTSTATUS
+process_urb_abort_pipe(PPDO_DEVICE_DATA pdodata, PURB urb)
+{
+	struct _URB_PIPE_REQUEST	*urb_pipe = &urb->UrbPipeRequest;
+
+	UNREFERENCED_PARAMETER(pdodata);
+
+	////TODO need to check
+	DBGI(DBG_IOCTL, "abort_pipe: %x\n", urb_pipe->PipeHandle);
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
 process_urb_get_frame(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
 	struct _URB_GET_CURRENT_FRAME_NUMBER	*urb_get = &urb->UrbGetCurrentFrameNumber;
@@ -118,16 +130,19 @@ static NTSTATUS
 process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 {
 	if (urb == NULL) {
-		ERROR(("process_irp_urb: null urb"));
+		DBGE(DBG_IOCTL, "process_irp_urb_req: null urb\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
+	DBGI(DBG_IOCTL, "process_irp_urb_req: function: %s\n", func2name(urb->UrbHeader.Function));
+
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_SELECT_CONFIGURATION:
-		DBGI(DBG_IOCTL, "select configuration\n");
 		return process_urb_select_config(pdodata, urb);
 	case URB_FUNCTION_RESET_PIPE:
 		return process_urb_reset_pipe(pdodata);
+	case URB_FUNCTION_ABORT_PIPE:
+		return process_urb_abort_pipe(pdodata, urb);
 	case URB_FUNCTION_GET_CURRENT_FRAME_NUMBER:
 		return process_urb_get_frame(pdodata, urb);
 	case URB_FUNCTION_ISOCH_TRANSFER:
@@ -145,7 +160,8 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	case URB_FUNCTION_SELECT_INTERFACE:
 		return submit_urb_req(pdodata, irp);
 	default:
-		DBGW(DBG_IOCTL, "Unknown function:%x %d\n", urb->UrbHeader.Function, urb->UrbHeader.Length);
+		DBGW(DBG_IOCTL, "process_irp_urb_req: unhandled function: %s: len: %d\n",
+			func2name(urb->UrbHeader.Function), urb->UrbHeader.Length);
 		return STATUS_INVALID_PARAMETER;
 	}
 }
@@ -196,7 +212,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = submit_urb_req(pdoData, Irp);
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unknown ioctl code: %x", ioctl_code);
+		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", code2name(ioctl_code));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
@@ -285,6 +301,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		}
 		break;
 	default:
+		DBGE(DBG_IOCTL, "unhandled ioctl: %s", code2name(ioctl_code));
 		break;
 	}
 
