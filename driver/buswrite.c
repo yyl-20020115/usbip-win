@@ -67,7 +67,7 @@ try_save_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 	RtlCopyMemory(pdodata->dev_config, urb_desc->TransferBuffer, len);
 }
 
-static BOOL_t
+static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
 {
 	ULONG	i;
@@ -76,13 +76,13 @@ save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descripto
 		if (iso_desc->offset > urb->IsoPacket[i].Offset) {
 			DBGW(DBG_WRITE, "why offset changed?%d %d %d %d\n",
 			     i, iso_desc->offset, iso_desc->actual_length, urb->IsoPacket[i].Offset);
-			return False;
+			return FALSE;
 		}
 		urb->IsoPacket[i].Length = iso_desc->actual_length;
 		urb->IsoPacket[i].Status = to_usbd_status(iso_desc->status);
 		iso_desc++;
 	}
-	return True;
+	return TRUE;
 }
 
 static PVOID

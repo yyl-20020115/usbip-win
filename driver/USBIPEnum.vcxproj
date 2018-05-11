@@ -36,7 +36,6 @@
   <ItemGroup>
     <ClInclude Include="..\include\usbipenum_api.h" />
     <ClInclude Include="..\include\usbip_proto.h" />
-    <ClInclude Include="basetype.h" />
     <ClInclude Include="busenum.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="driver.h" />

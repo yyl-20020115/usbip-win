@@ -30,7 +30,6 @@
 #ifndef BUSENUM_H
 #define BUSENUM_H
 
-#include "basetype.h"
 #include "debug.h"
 
 #define BUSENUM_POOL_TAG (ULONG) 'suBT'
@@ -264,8 +263,8 @@ struct urb_req {
 	PIRP	irp;
 	KEVENT	*event;
 	unsigned long	seq_num;
-	BOOL_t	sent;
-	LIST_ENTRY list;
+	BOOLEAN		sent;
+	LIST_ENTRY	list;
 };
 
 #define FDO_FROM_PDO(pdoData) \

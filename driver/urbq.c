@@ -40,7 +40,7 @@ find_pending_urb_req(PPDO_DEVICE_DATA pdodata)
 
 		urb = CONTAINING_RECORD(le, struct urb_req, list);
 		if (!urb->sent) {
-			urb->sent = True;
+			urb->sent = TRUE;
 			if (urb->seq_num != 0) {
 				ERROR(("non-zero seq_num: %d\n", urb->seq_num));
 			}
@@ -102,20 +102,20 @@ create_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 	return urb_r;
 }
 
-static BOOL_t
+static BOOLEAN
 insert_urb_req(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r)
 {
 	PIRP	irp = urb_r->irp;
 
 	IoSetCancelRoutine(irp, cancel_irp);
 	if (irp->Cancel && IoSetCancelRoutine(irp, NULL)) {
-		return False;
+		return FALSE;
 	}
 	else {
 		IoMarkIrpPending(irp);
 		InsertTailList(&pdodata->ioctl_q, &urb_r->list);
 	}
-	return True;
+	return TRUE;
 }
 
 NTSTATUS
@@ -151,7 +151,7 @@ submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 
 	if (read_irp->IoStatus.Status == STATUS_SUCCESS) {
 		KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
-		urb_r->sent = True;
+		urb_r->sent = TRUE;
 		status = insert_urb_req(pdodata, urb_r) ? STATUS_PENDING: STATUS_CANCELLED;
 		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
 		if (status == STATUS_CANCELLED) {
