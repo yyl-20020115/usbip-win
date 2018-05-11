@@ -1,10 +1,7 @@
 #include "busenum.h"
 #include <wmistr.h>
 
-PCHAR
-WMIMinorFunctionString (
-    __in UCHAR MinorFunction
-);
+#include "dbgcode.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE,Bus_WmiRegistration)
@@ -128,7 +125,7 @@ Routine Description
         //
         // The PDO, just complete the request with the current status
         //
-	    DBGI(DBG_WMI, "PDO %s\n", WMIMinorFunctionString(stack->MinorFunction));
+	    DBGI(DBG_WMI, "PDO %s\n", dbg_wmi_minor(stack->MinorFunction));
         status = Irp->IoStatus.Status;
         IoCompleteRequest (Irp, IO_NO_INCREMENT);
         return status;
@@ -136,7 +133,7 @@ Routine Description
 
     fdoData = (PFDO_DEVICE_DATA) DeviceObject->DeviceExtension;
 
-    DBGI(DBG_WMI, "FDO: %s\n", WMIMinorFunctionString(stack->MinorFunction));
+    DBGI(DBG_WMI, "FDO: %s\n", dbg_wmi_minor(stack->MinorFunction));
 
     Bus_IncIoCount (fdoData);
 
@@ -534,41 +531,3 @@ Return Value:
 
     return STATUS_SUCCESS;
 }
-
-#if DBG
-
-PCHAR
-WMIMinorFunctionString (
-    __in UCHAR MinorFunction
-)
-{
-    switch (MinorFunction)
-    {
-        case IRP_MN_CHANGE_SINGLE_INSTANCE:
-            return "IRP_MN_CHANGE_SINGLE_INSTANCE";
-        case IRP_MN_CHANGE_SINGLE_ITEM:
-            return "IRP_MN_CHANGE_SINGLE_ITEM";
-        case IRP_MN_DISABLE_COLLECTION:
-            return "IRP_MN_DISABLE_COLLECTION";
-        case IRP_MN_DISABLE_EVENTS:
-            return "IRP_MN_DISABLE_EVENTS";
-        case IRP_MN_ENABLE_COLLECTION:
-            return "IRP_MN_ENABLE_COLLECTION";
-        case IRP_MN_ENABLE_EVENTS:
-            return "IRP_MN_ENABLE_EVENTS";
-        case IRP_MN_EXECUTE_METHOD:
-            return "IRP_MN_EXECUTE_METHOD";
-        case IRP_MN_QUERY_ALL_DATA:
-            return "IRP_MN_QUERY_ALL_DATA";
-        case IRP_MN_QUERY_SINGLE_INSTANCE:
-            return "IRP_MN_QUERY_SINGLE_INSTANCE";
-        case IRP_MN_REGINFO:
-            return "IRP_MN_REGINFO";
-        default:
-            return "unknown_syscontrol_irp";
-    }
-}
-
-#endif
-
-

@@ -3,6 +3,8 @@
 #include <usbdi.h>
 #include <usbbusif.h>
 
+#include "dbgcode.h"
+
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, Bus_PDO_PnP)
 #pragma alloc_text (PAGE, Bus_PDO_QueryDeviceCaps)
@@ -238,7 +240,7 @@ Routine Description:
         // Query the IDs of the device
 
         DBGI(DBG_PNP, "\tQueryId Type: %d %s\n", IrpStack->Parameters.QueryId.IdType,
-                DbgDeviceIDString(IrpStack->Parameters.QueryId.IdType));
+	     dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
 
         status = Bus_PDO_QueryDeviceId(DeviceData, Irp);
 
@@ -246,7 +248,7 @@ Routine Description:
 
     case IRP_MN_QUERY_DEVICE_RELATIONS:
 		DBGI(DBG_PNP, "\tQueryDeviceRelation Type: %s\n",
-			DbgDeviceRelationString(IrpStack->Parameters.QueryDeviceRelations.Type));
+		     dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
 
         status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
 

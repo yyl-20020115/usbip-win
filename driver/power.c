@@ -1,6 +1,6 @@
 #include "busenum.h"
 
-
+#include "dbgcode.h"
 
 NTSTATUS
 Bus_Power(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
@@ -30,16 +30,16 @@ Bus_Power(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	if (commonData->IsFDO) {
 		DBGI(DBG_POWER, "FDO: minor: %s IRP:0x%p %s %s\n",
-		     PowerMinorFunctionString(irpStack->MinorFunction), Irp,
-		     DbgSystemPowerString(commonData->SystemPowerState),
-		     DbgDevicePowerString(commonData->DevicePowerState));
+		     dbg_power_minor(irpStack->MinorFunction), Irp,
+		     dbg_system_power(commonData->SystemPowerState),
+		     dbg_device_power(commonData->DevicePowerState));
 
 		status = Bus_FDO_Power((PFDO_DEVICE_DATA)DeviceObject->DeviceExtension, Irp);
 	} else {
 		DBGI(DBG_POWER, "PDO: minor: %s IRP:0x%p %s %s\n",
-		     PowerMinorFunctionString(irpStack->MinorFunction), Irp,
-		     DbgSystemPowerString(commonData->SystemPowerState),
-		     DbgDevicePowerString(commonData->DevicePowerState));
+			 dbg_power_minor(irpStack->MinorFunction), Irp,
+			 dbg_system_power(commonData->SystemPowerState),
+			 dbg_device_power(commonData->DevicePowerState));
 
 		status = Bus_PDO_Power ((PPDO_DEVICE_DATA)DeviceObject->DeviceExtension, Irp);
 	}
@@ -101,8 +101,8 @@ Return Value:
         DBGI(DBG_POWER, "\tRequest to set %s state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
-                        DbgSystemPowerString(powerState.SystemState) :\
-                        DbgDevicePowerString(powerState.DeviceState)));
+                        dbg_system_power(powerState.SystemState) :\
+                        dbg_device_power(powerState.DeviceState)));
     }
 
     PoStartNextPowerIrp (Irp);
@@ -152,8 +152,8 @@ Return Value:
         DBGI(DBG_POWER, "\tSetting %s power state to %s\n",
                      ((powerType == SystemPowerState) ?  "System" : "Device"),
                      ((powerType == SystemPowerState) ? \
-                        DbgSystemPowerString(powerState.SystemState) : \
-                        DbgDevicePowerString(powerState.DeviceState)));
+                        dbg_system_power(powerState.SystemState) : \
+                        dbg_device_power(powerState.DeviceState)));
 
         switch (powerType) {
             case DevicePowerState:
@@ -213,82 +213,3 @@ Return Value:
 
     return status;
 }
-
-#if DBG
-
-PCHAR
-PowerMinorFunctionString (
-    UCHAR MinorFunction
-)
-{
-    switch (MinorFunction)
-    {
-        case IRP_MN_SET_POWER:
-            return "IRP_MN_SET_POWER";
-        case IRP_MN_QUERY_POWER:
-            return "IRP_MN_QUERY_POWER";
-        case IRP_MN_POWER_SEQUENCE:
-            return "IRP_MN_POWER_SEQUENCE";
-        case IRP_MN_WAIT_WAKE:
-            return "IRP_MN_WAIT_WAKE";
-
-        default:
-            return "unknown_power_irp";
-    }
-}
-
-PCHAR
-DbgSystemPowerString(
-    __in SYSTEM_POWER_STATE Type
-    )
-{
-    switch (Type)
-    {
-        case PowerSystemUnspecified:
-            return "PowerSystemUnspecified";
-        case PowerSystemWorking:
-            return "PowerSystemWorking";
-        case PowerSystemSleeping1:
-            return "PowerSystemSleeping1";
-        case PowerSystemSleeping2:
-            return "PowerSystemSleeping2";
-        case PowerSystemSleeping3:
-            return "PowerSystemSleeping3";
-        case PowerSystemHibernate:
-            return "PowerSystemHibernate";
-        case PowerSystemShutdown:
-            return "PowerSystemShutdown";
-        case PowerSystemMaximum:
-            return "PowerSystemMaximum";
-        default:
-            return "UnKnown System Power State";
-    }
- }
-
-PCHAR
-DbgDevicePowerString(
-    __in DEVICE_POWER_STATE Type
-    )
-{
-    switch (Type)
-    {
-        case PowerDeviceUnspecified:
-            return "PowerDeviceUnspecified";
-        case PowerDeviceD0:
-            return "PowerDeviceD0";
-        case PowerDeviceD1:
-            return "PowerDeviceD1";
-        case PowerDeviceD2:
-            return "PowerDeviceD2";
-        case PowerDeviceD3:
-            return "PowerDeviceD3";
-        case PowerDeviceMaximum:
-            return "PowerDeviceMaximum";
-        default:
-            return "UnKnown Device Power State";
-    }
-}
-
-#endif
-
-

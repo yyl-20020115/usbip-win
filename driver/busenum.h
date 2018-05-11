@@ -323,11 +323,6 @@ Bus_DecIoCount (
 // Defined in PNP.C
 //
 
-PCHAR
-PnPMinorFunctionString (
-    UCHAR MinorFunction
-);
-
 DRIVER_ADD_DEVICE Bus_AddDevice;
 
 DRIVER_DISPATCH Bus_SendIrpSynchronously;
@@ -402,16 +397,6 @@ Bus_StartFdo (
     __in  PFDO_DEVICE_DATA            FdoData,
     __in  PIRP   Irp );
 
-PCHAR
-DbgDeviceIDString(
-    BUS_QUERY_ID_TYPE Type
-    );
-
-PCHAR
-DbgDeviceRelationString(
-    __in DEVICE_RELATION_TYPE Type
-    );
-
 //
 // Defined in Power.c
 //
@@ -432,21 +417,6 @@ Bus_PDO_Power (
 
 __drv_dispatchType(IRP_MJ_POWER)
 DRIVER_DISPATCH Bus_Power;
-
-PCHAR
-PowerMinorFunctionString (
-    UCHAR MinorFunction
-);
-
-PCHAR
-DbgSystemPowerString(
-    __in SYSTEM_POWER_STATE Type
-    );
-
-PCHAR
-DbgDevicePowerString(
-    __in DEVICE_POWER_STATE Type
-    );
 
 //
 // Defined in BusPDO.c

@@ -2,7 +2,7 @@
 
 #include <usbdi.h>
 
-#include "code2name.h"
+#include "dbgcode.h"
 #include "usbreq.h"
 
 //

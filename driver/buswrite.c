@@ -3,7 +3,7 @@
 #include <usbdi.h>
 
 #include "usbip_proto.h"
-#include "code2name.h"
+#include "dbgcode.h"
 #include "usbreq.h"
 
 #ifdef ALLOC_PRAGMA
@@ -320,7 +320,7 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 		status = STATUS_SUCCESS;
 		break;
 	default:
-		ERROR(("Warning, not supported func: %s\n", func2name(urb->UrbHeader.Function)));
+		ERROR(("Warning, not supported func: %s\n", dbg_urbfunc(urb->UrbHeader.Function)));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}

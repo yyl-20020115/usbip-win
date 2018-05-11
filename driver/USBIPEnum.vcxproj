@@ -24,7 +24,7 @@
     <ClCompile Include="buspdo.c" />
     <ClCompile Include="busread.c" />
     <ClCompile Include="buswrite.c" />
-    <ClCompile Include="code2name.c" />
+    <ClCompile Include="dbgcode.c" />
     <ClCompile Include="plugin.c" />
     <ClCompile Include="pnp.c" />
     <ClCompile Include="power.c" />
@@ -41,7 +41,7 @@
     <ClInclude Include="driver.h" />
     <ClInclude Include="trace.h" />
     <ClInclude Include="usbreq.h" />
-    <ClInclude Include="code2name.h" />
+    <ClInclude Include="dbgcode.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="USBIPEnum.inf" />

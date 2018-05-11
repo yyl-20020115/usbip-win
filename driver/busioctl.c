@@ -2,7 +2,7 @@
 
 #include <usbdi.h>
 
-#include "code2name.h"
+#include "dbgcode.h"
 #include "usbreq.h"
 
 #ifdef ALLOC_PRAGMA
@@ -134,7 +134,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	DBGI(DBG_IOCTL, "process_irp_urb_req: function: %s\n", func2name(urb->UrbHeader.Function));
+	DBGI(DBG_IOCTL, "process_irp_urb_req: function: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
 
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_SELECT_CONFIGURATION:
@@ -161,7 +161,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 		return submit_urb_req(pdodata, irp);
 	default:
 		DBGW(DBG_IOCTL, "process_irp_urb_req: unhandled function: %s: len: %d\n",
-			func2name(urb->UrbHeader.Function), urb->UrbHeader.Length);
+			dbg_urbfunc(urb->UrbHeader.Function), urb->UrbHeader.Length);
 		return STATUS_INVALID_PARAMETER;
 	}
 }
@@ -182,7 +182,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
 
-	DBGI(DBG_IOCTL, "ioctl code: %s\n", code2name(ioctl_code));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_ioctl_code(ioctl_code));
 
 	if (commonData->IsFDO) {
 		DBGW(DBG_IOCTL, "internal ioctl for fdo is not allowed\n");
@@ -212,7 +212,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = submit_urb_req(pdoData, Irp);
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", code2name(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", dbg_ioctl_code(ioctl_code));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
@@ -261,7 +261,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
-	DBGI(DBG_IOCTL, "ioctl code: %s\n", code2name(ioctl_code));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_ioctl_code(ioctl_code));
 
 	Bus_IncIoCount(fdoData);
 
@@ -301,7 +301,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		}
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled ioctl: %s", code2name(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled ioctl: %s", dbg_ioctl_code(ioctl_code));
 		break;
 	}
 

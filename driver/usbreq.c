@@ -4,7 +4,7 @@
 
 #include <usbdi.h>
 #include "usbip_proto.h"
-#include "code2name.h"
+#include "dbgcode.h"
 
 void
 show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)
