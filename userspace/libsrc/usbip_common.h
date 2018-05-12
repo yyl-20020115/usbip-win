@@ -35,12 +35,14 @@
 #define USBIP_HOST_DRV_NAME	"usbip-host"
 #define USBIP_VHCI_DRV_NAME	"vhci_hcd"
 
+#if 0 
 enum usb_device_speed {
 	USB_SPEED_UNKNOWN = 0,                  /* enumerating */
 	USB_SPEED_LOW, USB_SPEED_FULL,          /* usb 1.1 */
 	USB_SPEED_HIGH,                         /* usb 2.0 */
 	USB_SPEED_VARIABLE                      /* wireless (usb 2.5) */
 };
+#endif
 
 /* FIXME: how to sync with drivers/usbip_common.h ? */
 enum usbip_device_status{

@@ -1,12 +1,17 @@
-#include "busenum.h"
+#include "driver.h"
+
 #include <wmistr.h>
 
-#include "dbgcode.h"
+#include "device.h"
+#include "usbipenum_api.h"
+#include "globals.h"
+
+WMI_SET_DATAITEM_CALLBACK Bus_SetWmiDataItem;
+WMI_SET_DATABLOCK_CALLBACK Bus_SetWmiDataBlock;
+WMI_QUERY_DATABLOCK_CALLBACK Bus_QueryWmiDataBlock;
+WMI_QUERY_REGINFO_CALLBACK Bus_QueryWmiRegInfo;
 
 #ifdef ALLOC_PRAGMA
-#pragma alloc_text(PAGE,Bus_WmiRegistration)
-#pragma alloc_text(PAGE,Bus_WmiDeRegistration)
-#pragma alloc_text(PAGE,Bus_SystemControl)
 #pragma alloc_text(PAGE,Bus_SetWmiDataItem)
 #pragma alloc_text(PAGE,Bus_SetWmiDataBlock)
 #pragma alloc_text(PAGE,Bus_QueryWmiDataBlock)
@@ -25,78 +30,8 @@ WMIGUIDREGINFO USBIPBusWmiGuidList[] =
     }
 };
 
-NTSTATUS
-Bus_WmiRegistration(
-    PFDO_DEVICE_DATA               FdoData
-)
-/*++
-Routine Description
-
-    Registers with WMI as a data provider for this
-    instance of the device
-
---*/
-{
-    NTSTATUS status;
-
-    PAGED_CODE();
-
-    FdoData->WmiLibInfo.GuidCount = sizeof (USBIPBusWmiGuidList) /
-                                 sizeof (WMIGUIDREGINFO);
-    ASSERT (NUMBER_OF_WMI_GUIDS == FdoData->WmiLibInfo.GuidCount);
-    FdoData->WmiLibInfo.GuidList = USBIPBusWmiGuidList;
-    FdoData->WmiLibInfo.QueryWmiRegInfo = Bus_QueryWmiRegInfo;
-    FdoData->WmiLibInfo.QueryWmiDataBlock = Bus_QueryWmiDataBlock;
-    FdoData->WmiLibInfo.SetWmiDataBlock = Bus_SetWmiDataBlock;
-    FdoData->WmiLibInfo.SetWmiDataItem = Bus_SetWmiDataItem;
-    FdoData->WmiLibInfo.ExecuteWmiMethod = NULL;
-    FdoData->WmiLibInfo.WmiFunctionControl = NULL;
-
-    //
-    // Register with WMI
-    //
-
-    status = IoWMIRegistrationControl(FdoData->common.Self,
-                             WMIREG_ACTION_REGISTER
-                             );
-
-    //
-    // Initialize the Std device data structure
-    //
-
-    FdoData->StdUSBIPBusData.ErrorCount = 0;
-
-    return status;
-
-}
-
-NTSTATUS
-Bus_WmiDeRegistration(
-    PFDO_DEVICE_DATA               FdoData
-)
-/*++
-Routine Description
-
-     Inform WMI to remove this DeviceObject from its
-     list of providers. This function also
-     decrements the reference count of the deviceobject.
-
---*/
-{
-
-    PAGED_CODE();
-
-    return IoWMIRegistrationControl(FdoData->common.Self,
-                                 WMIREG_ACTION_DEREGISTER
-                                 );
-
-}
-
-NTSTATUS
-Bus_SystemControl (
-    __in  PDEVICE_OBJECT  DeviceObject,
-    __in  PIRP            Irp
-    )
+PAGEABLE NTSTATUS
+Bus_SystemControl(__in  PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 /*++
 Routine Description
 
@@ -107,7 +42,7 @@ Routine Description
 
 --*/
 {
-    PFDO_DEVICE_DATA               fdoData;
+    PFDO_DEVICE_DATA        fdoData;
     SYSCTL_IRP_DISPOSITION  disposition;
     NTSTATUS                status;
     PIO_STACK_LOCATION      stack;
@@ -530,4 +465,65 @@ Return Value:
     RtlInitUnicodeString(MofResourceName, MOFRESOURCENAME);
 
     return STATUS_SUCCESS;
+}
+
+PAGEABLE NTSTATUS
+Bus_WmiRegistration(PFDO_DEVICE_DATA FdoData)
+/*++
+Routine Description
+
+Registers with WMI as a data provider for this
+instance of the device
+
+--*/
+{
+	NTSTATUS status;
+
+	PAGED_CODE();
+
+	FdoData->WmiLibInfo.GuidCount = sizeof(USBIPBusWmiGuidList) /
+		sizeof(WMIGUIDREGINFO);
+	ASSERT(NUMBER_OF_WMI_GUIDS == FdoData->WmiLibInfo.GuidCount);
+	FdoData->WmiLibInfo.GuidList = USBIPBusWmiGuidList;
+	FdoData->WmiLibInfo.QueryWmiRegInfo = Bus_QueryWmiRegInfo;
+	FdoData->WmiLibInfo.QueryWmiDataBlock = Bus_QueryWmiDataBlock;
+	FdoData->WmiLibInfo.SetWmiDataBlock = Bus_SetWmiDataBlock;
+	FdoData->WmiLibInfo.SetWmiDataItem = Bus_SetWmiDataItem;
+	FdoData->WmiLibInfo.ExecuteWmiMethod = NULL;
+	FdoData->WmiLibInfo.WmiFunctionControl = NULL;
+
+	//
+	// Register with WMI
+	//
+
+	status = IoWMIRegistrationControl(FdoData->common.Self,
+		WMIREG_ACTION_REGISTER
+	);
+
+	//
+	// Initialize the Std device data structure
+	//
+
+	FdoData->StdUSBIPBusData.ErrorCount = 0;
+
+	return status;
+}
+
+PAGEABLE NTSTATUS
+Bus_WmiDeRegistration(PFDO_DEVICE_DATA FdoData)
+/*++
+Routine Description
+
+Inform WMI to remove this DeviceObject from its
+list of providers. This function also
+decrements the reference count of the deviceobject.
+
+--*/
+{
+
+	PAGED_CODE();
+
+	return IoWMIRegistrationControl(FdoData->common.Self,
+		WMIREG_ACTION_DEREGISTER
+	);
 }

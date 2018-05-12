@@ -1,10 +1,7 @@
+#include "driver.h"
+
+#include "usbipenum_api.h"
 #include "usbreq.h"
-
-#include "busenum.h"
-
-#include <usbdi.h>
-#include "usbip_proto.h"
-#include "dbgcode.h"
 
 void
 show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)

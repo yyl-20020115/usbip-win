@@ -1,14 +1,7 @@
-#include "busenum.h"
-
-#include <usbdi.h>
+#include "driver.h"
 
 #include "usbip_proto.h"
-#include "dbgcode.h"
 #include "usbreq.h"
-
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, Bus_Write)
-#endif
 
 extern struct urb_req *
 find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
@@ -208,7 +201,7 @@ copy_to_transfer_buffer(PVOID buf_dst, PMDL bufMDL, int dst_len, PVOID src, int 
 	PVOID	buf;
 
 	if (dst_len < src_len) {
-		ERROR(("too small buffer: dest: %d, src: %d\n", dst_len, src_len));
+		DBGE(DBG_WRITE, "too small buffer: dest: %d, src: %d\n", dst_len, src_len);
 		return STATUS_INVALID_PARAMETER;
 	}
 	buf = get_buf(buf_dst, bufMDL);
@@ -320,7 +313,7 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 		status = STATUS_SUCCESS;
 		break;
 	default:
-		ERROR(("Warning, not supported func: %s\n", dbg_urbfunc(urb->UrbHeader.Function)));
+		DBGE(DBG_WRITE, "not supported func: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
@@ -431,7 +424,7 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 	return STATUS_SUCCESS;
 }
 
-NTSTATUS
+PAGEABLE NTSTATUS
 Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	stackirp;

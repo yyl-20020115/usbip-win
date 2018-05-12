@@ -1,16 +1,20 @@
-#include "busenum.h"
+#include "driver.h"
 
-#include <usbdi.h>
-
-#include "dbgcode.h"
 #include "usbreq.h"
-
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, Bus_IoCtl)
-#endif
+#include "pnp.h"
+#include "usbipenum_api.h"
 
 extern NTSTATUS
 submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP Irp);
+
+extern PAGEABLE NTSTATUS
+bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA dev_data, PFILE_OBJECT fo);
+
+extern PAGEABLE NTSTATUS
+bus_get_ports_status(ioctl_usbvbus_get_ports_status *st, PFDO_DEVICE_DATA dev_data, ULONG *info);
+
+extern PAGEABLE NTSTATUS
+Bus_EjectDevice(PBUSENUM_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData);
 
 static NTSTATUS
 process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
@@ -166,7 +170,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	}
 }
 
-NTSTATUS
+PAGEABLE NTSTATUS
 Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION      irpStack;
@@ -227,7 +231,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	return status;
 }
 
-NTSTATUS
+PAGEABLE NTSTATUS
 Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	irpStack;

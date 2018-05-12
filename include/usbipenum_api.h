@@ -51,6 +51,13 @@ DEFINE_GUID(USBIP_NOTIFY_DEVICE_ARRIVAL_EVENT,
 
 #define BUSENUM_COMPATIBLE_IDS_LENGTH sizeof(COMPATIBLE_IDS_SAMPLE)
 
+enum usb_device_speed {
+	USB_SPEED_UNKNOWN = 0,                  /* enumerating */
+	USB_SPEED_LOW, USB_SPEED_FULL,          /* usb 1.1 */
+	USB_SPEED_HIGH,                         /* usb 2.0 */
+	USB_SPEED_VARIABLE                      /* wireless (usb 2.5) */
+};
+
 typedef struct _ioctl_usbvbus_plugin
 {
 	unsigned int devid;

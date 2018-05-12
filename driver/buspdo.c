@@ -1,386 +1,138 @@
-#include "busenum.h"
-#include <wdmguid.h>
+#include "driver.h"
+
 #include <usbdi.h>
+#include <wdmguid.h>
 #include <usbbusif.h>
 
-#include "dbgcode.h"
+#include "usbipenum_api.h"
+#include "pnp.h"
 
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, Bus_PDO_PnP)
-#pragma alloc_text (PAGE, Bus_PDO_QueryDeviceCaps)
-#pragma alloc_text (PAGE, Bus_PDO_QueryDeviceId)
-#pragma alloc_text (PAGE, Bus_PDO_QueryDeviceText)
-#pragma alloc_text (PAGE, Bus_PDO_QueryResources)
-#pragma alloc_text (PAGE, Bus_PDO_QueryResourceRequirements)
-#pragma alloc_text (PAGE, Bus_PDO_QueryDeviceRelations)
-#pragma alloc_text (PAGE, Bus_PDO_QueryBusInformation)
-#pragma alloc_text (PAGE, Bus_GetDeviceCapabilities)
-#pragma alloc_text (PAGE, Bus_PDO_QueryInterface)
+#define FDO_FROM_PDO(pdoData)	((PFDO_DEVICE_DATA) (pdoData)->ParentFdo->DeviceExtension)
 
-#endif
+extern PAGEABLE NTSTATUS
+Bus_DestroyPdo(PDEVICE_OBJECT Device, PPDO_DEVICE_DATA PdoData);
+
+static PAGEABLE NTSTATUS
+Bus_GetDeviceCapabilities(__in PDEVICE_OBJECT DeviceObject, __in PDEVICE_CAPABILITIES DeviceCapabilities)
+/*++
+
+Routine Description:
+
+This routine sends the get capabilities irp to the given stack
+
+Arguments:
+
+DeviceObject        A device object in the stack whose capabilities we want
+DeviceCapabilites   Where to store the answer
+
+Return Value:
 
 NTSTATUS
-Bus_PDO_PnP (
-    __in PDEVICE_OBJECT       DeviceObject,
-    __in PIRP                 Irp,
-    __in PIO_STACK_LOCATION   IrpStack,
-    __in PPDO_DEVICE_DATA     DeviceData
-    )
-/*++
-Routine Description:
-    Handle requests from the Plug & Play system for the devices on the BUS
 
 --*/
 {
-    NTSTATUS                status;
-
-    PAGED_CODE ();
-
-
-    //
-    // NB: Because we are a bus enumerator, we have no one to whom we could
-    // defer these irps.  Therefore we do not pass them down but merely
-    // return them.
-    //
-
-    switch (IrpStack->MinorFunction) {
-
-    case IRP_MN_START_DEVICE:
-
-        //
-        // Here we do what ever initialization and ``turning on'' that is
-        // required to allow others to access this device.
-        // Power up the device.
-        //
-        DeviceData->common.DevicePowerState = PowerDeviceD0;
-        SET_NEW_PNP_STATE(DeviceData, Started);
-	status = IoRegisterDeviceInterface (
-                DeviceObject,
-                &GUID_DEVINTERFACE_USB_DEVICE,
-                NULL,
-                &DeviceData->usb_dev_interface);
-	if(status==STATUS_SUCCESS)
-		IoSetDeviceInterfaceState(&DeviceData->usb_dev_interface, TRUE);
-        break;
-
-    case IRP_MN_STOP_DEVICE:
-
-        //
-        // Here we shut down the device and give up and unmap any resources
-        // we acquired for the device.
-        //
-
-
-        SET_NEW_PNP_STATE(DeviceData, Stopped);
-	IoSetDeviceInterfaceState(&DeviceData->usb_dev_interface, FALSE);
-        status = STATUS_SUCCESS;
-        break;
-
-
-    case IRP_MN_QUERY_STOP_DEVICE:
-
-        //
-        // No reason here why we can't stop the device.
-        // If there were a reason we should speak now, because answering success
-        // here may result in a stop device irp.
-        //
-
-        SET_NEW_PNP_STATE(DeviceData, StopPending);
-        status = STATUS_SUCCESS;
-        break;
-
-    case IRP_MN_CANCEL_STOP_DEVICE:
-
-        //
-        // The stop was canceled.  Whatever state we set, or resources we put
-        // on hold in anticipation of the forthcoming STOP device IRP should be
-        // put back to normal.  Someone, in the long list of concerned parties,
-        // has failed the stop device query.
-        //
-
-        //
-        // First check to see whether you have received cancel-stop
-        // without first receiving a query-stop. This could happen if someone
-        // above us fails a query-stop and passes down the subsequent
-        // cancel-stop.
-        //
-
-        if (StopPending == DeviceData->common.DevicePnPState)
-        {
-            //
-            // We did receive a query-stop, so restore.
-            //
-            RESTORE_PREVIOUS_PNP_STATE(DeviceData);
-        }
-        status = STATUS_SUCCESS;// We must not fail this IRP.
-        break;
-
-    case IRP_MN_QUERY_REMOVE_DEVICE:
-
-        //
-        // Check to see whether the device can be removed safely.
-        // If not fail this request. This is the last opportunity
-        // to do so.
-        //
-        if (DeviceData->InterfaceRefCount){
-            //
-            // Somebody is still using our interface.
-            // We must fail remove.
-            //
-            status = STATUS_UNSUCCESSFUL;
-            break;
-        }
-
-        SET_NEW_PNP_STATE(DeviceData, RemovePending);
-        status = STATUS_SUCCESS;
-        break;
-
-    case IRP_MN_CANCEL_REMOVE_DEVICE:
-
-        //
-        // Clean up a remove that did not go through.
-        //
-
-        //
-        // First check to see whether you have received cancel-remove
-        // without first receiving a query-remove. This could happen if
-        // someone above us fails a query-remove and passes down the
-        // subsequent cancel-remove.
-        //
-
-        if (RemovePending == DeviceData->common.DevicePnPState)
-        {
-            //
-            // We did receive a query-remove, so restore.
-            //
-            RESTORE_PREVIOUS_PNP_STATE(DeviceData);
-        }
-        status = STATUS_SUCCESS; // We must not fail this IRP.
-        break;
-
-    case IRP_MN_SURPRISE_REMOVAL:
-
-        //
-        // We should stop all access to the device and relinquish all the
-        // resources. Let's just mark that it happened and we will do
-        // the cleanup later in IRP_MN_REMOVE_DEVICE.
-        //
-
-        SET_NEW_PNP_STATE(DeviceData, SurpriseRemovePending);
-        status = STATUS_SUCCESS;
-        break;
+	IO_STATUS_BLOCK     ioStatus;
+	KEVENT              pnpEvent;
+	NTSTATUS            status;
+	PDEVICE_OBJECT      targetObject;
+	PIO_STACK_LOCATION  irpStack;
+	PIRP                pnpIrp;
+
+	PAGED_CODE();
+
+	//
+	// Initialize the capabilities that we will send down
+	//
+	RtlZeroMemory(DeviceCapabilities, sizeof(DEVICE_CAPABILITIES));
+	DeviceCapabilities->Size = sizeof(DEVICE_CAPABILITIES);
+	DeviceCapabilities->Version = 1;
+	DeviceCapabilities->Address = (ULONG)-1;
+	DeviceCapabilities->UINumber = (ULONG)-1;
+
+	//
+	// Initialize the event
+	//
+	KeInitializeEvent(&pnpEvent, NotificationEvent, FALSE);
+
+	targetObject = IoGetAttachedDeviceReference(DeviceObject);
+
+	//
+	// Build an Irp
+	//
+	pnpIrp = IoBuildSynchronousFsdRequest(
+		IRP_MJ_PNP,
+		targetObject,
+		NULL,
+		0,
+		NULL,
+		&pnpEvent,
+		&ioStatus
+	);
+	if (pnpIrp == NULL) {
+
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		goto GetDeviceCapabilitiesExit;
+
+	}
+
+	//
+	// Pnp Irps all begin life as STATUS_NOT_SUPPORTED;
+	//
+	pnpIrp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+
+	//
+	// Get the top of stack
+	//
+	irpStack = IoGetNextIrpStackLocation(pnpIrp);
+
+	//
+	// Set the top of stack
+	//
+	RtlZeroMemory(irpStack, sizeof(IO_STACK_LOCATION));
+	irpStack->MajorFunction = IRP_MJ_PNP;
+	irpStack->MinorFunction = IRP_MN_QUERY_CAPABILITIES;
+	irpStack->Parameters.DeviceCapabilities.Capabilities = DeviceCapabilities;
+
+	//
+	// Call the driver
+	//
+	status = IoCallDriver(targetObject, pnpIrp);
+	if (status == STATUS_PENDING) {
+
+		//
+		// Block until the irp comes back.
+		// Important thing to note here is when you allocate
+		// the memory for an event in the stack you must do a
+		// KernelMode wait instead of UserMode to prevent
+		// the stack from getting paged out.
+		//
+
+		KeWaitForSingleObject(
+			&pnpEvent,
+			Executive,
+			KernelMode,
+			FALSE,
+			NULL
+		);
+		status = ioStatus.Status;
+
+	}
+
+GetDeviceCapabilitiesExit:
+	//
+	// Done with reference
+	//
+	ObDereferenceObject(targetObject);
+
+	//
+	// Done
+	//
+	return status;
 
-    case IRP_MN_REMOVE_DEVICE:
-
-        //
-        // Present is set to true when the pdo is exposed via PlugIn IOCTL.
-        // It is set to FALSE when a UnPlug IOCTL is received.
-        // We will delete the PDO only after we have reported to the
-        // Plug and Play manager that it's missing.
-        //
-
-        if (DeviceData->ReportedMissing) {
-            PFDO_DEVICE_DATA fdoData;
-
-            SET_NEW_PNP_STATE(DeviceData, Deleted);
-
-            //
-            // Remove the PDO from the list and decrement the count of PDO.
-            // Don't forget to synchronize access to the FDO data.
-            // If the parent FDO is deleted before child PDOs, the ParentFdo
-            // pointer will be NULL. This could happen if the child PDO
-            // is in a SurpriseRemovePending state when the parent FDO
-            // is removed.
-            //
-
-            if (DeviceData->ParentFdo) {
-                fdoData = FDO_FROM_PDO(DeviceData);
-                ExAcquireFastMutex (&fdoData->Mutex);
-                RemoveEntryList (&DeviceData->Link);
-                fdoData->NumPDOs--;
-                ExReleaseFastMutex (&fdoData->Mutex);
-            }
-            //
-            // Free up resources associated with PDO and delete it.
-            //
-            status = Bus_DestroyPdo(DeviceObject, DeviceData);
-            break;
-
-        }
-        if (DeviceData->Present) {
-            //
-            // When the device is disabled, the PDO transitions from
-            // RemovePending to NotStarted. We shouldn't delete
-            // the PDO because a) the device is still present on the bus,
-            // b) we haven't reported missing to the PnP manager.
-            //
-
-            SET_NEW_PNP_STATE(DeviceData, NotStarted);
-            status = STATUS_SUCCESS;
-        } else {
-           //ASSERT(DeviceData->Present);
-		DBGE(DBG_GENERAL, "why we are not present\n");
-		status = STATUS_SUCCESS;
-        }
-        break;
-
-    case IRP_MN_QUERY_CAPABILITIES:
-
-        //
-        // Return the capabilities of a device, such as whether the device
-        // can be locked or ejected..etc
-        //
-
-        status = Bus_PDO_QueryDeviceCaps(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_QUERY_ID:
-
-        // Query the IDs of the device
-
-        DBGI(DBG_PNP, "\tQueryId Type: %d %s\n", IrpStack->Parameters.QueryId.IdType,
-	     dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
-
-        status = Bus_PDO_QueryDeviceId(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_QUERY_DEVICE_RELATIONS:
-		DBGI(DBG_PNP, "\tQueryDeviceRelation Type: %s\n",
-		     dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
-
-        status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_QUERY_DEVICE_TEXT:
-
-        status = Bus_PDO_QueryDeviceText(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_QUERY_RESOURCES:
-
-        status = Bus_PDO_QueryResources(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
-
-        status = Bus_PDO_QueryResourceRequirements(DeviceData, Irp);
-
-        break;
-
-
-    case IRP_MN_QUERY_BUS_INFORMATION:
-
-        status = Bus_PDO_QueryBusInformation(DeviceData, Irp);
-
-        break;
-
-    case IRP_MN_DEVICE_USAGE_NOTIFICATION:
-
-        //
-        // OPTIONAL for bus drivers.
-        // This bus drivers any of the bus's descendants
-        // (child device, child of a child device, etc.) do not
-        // contain a memory file namely paging file, dump file,
-        // or hibernation file. So we  fail this Irp.
-        //
-
-        status = STATUS_UNSUCCESSFUL;
-        break;
-
-    case IRP_MN_EJECT:
-
-        //
-        // For the device to be ejected, the device must be in the D3
-        // device power state (off) and must be unlocked
-        // (if the device supports locking). Any driver that returns success
-        // for this IRP must wait until the device has been ejected before
-        // completing the IRP.
-        //
-        DeviceData->Present = FALSE;
-
-        status = STATUS_SUCCESS;
-        break;
-
-    case IRP_MN_QUERY_INTERFACE:
-        //
-        // This request enables a driver to export a direct-call
-        // interface to other drivers. A bus driver that exports
-        // an interface must handle this request for its child
-        // devices (child PDOs).
-        //
-        status = Bus_PDO_QueryInterface(DeviceData, Irp);
-        break;
-
-    case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
-
-        //
-        // OPTIONAL for bus drivers.
-        // The PnP Manager sends this IRP to a device
-        // stack so filter and function drivers can adjust the
-        // resources required by the device, if appropriate.
-        //
-
-        //break;
-
-    //case IRP_MN_QUERY_PNP_DEVICE_STATE:
-
-        //
-        // OPTIONAL for bus drivers.
-        // The PnP Manager sends this IRP after the drivers for
-        // a device return success from the IRP_MN_START_DEVICE
-        // request. The PnP Manager also sends this IRP when a
-        // driver for the device calls IoInvalidateDeviceState.
-        //
-
-        // break;
-
-    //case IRP_MN_READ_CONFIG:
-    //case IRP_MN_WRITE_CONFIG:
-
-        //
-        // Bus drivers for buses with configuration space must handle
-        // this request for their child devices. Our devices don't
-        // have a config space.
-        //
-
-        // break;
-
-    //case IRP_MN_SET_LOCK:
-
-        //
-        // Our device is not a lockable device
-        // so we don't support this Irp.
-        //
-
-        // break;
-
-    default:
-
-        //
-        //Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,("\t Not handled\n"));
-        // For PnP requests to the PDO that we do not understand we should
-        // return the IRP WITHOUT setting the status or information fields.
-        // These fields may have already been set by a filter (eg acpi).
-        status = Irp->IoStatus.Status;
-
-        break;
-    }
-
-    Irp->IoStatus.Status = status;
-    IoCompleteRequest (Irp, IO_NO_INCREMENT);
-
-    return status;
 }
 
-NTSTATUS
-Bus_PDO_QueryDeviceCaps(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryDeviceCaps(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -555,13 +307,10 @@ Return Value:
     deviceCapabilities->UINumber = DeviceData->SerialNo;
 
     return STATUS_SUCCESS;
-
 }
 
-NTSTATUS
-Bus_PDO_QueryDeviceId(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryDeviceId(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -684,8 +433,8 @@ Return Value:
 
 }
 
-NTSTATUS
-Bus_PDO_QueryDeviceText(__in PPDO_DEVICE_DATA DeviceData, __in  PIRP Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryDeviceText(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -794,10 +543,8 @@ Return Value:
 
 }
 
-NTSTATUS
-Bus_PDO_QueryResources(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryResources(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -878,10 +625,8 @@ Return Value:
 #endif
 }
 
-NTSTATUS
-Bus_PDO_QueryResourceRequirements(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryResourceRequirements(__in PPDO_DEVICE_DATA DeviceData, __in  PIRP Irp)
 /*++
 
 Routine Description:
@@ -982,10 +727,8 @@ Return Value:
     return status;
 }
 
-NTSTATUS
-Bus_PDO_QueryDeviceRelations(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryDeviceRelations(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -1074,10 +817,8 @@ Return Value:
     return status;
 }
 
-NTSTATUS
-Bus_PDO_QueryBusInformation(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryBusInformation(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 /*++
 
 Routine Description:
@@ -1159,10 +900,9 @@ NTSTATUS USB_BUSIFFN QueryBusInformation(
 	return STATUS_UNSUCCESSFUL;
 }
 
-NTSTATUS USB_BUSIFFN SubmitIsoOutUrb (
-        IN PVOID context,
-        IN PURB urb
-){
+static NTSTATUS
+USB_BUSIFFN SubmitIsoOutUrb(IN PVOID context, IN PURB urb)
+{
 	UNREFERENCED_PARAMETER(context);
 	UNREFERENCED_PARAMETER(urb);
 
@@ -1170,10 +910,8 @@ NTSTATUS USB_BUSIFFN SubmitIsoOutUrb (
 	return STATUS_UNSUCCESSFUL;
 }
 
-NTSTATUS USB_BUSIFFN QueryBusTime(
-    IN PVOID context,
-    IN OUT PULONG currentusbframe
-)
+static NTSTATUS
+USB_BUSIFFN QueryBusTime(IN PVOID context, IN OUT PULONG currentusbframe)
 {
 	UNREFERENCED_PARAMETER(context);
 	UNREFERENCED_PARAMETER(currentusbframe);
@@ -1182,10 +920,8 @@ NTSTATUS USB_BUSIFFN QueryBusTime(
 	return STATUS_UNSUCCESSFUL;
 }
 
-VOID USB_BUSIFFN GetUSBDIVersion (
-        IN PVOID context,
-        IN OUT PUSBD_VERSION_INFORMATION inf,
-        IN OUT PULONG HcdCapabilities
+static VOID USB_BUSIFFN
+GetUSBDIVersion(IN PVOID context, IN OUT PUSBD_VERSION_INFORMATION inf, IN OUT PULONG HcdCapabilities
 ){
 	UNREFERENCED_PARAMETER(context);
 
@@ -1196,10 +932,48 @@ VOID USB_BUSIFFN GetUSBDIVersion (
 	return;
 }
 
-NTSTATUS
-Bus_PDO_QueryInterface(
-    __in PPDO_DEVICE_DATA     DeviceData,
-    __in  PIRP   Irp )
+static VOID
+InterfaceReference(__in PVOID Context)
+/*++
+
+Routine Description:
+
+This routine increments the refcount. We check this refcount
+during query_remove decide whether to allow the remove or not.
+
+Arguments:
+
+Context        pointer to  PDO device extension
+
+Return Value:
+
+--*/
+{
+	InterlockedIncrement(&((PPDO_DEVICE_DATA)Context)->InterfaceRefCount);
+}
+
+static VOID
+InterfaceDereference(__in PVOID Context)
+/*++
+
+Routine Description:
+
+This routine decrements the refcount. We check this refcount
+during query_remove decide whether to allow the remove or not.
+
+Arguments:
+
+Context        pointer to  PDO device extension
+
+Return Value:
+
+--*/
+{
+	InterlockedDecrement(&((PPDO_DEVICE_DATA)Context)->InterfaceRefCount);
+}
+
+static PAGEABLE NTSTATUS
+Bus_PDO_QueryInterface(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
 {
    PIO_STACK_LOCATION irpStack;
    GUID *interfaceType;
@@ -1261,252 +1035,357 @@ Bus_PDO_QueryInterface(
    return status;
 }
 
-BOOLEAN
-Bus_GetCrispinessLevel(__in PVOID Context, __out PUCHAR Level)
-/*++
+PAGEABLE NTSTATUS
+Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
+	__in PIO_STACK_LOCATION IrpStack, __in PPDO_DEVICE_DATA DeviceData)
+	/*++
+	Routine Description:
+	Handle requests from the Plug & Play system for the devices on the BUS
 
-Routine Description:
-
-    This routine gets the current crispiness level of the USBIP.
-
-Arguments:
-
-    Context        pointer to  PDO device extension
-    Level          crispiness level of the device
-
-Return Value:
-
-    TRUE or FALSE
-
---*/
+	--*/
 {
-	UNREFERENCED_PARAMETER(Context);
-    //
-    // Validate the context to see if it's really a pointer
-    // to PDO's device extension. You can store some kind
-    // of signature in the PDO for this purpose
-    //
-	DBGI(DBG_PNP, "GetCrispinessLevel\n");
-	*Level = 10;
-	return TRUE;
+	NTSTATUS                status;
+
+	PAGED_CODE();
+
+
+	//
+	// NB: Because we are a bus enumerator, we have no one to whom we could
+	// defer these irps.  Therefore we do not pass them down but merely
+	// return them.
+	//
+
+	switch (IrpStack->MinorFunction) {
+
+	case IRP_MN_START_DEVICE:
+
+		//
+		// Here we do what ever initialization and ``turning on'' that is
+		// required to allow others to access this device.
+		// Power up the device.
+		//
+		DeviceData->common.DevicePowerState = PowerDeviceD0;
+		SET_NEW_PNP_STATE(DeviceData, Started);
+		status = IoRegisterDeviceInterface(
+			DeviceObject,
+			&GUID_DEVINTERFACE_USB_DEVICE,
+			NULL,
+			&DeviceData->usb_dev_interface);
+		if (status == STATUS_SUCCESS)
+			IoSetDeviceInterfaceState(&DeviceData->usb_dev_interface, TRUE);
+		break;
+
+	case IRP_MN_STOP_DEVICE:
+
+		//
+		// Here we shut down the device and give up and unmap any resources
+		// we acquired for the device.
+		//
+
+
+		SET_NEW_PNP_STATE(DeviceData, Stopped);
+		IoSetDeviceInterfaceState(&DeviceData->usb_dev_interface, FALSE);
+		status = STATUS_SUCCESS;
+		break;
+
+
+	case IRP_MN_QUERY_STOP_DEVICE:
+
+		//
+		// No reason here why we can't stop the device.
+		// If there were a reason we should speak now, because answering success
+		// here may result in a stop device irp.
+		//
+
+		SET_NEW_PNP_STATE(DeviceData, StopPending);
+		status = STATUS_SUCCESS;
+		break;
+
+	case IRP_MN_CANCEL_STOP_DEVICE:
+
+		//
+		// The stop was canceled.  Whatever state we set, or resources we put
+		// on hold in anticipation of the forthcoming STOP device IRP should be
+		// put back to normal.  Someone, in the long list of concerned parties,
+		// has failed the stop device query.
+		//
+
+		//
+		// First check to see whether you have received cancel-stop
+		// without first receiving a query-stop. This could happen if someone
+		// above us fails a query-stop and passes down the subsequent
+		// cancel-stop.
+		//
+
+		if (StopPending == DeviceData->common.DevicePnPState)
+		{
+			//
+			// We did receive a query-stop, so restore.
+			//
+			RESTORE_PREVIOUS_PNP_STATE(DeviceData);
+		}
+		status = STATUS_SUCCESS;// We must not fail this IRP.
+		break;
+
+	case IRP_MN_QUERY_REMOVE_DEVICE:
+
+		//
+		// Check to see whether the device can be removed safely.
+		// If not fail this request. This is the last opportunity
+		// to do so.
+		//
+		if (DeviceData->InterfaceRefCount) {
+			//
+			// Somebody is still using our interface.
+			// We must fail remove.
+			//
+			status = STATUS_UNSUCCESSFUL;
+			break;
+		}
+
+		SET_NEW_PNP_STATE(DeviceData, RemovePending);
+		status = STATUS_SUCCESS;
+		break;
+
+	case IRP_MN_CANCEL_REMOVE_DEVICE:
+
+		//
+		// Clean up a remove that did not go through.
+		//
+
+		//
+		// First check to see whether you have received cancel-remove
+		// without first receiving a query-remove. This could happen if
+		// someone above us fails a query-remove and passes down the
+		// subsequent cancel-remove.
+		//
+
+		if (RemovePending == DeviceData->common.DevicePnPState)
+		{
+			//
+			// We did receive a query-remove, so restore.
+			//
+			RESTORE_PREVIOUS_PNP_STATE(DeviceData);
+		}
+		status = STATUS_SUCCESS; // We must not fail this IRP.
+		break;
+
+	case IRP_MN_SURPRISE_REMOVAL:
+
+		//
+		// We should stop all access to the device and relinquish all the
+		// resources. Let's just mark that it happened and we will do
+		// the cleanup later in IRP_MN_REMOVE_DEVICE.
+		//
+
+		SET_NEW_PNP_STATE(DeviceData, SurpriseRemovePending);
+		status = STATUS_SUCCESS;
+		break;
+
+	case IRP_MN_REMOVE_DEVICE:
+
+		//
+		// Present is set to true when the pdo is exposed via PlugIn IOCTL.
+		// It is set to FALSE when a UnPlug IOCTL is received.
+		// We will delete the PDO only after we have reported to the
+		// Plug and Play manager that it's missing.
+		//
+
+		if (DeviceData->ReportedMissing) {
+			PFDO_DEVICE_DATA fdoData;
+
+			SET_NEW_PNP_STATE(DeviceData, Deleted);
+
+			//
+			// Remove the PDO from the list and decrement the count of PDO.
+			// Don't forget to synchronize access to the FDO data.
+			// If the parent FDO is deleted before child PDOs, the ParentFdo
+			// pointer will be NULL. This could happen if the child PDO
+			// is in a SurpriseRemovePending state when the parent FDO
+			// is removed.
+			//
+
+			if (DeviceData->ParentFdo) {
+				fdoData = FDO_FROM_PDO(DeviceData);
+				ExAcquireFastMutex(&fdoData->Mutex);
+				RemoveEntryList(&DeviceData->Link);
+				fdoData->NumPDOs--;
+				ExReleaseFastMutex(&fdoData->Mutex);
+			}
+			//
+			// Free up resources associated with PDO and delete it.
+			//
+			status = Bus_DestroyPdo(DeviceObject, DeviceData);
+			break;
+
+		}
+		if (DeviceData->Present) {
+			//
+			// When the device is disabled, the PDO transitions from
+			// RemovePending to NotStarted. We shouldn't delete
+			// the PDO because a) the device is still present on the bus,
+			// b) we haven't reported missing to the PnP manager.
+			//
+
+			SET_NEW_PNP_STATE(DeviceData, NotStarted);
+			status = STATUS_SUCCESS;
+		}
+		else {
+			//ASSERT(DeviceData->Present);
+			DBGE(DBG_GENERAL, "why we are not present\n");
+			status = STATUS_SUCCESS;
+		}
+		break;
+
+	case IRP_MN_QUERY_CAPABILITIES:
+
+		//
+		// Return the capabilities of a device, such as whether the device
+		// can be locked or ejected..etc
+		//
+
+		status = Bus_PDO_QueryDeviceCaps(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_QUERY_ID:
+
+		// Query the IDs of the device
+
+		DBGI(DBG_PNP, "\tQueryId Type: %d %s\n", IrpStack->Parameters.QueryId.IdType,
+			dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
+
+		status = Bus_PDO_QueryDeviceId(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_QUERY_DEVICE_RELATIONS:
+		DBGI(DBG_PNP, "\tQueryDeviceRelation Type: %s\n",
+			dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
+
+		status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_QUERY_DEVICE_TEXT:
+
+		status = Bus_PDO_QueryDeviceText(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_QUERY_RESOURCES:
+
+		status = Bus_PDO_QueryResources(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
+
+		status = Bus_PDO_QueryResourceRequirements(DeviceData, Irp);
+
+		break;
+
+
+	case IRP_MN_QUERY_BUS_INFORMATION:
+
+		status = Bus_PDO_QueryBusInformation(DeviceData, Irp);
+
+		break;
+
+	case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+
+		//
+		// OPTIONAL for bus drivers.
+		// This bus drivers any of the bus's descendants
+		// (child device, child of a child device, etc.) do not
+		// contain a memory file namely paging file, dump file,
+		// or hibernation file. So we  fail this Irp.
+		//
+
+		status = STATUS_UNSUCCESSFUL;
+		break;
+
+	case IRP_MN_EJECT:
+
+		//
+		// For the device to be ejected, the device must be in the D3
+		// device power state (off) and must be unlocked
+		// (if the device supports locking). Any driver that returns success
+		// for this IRP must wait until the device has been ejected before
+		// completing the IRP.
+		//
+		DeviceData->Present = FALSE;
+
+		status = STATUS_SUCCESS;
+		break;
+
+	case IRP_MN_QUERY_INTERFACE:
+		//
+		// This request enables a driver to export a direct-call
+		// interface to other drivers. A bus driver that exports
+		// an interface must handle this request for its child
+		// devices (child PDOs).
+		//
+		status = Bus_PDO_QueryInterface(DeviceData, Irp);
+		break;
+
+	case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+
+		//
+		// OPTIONAL for bus drivers.
+		// The PnP Manager sends this IRP to a device
+		// stack so filter and function drivers can adjust the
+		// resources required by the device, if appropriate.
+		//
+
+		//break;
+
+		//case IRP_MN_QUERY_PNP_DEVICE_STATE:
+
+		//
+		// OPTIONAL for bus drivers.
+		// The PnP Manager sends this IRP after the drivers for
+		// a device return success from the IRP_MN_START_DEVICE
+		// request. The PnP Manager also sends this IRP when a
+		// driver for the device calls IoInvalidateDeviceState.
+		//
+
+		// break;
+
+		//case IRP_MN_READ_CONFIG:
+		//case IRP_MN_WRITE_CONFIG:
+
+		//
+		// Bus drivers for buses with configuration space must handle
+		// this request for their child devices. Our devices don't
+		// have a config space.
+		//
+
+		// break;
+
+		//case IRP_MN_SET_LOCK:
+
+		//
+		// Our device is not a lockable device
+		// so we don't support this Irp.
+		//
+
+		// break;
+
+	default:
+
+		//
+		//Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,("\t Not handled\n"));
+		// For PnP requests to the PDO that we do not understand we should
+		// return the IRP WITHOUT setting the status or information fields.
+		// These fields may have already been set by a filter (eg acpi).
+		status = Irp->IoStatus.Status;
+
+		break;
+	}
+
+	Irp->IoStatus.Status = status;
+	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+	return status;
 }
-
-BOOLEAN
-Bus_SetCrispinessLevel(__in PVOID Context, __in UCHAR Level)
-/*++
-
-Routine Description:
-
-    This routine sets the current crispiness level of the USBIP.
-
-Arguments:
-
-    Context        pointer to  PDO device extension
-    Level          crispiness level of the device
-
-Return Value:
-
-    TRUE or FALSE
-
---*/
-{
-	UNREFERENCED_PARAMETER(Context);
-	UNREFERENCED_PARAMETER(Level);
-
-	DBGI(DBG_PNP, "SetCrispinessLevel\n");
-	return TRUE;
-}
-
-BOOLEAN
-Bus_IsSafetyLockEnabled(__in PVOID Context)
-/*++
-
-Routine Description:
-
-    Routine to check whether safety lock is enabled
-
-Arguments:
-
-    Context        pointer to  PDO device extension
-
-Return Value:
-
-    TRUE or FALSE
-
---*/
-{
-	UNREFERENCED_PARAMETER(Context);
-
-	DBGI(DBG_GENERAL | DBG_PNP, "IsSafetyLockEnabled\n");
-	return TRUE;
-}
-
-VOID
-InterfaceReference (
-   __in PVOID Context
-   )
-/*++
-
-Routine Description:
-
-    This routine increments the refcount. We check this refcount
-    during query_remove decide whether to allow the remove or not.
-
-Arguments:
-
-    Context        pointer to  PDO device extension
-
-Return Value:
-
---*/
-{
-    InterlockedIncrement(&((PPDO_DEVICE_DATA)Context)->InterfaceRefCount);
-}
-
-VOID
-InterfaceDereference (
-   __in PVOID Context
-   )
-/*++
-
-Routine Description:
-
-    This routine decrements the refcount. We check this refcount
-    during query_remove decide whether to allow the remove or not.
-
-Arguments:
-
-    Context        pointer to  PDO device extension
-
-Return Value:
-
---*/
-{
-    InterlockedDecrement(&((PPDO_DEVICE_DATA)Context)->InterfaceRefCount);
-}
-
-NTSTATUS
-Bus_GetDeviceCapabilities(
-    __in  PDEVICE_OBJECT          DeviceObject,
-    __in  PDEVICE_CAPABILITIES    DeviceCapabilities
-    )
-/*++
-
-Routine Description:
-
-    This routine sends the get capabilities irp to the given stack
-
-Arguments:
-
-    DeviceObject        A device object in the stack whose capabilities we want
-    DeviceCapabilites   Where to store the answer
-
-Return Value:
-
-    NTSTATUS
-
---*/
-{
-    IO_STATUS_BLOCK     ioStatus;
-    KEVENT              pnpEvent;
-    NTSTATUS            status;
-    PDEVICE_OBJECT      targetObject;
-    PIO_STACK_LOCATION  irpStack;
-    PIRP                pnpIrp;
-
-    PAGED_CODE();
-
-    //
-    // Initialize the capabilities that we will send down
-    //
-    RtlZeroMemory( DeviceCapabilities, sizeof(DEVICE_CAPABILITIES) );
-    DeviceCapabilities->Size = sizeof(DEVICE_CAPABILITIES);
-    DeviceCapabilities->Version = 1;
-    DeviceCapabilities->Address = (ULONG)-1;
-    DeviceCapabilities->UINumber = (ULONG)-1;
-
-    //
-    // Initialize the event
-    //
-    KeInitializeEvent( &pnpEvent, NotificationEvent, FALSE );
-
-    targetObject = IoGetAttachedDeviceReference( DeviceObject );
-
-    //
-    // Build an Irp
-    //
-    pnpIrp = IoBuildSynchronousFsdRequest(
-        IRP_MJ_PNP,
-        targetObject,
-        NULL,
-        0,
-        NULL,
-        &pnpEvent,
-        &ioStatus
-        );
-    if (pnpIrp == NULL) {
-
-        status = STATUS_INSUFFICIENT_RESOURCES;
-        goto GetDeviceCapabilitiesExit;
-
-    }
-
-    //
-    // Pnp Irps all begin life as STATUS_NOT_SUPPORTED;
-    //
-    pnpIrp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-
-    //
-    // Get the top of stack
-    //
-    irpStack = IoGetNextIrpStackLocation( pnpIrp );
-
-    //
-    // Set the top of stack
-    //
-    RtlZeroMemory( irpStack, sizeof(IO_STACK_LOCATION ) );
-    irpStack->MajorFunction = IRP_MJ_PNP;
-    irpStack->MinorFunction = IRP_MN_QUERY_CAPABILITIES;
-    irpStack->Parameters.DeviceCapabilities.Capabilities = DeviceCapabilities;
-
-    //
-    // Call the driver
-    //
-    status = IoCallDriver( targetObject, pnpIrp );
-    if (status == STATUS_PENDING) {
-
-        //
-        // Block until the irp comes back.
-        // Important thing to note here is when you allocate
-        // the memory for an event in the stack you must do a
-        // KernelMode wait instead of UserMode to prevent
-        // the stack from getting paged out.
-        //
-
-        KeWaitForSingleObject(
-            &pnpEvent,
-            Executive,
-            KernelMode,
-            FALSE,
-            NULL
-            );
-        status = ioStatus.Status;
-
-    }
-
-GetDeviceCapabilitiesExit:
-    //
-    // Done with reference
-    //
-    ObDereferenceObject( targetObject );
-
-    //
-    // Done
-    //
-    return status;
-
-}
-
-
-
-

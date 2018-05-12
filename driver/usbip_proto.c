@@ -1,28 +1,7 @@
-#include "busenum.h"
-
-#include <usbdi.h>
+#include "driver.h"
 
 #include "usbip_proto.h"
 #include "usbreq.h"
-
-#define CHECK_SIZE_RW() \
-	do { \
-		if (buf == NULL) \
-			return STATUS_BUFFER_TOO_SMALL; \
-		if (req->TransferFlags & USBD_TRANSFER_DIRECTION_IN) { \
-			if (len < sizeof(*h)) \
-				return STATUS_BUFFER_TOO_SMALL; \
-		} else { \
-			if (len < sizeof(*h) + req->TransferBufferLength) \
-				return STATUS_BUFFER_TOO_SMALL; \
-		} \
-	} while (0)
-
-#define CHECK_SIZE_READ() \
-	do { \
-		if (len < sizeof(*h) || buf == NULL) \
-			return STATUS_BUFFER_TOO_SMALL; \
-	} while (0)
 
 #define USBDEVFS_URB_SHORT_NOT_OK	0x01
 #define USBDEVFS_URB_ISO_ASAP		0x02

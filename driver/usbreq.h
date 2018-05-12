@@ -1,8 +1,9 @@
 #pragma once
 
-#include "busenum.h"
-
+#include <ntddk.h>
 #include <usbdi.h>
+
+#include "device.h"
 
 #define MAKE_PIPE(ep, type, interval) ((USBD_PIPE_HANDLE)((ep) | ((interval) << 8) | ((type) << 16)))
 
@@ -11,12 +12,21 @@
 #define PIPE2TYPE(handle)	((unsigned char)(((INT_PTR)(handle) & 0xff0000) >> 16))
 #define PIPE2INTERVAL(handle)	((unsigned char)(((INT_PTR)(handle) & 0xff00) >> 8))
 
+struct urb_req {
+	PPDO_DEVICE_DATA	pdodata;
+	PIRP	irp;
+	KEVENT	*event;
+	unsigned long	seq_num;
+	BOOLEAN		sent;
+	LIST_ENTRY	list;
+};
+
 struct usb_ctrl_setup {
-	unsigned char bRequestType;
-	unsigned char  bRequest;
-	unsigned short wValue;
-	unsigned short wIndex;
-	unsigned short wLength;
+	unsigned char	bRequestType;
+	unsigned char	bRequest;
+	unsigned short	wValue;
+	unsigned short	wIndex;
+	unsigned short	wLength;
 };
 
 extern void

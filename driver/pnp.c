@@ -1,27 +1,25 @@
-#include "busenum.h"
-#include <wdmsec.h> // for IoCreateDeviceSecure
+#include "driver.h"
 
-#include "dbgcode.h"
+#include "usbipenum_api.h"
+#include "pnp.h"
+#include "usbreq.h"
 
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, Bus_AddDevice)
-#pragma alloc_text (PAGE, Bus_PnP)
-#pragma alloc_text (PAGE, bus_get_ports_status)
-#pragma alloc_text (PAGE, bus_init_pdo)
-#pragma alloc_text (PAGE, bus_unplug_dev)
-#pragma alloc_text (PAGE, Bus_DestroyPdo)
-#pragma alloc_text (PAGE, Bus_RemoveFdo)
-#pragma alloc_text (PAGE, Bus_FDO_PnP)
-#pragma alloc_text (PAGE, Bus_StartFdo)
-#pragma alloc_text (PAGE, Bus_SendIrpSynchronously)
-#pragma alloc_text (PAGE, Bus_EjectDevice)
-#endif
+#define INITIALIZE_PNP_STATE(_Data_)    \
+        (_Data_)->common.DevicePnPState =  NotStarted;\
+        (_Data_)->common.PreviousPnPState = NotStarted;
 
-NTSTATUS
-Bus_AddDevice(
-    __in PDRIVER_OBJECT DriverObject,
-    __in PDEVICE_OBJECT PhysicalDeviceObject
-    )
+extern PAGEABLE NTSTATUS
+Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
+	__in PIO_STACK_LOCATION IrpStack, __in PPDO_DEVICE_DATA DeviceData);
+
+extern PAGEABLE NTSTATUS
+Bus_WmiRegistration(__in PFDO_DEVICE_DATA FdoData);
+
+extern PAGEABLE NTSTATUS
+Bus_WmiDeRegistration(__in PFDO_DEVICE_DATA FdoData);
+
+PAGEABLE NTSTATUS
+Bus_AddDevice(__in PDRIVER_OBJECT DriverObject, __in PDEVICE_OBJECT PhysicalDeviceObject)
 /*++
 Routine Description.
 
@@ -215,58 +213,256 @@ End:
 
 }
 
-NTSTATUS
-Bus_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+static PAGEABLE void
+Bus_RemoveFdo(__in PFDO_DEVICE_DATA FdoData)
+/*++
+Routine Description:
+
+Frees any memory allocated by the FDO and unmap any IO mapped as well.
+This function does not the delete the deviceobject.
+
+Arguments:
+
+DeviceData - Pointer to the FDO's device extension.
+
+Return Value:
+
+NT Status is returned.
+
+--*/
 {
-	PIO_STACK_LOCATION      irpStack;
-	NTSTATUS                status;
-	PCOMMON_DEVICE_DATA     commonData;
-
-	PAGED_CODE ();
-
-	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Enter\n");
-
-	irpStack = IoGetCurrentIrpStackLocation(Irp);
-	ASSERT (IRP_MJ_PNP == irpStack->MajorFunction);
-
-	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+	PAGED_CODE();
 
 	//
-	// If the device has been removed, the driver should
-	// not pass the IRP down to the next lower driver.
+	// Stop all access to the device, fail any outstanding I/O to the device,
+	// and free all the resources associated with the device.
 	//
-	if (commonData->DevicePnPState == Deleted) {
-		Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
-		IoCompleteRequest (Irp, IO_NO_INCREMENT);
+
+	//
+	// Disable the device interface and free the buffer
+	//
+	if (FdoData->InterfaceName.Buffer != NULL) {
+
+		IoSetDeviceInterfaceState(&FdoData->InterfaceName, FALSE);
+
+		ExFreePool(FdoData->InterfaceName.Buffer);
+		RtlZeroMemory(&FdoData->InterfaceName,
+			sizeof(UNICODE_STRING));
+	}
+
+	//
+	// Inform WMI to remove this DeviceObject from its
+	// list of providers.
+	//
+
+	Bus_WmiDeRegistration(FdoData);
+}
+
+PAGEABLE NTSTATUS
+Bus_DestroyPdo(PDEVICE_OBJECT Device, __in PPDO_DEVICE_DATA PdoData)
+/*++
+Routine Description:
+The Plug & Play subsystem has instructed that this PDO should be removed.
+
+We should therefore
+- Complete any requests queued in the driver
+- If the device is still attached to the system,
+- then complete the request and return.
+- Otherwise, cleanup device specific allocations, memory, events...
+- Call IoDeleteDevice
+- Return from the dispatch routine.
+
+Note that if the device is still connected to the bus (IE in this case
+the enum application has not yet told us that the USBIP device has disappeared)
+then the PDO must remain around, and must be returned during any
+query Device relations IRPS.
+
+--*/
+
+{
+	PAGED_CODE();
+
+	//
+	// BusEnum does not queue any irps at this time so we have nothing to do.
+	//
+	//
+	// Free any resources.
+	//
+
+	if (PdoData->HardwareIDs) {
+		ExFreePool(PdoData->HardwareIDs);
+		PdoData->HardwareIDs = NULL;
+	}
+
+	if (PdoData->compatible_ids) {
+		ExFreePool(PdoData->compatible_ids);
+		PdoData->compatible_ids = NULL;
+	}
+	//FIXME
+	if (PdoData->fo) {
+		PdoData->fo->FsContext = NULL;
+		PdoData->fo = NULL;
+	}
+	DBGI(DBG_PNP, "\tDeleting PDO: 0x%p\n", Device);
+	IoDeleteDevice(Device);
+	return STATUS_SUCCESS;
+}
+
+static PAGEABLE NTSTATUS
+Bus_StartFdo(__in PFDO_DEVICE_DATA FdoData, __in PIRP Irp)
+/*++
+
+Routine Description:
+
+Initialize and start the bus controller. Get the resources
+by parsing the list and map them if required.
+
+Arguments:
+
+DeviceData - Pointer to the FDO's device extension.
+Irp          - Pointer to the irp.
+
+Return Value:
+
+NT Status is returned.
+
+--*/
+{
+	NTSTATUS status;
+	POWER_STATE powerState;
+
+	PAGED_CODE();
+
+	UNREFERENCED_PARAMETER(Irp);
+
+	//
+	// Check the function driver source to learn
+	// about parsing resource list.
+	//
+
+	//
+	// Enable device interface. If the return status is
+	// STATUS_OBJECT_NAME_EXISTS means we are enabling the interface
+	// that was already enabled, which could happen if the device
+	// is stopped and restarted for resource rebalancing.
+	//
+
+	status = IoSetDeviceInterfaceState(&FdoData->InterfaceName, TRUE);
+	if (!NT_SUCCESS(status)) {
+		DBGE(DBG_PNP, "IoSetDeviceInterfaceState failed: 0x%x\n", status);
 		return status;
 	}
 
-	if (commonData->IsFDO) {
-		DBGI(DBG_PNP, "FDO: minor: %s, IRP:0x%p\n", dbg_pnp_minor(irpStack->MinorFunction), Irp);
-		//
-		// Request is for the bus FDO
-		//
-		status = Bus_FDO_PnP(DeviceObject, Irp, irpStack, (PFDO_DEVICE_DATA) commonData);
-	} else {
-		DBGI(DBG_PNP, "PDO: minor: %s, IRP: 0x%p\n", dbg_pnp_minor(irpStack->MinorFunction), Irp);
-		//
-		// Request is for the child PDO.
-		//
-		status = Bus_PDO_PnP(DeviceObject, Irp, irpStack, (PPDO_DEVICE_DATA) commonData);
-	}
+	//
+	// Set the device power state to fully on. Also if this Start
+	// is due to resource rebalance, you should restore the device
+	// to the state it was before you stopped the device and relinquished
+	// resources.
+	//
 
-	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Leave\n");
+	FdoData->common.DevicePowerState = PowerDeviceD0;
+	powerState.DeviceState = PowerDeviceD0;
+	PoSetPowerState(FdoData->common.Self, DevicePowerState, powerState);
+
+	SET_NEW_PNP_STATE(FdoData, Started);
+
+	//
+	// Register with WMI
+	//
+	status = Bus_WmiRegistration(FdoData);
+	if (!NT_SUCCESS(status)) {
+		DBGE(DBG_PNP, "StartFdo: Bus_WmiRegistration failed (%x)\n", status);
+	}
 
 	return status;
 }
 
-NTSTATUS
-Bus_FDO_PnP (
-    __in PDEVICE_OBJECT       DeviceObject,
-    __in PIRP                 Irp,
-    __in PIO_STACK_LOCATION   IrpStack,
-    __in PFDO_DEVICE_DATA     DeviceData
-    )
+static NTSTATUS
+Bus_CompletionRoutine(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp, __in PVOID Context)
+/*++
+Routine Description:
+A completion routine for use when calling the lower device objects to
+which our bus (FDO) is attached.
+
+Arguments:
+
+DeviceObject - Pointer to deviceobject
+Irp          - Pointer to a PnP Irp.
+Context      - Pointer to an event object
+Return Value:
+
+NT Status is returned.
+
+--*/
+{
+	UNREFERENCED_PARAMETER(DeviceObject);
+
+	//
+	// If the lower driver didn't return STATUS_PENDING, we don't need to
+	// set the event because we won't be waiting on it.
+	// This optimization avoids grabbing the dispatcher lock and improves perf.
+	//
+	if (Irp->PendingReturned == TRUE) {
+		KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+	}
+	return STATUS_MORE_PROCESSING_REQUIRED; // Keep this IRP
+}
+
+static PAGEABLE NTSTATUS
+Bus_SendIrpSynchronously(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+/*++
+Routine Description:
+
+Sends the Irp down to lower driver and waits for it to
+come back by setting a completion routine.
+
+Arguments:
+DeviceObject - Pointer to deviceobject
+Irp          - Pointer to a PnP Irp.
+
+Return Value:
+
+NT Status is returned.
+
+--*/
+{
+	KEVENT   event;
+	NTSTATUS status;
+
+	PAGED_CODE();
+
+	KeInitializeEvent(&event, NotificationEvent, FALSE);
+
+	IoCopyCurrentIrpStackLocationToNext(Irp);
+
+	IoSetCompletionRoutine(Irp, Bus_CompletionRoutine, &event, TRUE, TRUE, TRUE);
+
+	status = IoCallDriver(DeviceObject, Irp);
+
+	//
+	// Wait for lower drivers to be done with the Irp.
+	// Important thing to note here is when you allocate
+	// the memory for an event in the stack you must do a
+	// KernelMode wait instead of UserMode to prevent
+	// the stack from getting paged out.
+	//
+
+	if (status == STATUS_PENDING) {
+		KeWaitForSingleObject(&event,
+			Executive,
+			KernelMode,
+			FALSE,
+			NULL
+		);
+		status = Irp->IoStatus.Status;
+	}
+
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+Bus_FDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp, __in PIO_STACK_LOCATION IrpStack,
+	__in PFDO_DEVICE_DATA DeviceData)
 /*++
 Routine Description:
 
@@ -706,220 +902,50 @@ Routine Description:
     return status;
 }
 
-NTSTATUS
-Bus_StartFdo (
-    __in  PFDO_DEVICE_DATA            FdoData,
-    __in  PIRP   Irp )
-/*++
-
-Routine Description:
-
-    Initialize and start the bus controller. Get the resources
-    by parsing the list and map them if required.
-
-Arguments:
-
-    DeviceData - Pointer to the FDO's device extension.
-    Irp          - Pointer to the irp.
-
-Return Value:
-
-    NT Status is returned.
-
---*/
+PAGEABLE NTSTATUS
+Bus_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
-    NTSTATUS status;
-    POWER_STATE powerState;
+	PIO_STACK_LOCATION      irpStack;
+	NTSTATUS                status;
+	PCOMMON_DEVICE_DATA     commonData;
 
-    PAGED_CODE ();
+	PAGED_CODE();
 
-	UNREFERENCED_PARAMETER(Irp);
+	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Enter\n");
 
-    //
-    // Check the function driver source to learn
-    // about parsing resource list.
-    //
+	irpStack = IoGetCurrentIrpStackLocation(Irp);
+	ASSERT(IRP_MJ_PNP == irpStack->MajorFunction);
 
-    //
-    // Enable device interface. If the return status is
-    // STATUS_OBJECT_NAME_EXISTS means we are enabling the interface
-    // that was already enabled, which could happen if the device
-    // is stopped and restarted for resource rebalancing.
-    //
+	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
 
-    status = IoSetDeviceInterfaceState(&FdoData->InterfaceName, TRUE);
-    if (!NT_SUCCESS (status)) {
-	    DBGE(DBG_PNP, "IoSetDeviceInterfaceState failed: 0x%x\n", status);
-	    return status;
-    }
+	//
+	// If the device has been removed, the driver should
+	// not pass the IRP down to the next lower driver.
+	//
+	if (commonData->DevicePnPState == Deleted) {
+		Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+		return status;
+	}
 
-    //
-    // Set the device power state to fully on. Also if this Start
-    // is due to resource rebalance, you should restore the device
-    // to the state it was before you stopped the device and relinquished
-    // resources.
-    //
+	if (commonData->IsFDO) {
+		DBGI(DBG_PNP, "FDO: minor: %s, IRP:0x%p\n", dbg_pnp_minor(irpStack->MinorFunction), Irp);
+		//
+		// Request is for the bus FDO
+		//
+		status = Bus_FDO_PnP(DeviceObject, Irp, irpStack, (PFDO_DEVICE_DATA)commonData);
+	}
+	else {
+		DBGI(DBG_PNP, "PDO: minor: %s, IRP: 0x%p\n", dbg_pnp_minor(irpStack->MinorFunction), Irp);
+		//
+		// Request is for the child PDO.
+		//
+		status = Bus_PDO_PnP(DeviceObject, Irp, irpStack, (PPDO_DEVICE_DATA)commonData);
+	}
 
-    FdoData->common.DevicePowerState = PowerDeviceD0;
-    powerState.DeviceState = PowerDeviceD0;
-    PoSetPowerState ( FdoData->common.Self, DevicePowerState, powerState );
+	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Leave\n");
 
-    SET_NEW_PNP_STATE(FdoData, Started);
-
-    //
-    // Register with WMI
-    //
-    status = Bus_WmiRegistration(FdoData);
-    if (!NT_SUCCESS (status)) {
-	    DBGE(DBG_PNP, "StartFdo: Bus_WmiRegistration failed (%x)\n", status);
-    }
-
-    return status;
-}
-
-void
-Bus_RemoveFdo (
-    __in PFDO_DEVICE_DATA FdoData
-    )
-/*++
-Routine Description:
-
-    Frees any memory allocated by the FDO and unmap any IO mapped as well.
-    This function does not the delete the deviceobject.
-
-Arguments:
-
-    DeviceData - Pointer to the FDO's device extension.
-
-Return Value:
-
-    NT Status is returned.
-
---*/
-{
-    PAGED_CODE ();
-
-    //
-    // Stop all access to the device, fail any outstanding I/O to the device,
-    // and free all the resources associated with the device.
-    //
-
-    //
-    // Disable the device interface and free the buffer
-    //
-    if (FdoData->InterfaceName.Buffer != NULL) {
-
-        IoSetDeviceInterfaceState (&FdoData->InterfaceName, FALSE);
-
-        ExFreePool (FdoData->InterfaceName.Buffer);
-        RtlZeroMemory (&FdoData->InterfaceName,
-                       sizeof (UNICODE_STRING));
-    }
-
-    //
-    // Inform WMI to remove this DeviceObject from its
-    // list of providers.
-    //
-
-    Bus_WmiDeRegistration(FdoData);
-
-}
-
-NTSTATUS
-Bus_SendIrpSynchronously (
-    __in PDEVICE_OBJECT DeviceObject,
-    __in PIRP Irp
-    )
-/*++
-Routine Description:
-
-    Sends the Irp down to lower driver and waits for it to
-    come back by setting a completion routine.
-
-Arguments:
-    DeviceObject - Pointer to deviceobject
-    Irp          - Pointer to a PnP Irp.
-
-Return Value:
-
-    NT Status is returned.
-
---*/
-{
-    KEVENT   event;
-    NTSTATUS status;
-
-    PAGED_CODE();
-
-    KeInitializeEvent(&event, NotificationEvent, FALSE);
-
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-
-    IoSetCompletionRoutine(Irp,
-                           Bus_CompletionRoutine,
-                           &event,
-                           TRUE,
-                           TRUE,
-                           TRUE
-                           );
-
-    status = IoCallDriver(DeviceObject, Irp);
-
-    //
-    // Wait for lower drivers to be done with the Irp.
-    // Important thing to note here is when you allocate
-    // the memory for an event in the stack you must do a
-    // KernelMode wait instead of UserMode to prevent
-    // the stack from getting paged out.
-    //
-
-    if (status == STATUS_PENDING) {
-       KeWaitForSingleObject(&event,
-                             Executive,
-                             KernelMode,
-                             FALSE,
-                             NULL
-                             );
-       status = Irp->IoStatus.Status;
-    }
-
-    return status;
-}
-
-NTSTATUS
-Bus_CompletionRoutine(
-    __in PDEVICE_OBJECT   DeviceObject,
-    __in PIRP             Irp,
-    __in PVOID            Context
-    )
-/*++
-Routine Description:
-    A completion routine for use when calling the lower device objects to
-    which our bus (FDO) is attached.
-
-Arguments:
-
-    DeviceObject - Pointer to deviceobject
-    Irp          - Pointer to a PnP Irp.
-    Context      - Pointer to an event object
-Return Value:
-
-    NT Status is returned.
-
---*/
-{
-    UNREFERENCED_PARAMETER (DeviceObject);
-
-    //
-    // If the lower driver didn't return STATUS_PENDING, we don't need to
-    // set the event because we won't be waiting on it.
-    // This optimization avoids grabbing the dispatcher lock and improves perf.
-    //
-    if (Irp->PendingReturned == TRUE) {
-
-        KeSetEvent ((PKEVENT) Context, IO_NO_INCREMENT, FALSE);
-    }
-    return STATUS_MORE_PROCESSING_REQUIRED; // Keep this IRP
+	return status;
 }
 
 void complete_pending_read_irp(PPDO_DEVICE_DATA pdodata)
@@ -989,64 +1015,8 @@ complete_pending_irp(PPDO_DEVICE_DATA pdodata)
     }while(1);
 }
 
-NTSTATUS
-Bus_DestroyPdo (
-    PDEVICE_OBJECT      Device,
-    __in PPDO_DEVICE_DATA    PdoData
-    )
-/*++
-Routine Description:
-    The Plug & Play subsystem has instructed that this PDO should be removed.
-
-    We should therefore
-    - Complete any requests queued in the driver
-    - If the device is still attached to the system,
-    - then complete the request and return.
-    - Otherwise, cleanup device specific allocations, memory, events...
-    - Call IoDeleteDevice
-    - Return from the dispatch routine.
-
-    Note that if the device is still connected to the bus (IE in this case
-    the enum application has not yet told us that the USBIP device has disappeared)
-    then the PDO must remain around, and must be returned during any
-    query Device relations IRPS.
-
---*/
-
-{
-    PAGED_CODE ();
-
-    //
-    // BusEnum does not queue any irps at this time so we have nothing to do.
-    //
-    //
-    // Free any resources.
-    //
-
-    if (PdoData->HardwareIDs) {
-        ExFreePool (PdoData->HardwareIDs);
-        PdoData->HardwareIDs = NULL;
-    }
-
-    if (PdoData->compatible_ids) {
-        ExFreePool (PdoData->compatible_ids);
-        PdoData->compatible_ids = NULL;
-    }
-    //FIXME
-    if (PdoData->fo){
-	    PdoData->fo->FsContext = NULL;
-	    PdoData->fo = NULL;
-    }
-    DBGI(DBG_PNP, "\tDeleting PDO: 0x%p\n", Device);
-    IoDeleteDevice (Device);
-    return STATUS_SUCCESS;
-}
-
-void
-bus_init_pdo (
-    __out PDEVICE_OBJECT      pdo,
-    PFDO_DEVICE_DATA    fdodata
-    )
+PAGEABLE void
+bus_init_pdo(__out PDEVICE_OBJECT pdo, PFDO_DEVICE_DATA fdodata)
 {
     PPDO_DEVICE_DATA pdodata;
 
@@ -1089,8 +1059,8 @@ bus_init_pdo (
     pdo->Flags &= ~DO_DEVICE_INITIALIZING;
 }
 
-NTSTATUS bus_get_ports_status(ioctl_usbvbus_get_ports_status * st,
-		PFDO_DEVICE_DATA  fdodata, ULONG *info)
+PAGEABLE NTSTATUS
+bus_get_ports_status(ioctl_usbvbus_get_ports_status *st, PFDO_DEVICE_DATA  fdodata, ULONG *info)
 {
     PPDO_DEVICE_DATA    pdodata;
     PLIST_ENTRY         entry;
@@ -1119,9 +1089,7 @@ NTSTATUS bus_get_ports_status(ioctl_usbvbus_get_ports_status * st,
     return STATUS_SUCCESS;
 }
 
-
-
-NTSTATUS
+PAGEABLE NTSTATUS
 bus_unplug_dev (
     int addr,
     PFDO_DEVICE_DATA            fdodata
@@ -1203,11 +1171,8 @@ bus_unplug_dev (
     return STATUS_INVALID_PARAMETER;
 }
 
-NTSTATUS
-Bus_EjectDevice (
-    PBUSENUM_EJECT_HARDWARE     Eject,
-    PFDO_DEVICE_DATA            FdoData
-    )
+PAGEABLE NTSTATUS
+Bus_EjectDevice(PBUSENUM_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData)
 /*++
 Routine Description:
     The user application has told us to eject the device from the bus.

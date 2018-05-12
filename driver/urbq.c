@@ -1,6 +1,7 @@
-#include "busenum.h"
+#include "driver.h"
 
 #include "usbip_proto.h"
+#include "usbreq.h"
 
 extern int
 process_urb_req(PIRP irp, struct urb_req *urb_r);
@@ -42,7 +43,7 @@ find_pending_urb_req(PPDO_DEVICE_DATA pdodata)
 		if (!urb->sent) {
 			urb->sent = TRUE;
 			if (urb->seq_num != 0) {
-				ERROR(("non-zero seq_num: %d\n", urb->seq_num));
+				DBGE(DBG_GENERAL, "non-zero seq_num: %d\n", urb->seq_num);
 			}
 			urb->seq_num = ++(pdodata->seq_num);
 			return urb;

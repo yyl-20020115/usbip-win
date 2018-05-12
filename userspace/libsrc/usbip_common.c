@@ -5,6 +5,8 @@
 #include "usbip.h"
 #include "names.h"
 
+#include "usbipenum_api.h"
+
 int usbip_use_syslog = 0;
 int usbip_use_stderr = 0;
 int usbip_use_debug  = 0;

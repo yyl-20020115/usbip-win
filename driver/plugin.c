@@ -1,11 +1,27 @@
-#include "busenum.h"
+#include "driver.h"
+
 #include <wdmsec.h> // for IoCreateDeviceSecure
 
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, bus_plugin_dev)
-#endif
+#include "device.h"
+#include "usbipenum_api.h"
 
-NTSTATUS bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, PFILE_OBJECT fo)
+//
+// This guid is used in IoCreateDeviceSecure call to create PDOs. The idea is to
+// allow the administrators to control access to the child device, in case the
+// device gets enumerated as a raw device - no function driver, by modifying the 
+// registry. If a function driver is loaded for the device, the system will override
+// the security descriptor specified in the call to IoCreateDeviceSecure with the 
+// one specifyied for the setup class of the child device.
+//
+DEFINE_GUID(GUID_SD_BUSENUM_PDO,
+	0x9d3039dd, 0xcca5, 0x4b4d, 0xb3, 0x3d, 0xe2, 0xdd, 0xc8, 0xa8, 0xc5, 0x2e);
+// {9D3039DD-CCA5-4b4d-B33D-E2DDC8A8C52E}
+
+extern PAGEABLE void
+bus_init_pdo(PDEVICE_OBJECT pdo, PFDO_DEVICE_DATA fdodata);
+
+PAGEABLE NTSTATUS
+bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA fdodata, PFILE_OBJECT fo)
 {
 	PDEVICE_OBJECT      pdo;
 	PPDO_DEVICE_DATA    pdodata, old_pdodata;

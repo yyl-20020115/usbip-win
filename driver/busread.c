@@ -1,12 +1,7 @@
-#include "busenum.h"
+#include "driver.h"
 
-#include <usbdi.h>
 #include "usbip_proto.h"
 #include "usbreq.h"
-
-#ifdef ALLOC_PRAGMA
-#pragma alloc_text (PAGE, Bus_Read)
-#endif
 
 extern struct urb_req *
 find_pending_urb_req(PPDO_DEVICE_DATA pdodata);
@@ -405,7 +400,7 @@ process_urb_req_submit(PIRP irp, struct urb_req *urb_r)
 	}
 
 	irp->IoStatus.Information = 0;
-	ERROR(("Unknown function: func:%x, len:%d\n", urb->UrbHeader.Function, urb->UrbHeader.Length));
+	DBGE(DBG_READ, "Unknown function: func:%x, len:%d\n", urb->UrbHeader.Function, urb->UrbHeader.Length);
 	return STATUS_INVALID_PARAMETER;
 }
 
@@ -466,7 +461,7 @@ process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
 	return status;
 }
 
-NTSTATUS
+PAGEABLE NTSTATUS
 Bus_Read(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 {
 	PFDO_DEVICE_DATA	fdoData;

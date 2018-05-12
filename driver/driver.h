@@ -1,14 +1,15 @@
 #pragma once
 
-//
-// This guid is used in IoCreateDeviceSecure call to create PDOs. The idea is to
-// allow the administrators to control access to the child device, in case the
-// device gets enumerated as a raw device - no function driver, by modifying the 
-// registry. If a function driver is loaded for the device, the system will override
-// the security descriptor specified in the call to IoCreateDeviceSecure with the 
-// one specifyied for the setup class of the child device.
-//
+#include <ntddk.h>
+#include <ntstrsafe.h>
+#include <initguid.h> // required for GUID definitions
 
-DEFINE_GUID(GUID_SD_BUSENUM_PDO,
-        0x9d3039dd, 0xcca5, 0x4b4d, 0xb3, 0x3d, 0xe2, 0xdd, 0xc8, 0xa8, 0xc5, 0x2e);
-// {9D3039DD-CCA5-4b4d-B33D-E2DDC8A8C52E}
+#include "basetype.h"
+#include "debug.h"
+
+#define BUSENUM_POOL_TAG (ULONG) 'suBT'
+
+#define ERROR(fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_ERROR_LEVEL, "USBIPEnum:(EE) " fmt, ## __VA_ARGS__)
+#define INFO(fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_INFO_LEVEL, "USBIPEnum: " fmt, ## __VA_ARGS__)
+
+extern NPAGED_LOOKASIDE_LIST g_lookaside;
