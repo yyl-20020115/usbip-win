@@ -30,34 +30,23 @@ to_usbd_status(int linux_status)
 }
 
 static void
-try_save_config(PPDO_DEVICE_DATA pdodata, PURB urb)
+try_save_devconf(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
-	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_desc = (struct _URB_CONTROL_DESCRIPTOR_REQUEST *)urb;
-	PUSB_CONFIGURATION_DESCRIPTOR	cfg;
-	int	len;
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_desc;
+	devconf_t	devconf;
 
+	if (pdodata->devconf != NULL)
+		return;
+
+	urb_desc = (struct _URB_CONTROL_DESCRIPTOR_REQUEST *)urb;
 	if (urb_desc->DescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE)
 		return;
 
-	cfg = (PUSB_CONFIGURATION_DESCRIPTOR)urb_desc->TransferBuffer;
-	len = urb_desc->TransferBufferLength;
-	if (len < sizeof(USB_CONFIGURATION_DESCRIPTOR)) {
-		DBGE(DBG_WRITE, "not full len\n");
-		return;
+	devconf = alloc_devconf_from_urb(urb_desc);
+	if (devconf != NULL) {
+		DBGI(DBG_GENERAL, "devconf has been saved\n");
+		pdodata->devconf = devconf;
 	}
-	if (cfg->bDescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE || cfg->wTotalLength != len) {
-		DBGI(DBG_WRITE, "not full cfg: dropped\n");
-		return;
-	}
-
-	DBGI(DBG_WRITE, "save config for using when select config\n");
-	pdodata->dev_config = ExAllocatePoolWithTag(NonPagedPool, len, BUSENUM_POOL_TAG);
-	if (pdodata->dev_config == NULL) {
-		DBGE(DBG_WRITE, "can't malloc %d bytes\n", len);
-		return;
-	}
-
-	RtlCopyMemory(pdodata->dev_config, urb_desc->TransferBuffer, len);
 }
 
 static BOOLEAN
@@ -120,79 +109,14 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 static NTSTATUS
 post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
-	struct _URB_SELECT_INTERFACE	*urb_sel = &urb->UrbSelectInterface;
-	USBD_INTERFACE_INFORMATION		*intf;
-	PUSB_INTERFACE_DESCRIPTOR intf_desc;
-	PUSB_ENDPOINT_DESCRIPTOR ep_desc;
-	unsigned int	i;
-	unsigned int offset = 0;
+	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
-	if (pdodata->dev_config == NULL) {
+	if (pdodata->devconf == NULL) {
 		DBGW(DBG_WRITE, "select interface when have no get config\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	intf = &urb_sel->Interface;
-	if (intf->Length < sizeof(*intf) - sizeof(intf->Pipes[0])) {
-		DBGW(DBG_WRITE, "Warning, intf is too small\n");
-		return STATUS_INVALID_PARAMETER;
-	}
-	DBGI(DBG_WRITE, "config handle:%08x\n", urb_sel->ConfigurationHandle);
-	DBGI(DBG_WRITE, "interface: len:%d int num:%d "
-	     "AlternateSetting:%d "
-	     "class:%d subclass:%d "
-	     "protocol:%d handle:%08x # pipes:%d\n",
-	     intf->Length,
-	     intf->InterfaceNumber,
-	     intf->AlternateSetting,
-	     intf->Class,
-	     intf->SubClass,
-	     intf->Protocol,
-	     intf->InterfaceHandle,
-	     intf->NumberOfPipes);
-
-	i = (intf->Length + sizeof(intf->Pipes[0]) - sizeof(*intf)) / sizeof(intf->Pipes[0]);
-	if (i < intf->NumberOfPipes) {
-		DBGW(DBG_WRITE, "why space is so small?");
-		return STATUS_INVALID_PARAMETER;
-	}
-	/* FIXME  do we need set the other info in intf ? */
-	intf->NumberOfPipes = i;
-
-	intf_desc = seek_to_one_intf_desc(
-		(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
-		&offset, intf->InterfaceNumber,
-		intf->AlternateSetting);
-	/* FIXME if alternatesetting, we sound send out a ctrl urb ? */
-	if (intf_desc == NULL) {
-		DBGW(DBG_WRITE, "can't select this interface\n");
-		return STATUS_INVALID_PARAMETER;
-	}
-	if (intf->NumberOfPipes != intf_desc->bNumEndpoints) {
-		DBGW(DBG_WRITE, "endpoints num no same: can hold:%d have %d\n",
-		     intf->NumberOfPipes,
-		     intf_desc->bNumEndpoints);
-		return STATUS_INVALID_PARAMETER;
-	}
-	for (i = 0; i < intf->NumberOfPipes; i++) {
-		show_pipe(i, &intf->Pipes[i]);
-		/*	Removed Check AM: 20110319: check causes usbstor.sys under Windows Vista and higher to fail.
-		if(intf->Pipes[i].MaximumTransferSize > 65536)
-		{
-		KdPrint("Maximum transfer size %d larger then 65536\n",intf->Pipes[i].MaximumTransferSize);
-		return STATUS_INVALID_PARAMETER;
-		}*/
-		ep_desc = seek_to_next_desc(
-			(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
-			&offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
-		if (NULL == ep_desc) {
-			DBGW(DBG_WRITE, "no ep desc\n");
-			return STATUS_INVALID_DEVICE_REQUEST;
-		}
-		set_pipe(&intf->Pipes[i], ep_desc, pdodata->speed);
-		show_pipe(i, &intf->Pipes[i]);
-	}
-	return STATUS_SUCCESS;
+	return select_interface(urb_seli, pdodata->devconf, pdodata->speed);
 }
 
 static NTSTATUS
@@ -336,8 +260,7 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {
 		case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
-			if (pdodata->dev_config == NULL)
-				try_save_config(pdodata, urb);
+			try_save_devconf(pdodata, urb);
 			break;
 		case URB_FUNCTION_SELECT_INTERFACE:
 			status = post_select_interface(pdodata, urb);

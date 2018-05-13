@@ -261,14 +261,15 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urb_r)
 {
 	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
 	struct usbip_header	*hdr;
-	int	in, type;
+	BOOLEAN	in;
+	int	type;
 	int	len;
 
-	in = PIPE2DIRECT(urb_bi->PipeHandle);
+	in = (urb_bi->TransferFlags & USBD_TRANSFER_DIRECTION_IN) ? TRUE: FALSE;
 	type = PIPE2TYPE(urb_bi->PipeHandle);
 
 	len = sizeof(struct usbip_header);
-	if (in)
+	if (!in)
 		len += urb_bi->TransferBufferLength;
 
 	irp->IoStatus.Information = 0;

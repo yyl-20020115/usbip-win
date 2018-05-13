@@ -1,6 +1,7 @@
 #include "driver.h"
 
 #include "usbreq.h"
+#include "devconf.h"
 #include "pnp.h"
 #include "usbipenum_api.h"
 
@@ -20,11 +21,8 @@ static NTSTATUS
 process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
 	struct _URB_SELECT_CONFIGURATION	*urb_sel = &urb->UrbSelectConfiguration;
-	USBD_INTERFACE_INFORMATION	*intf;
-	unsigned int	i;
-	unsigned int	offset = 0;
 
-	if (pdodata->dev_config == NULL) {
+	if (pdodata->devconf == NULL) {
 		DBGW(DBG_IOCTL, "select config when have no get config\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -32,70 +30,7 @@ process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 		DBGI(DBG_IOCTL, "Device unconfigured\n");
 		return STATUS_SUCCESS;
 	}
-	if (!RtlEqualMemory(pdodata->dev_config, urb_sel->ConfigurationDescriptor, sizeof(*urb_sel->ConfigurationDescriptor))) {
-		DBGW(DBG_IOCTL, "not the same config desc\n");
-		return STATUS_INVALID_DEVICE_REQUEST;
-	}
-
-	/* it has no means */
-	urb_sel->ConfigurationHandle = (USBD_CONFIGURATION_HANDLE)0x12345678;
-	intf = &urb_sel->Interface;
-	for (i = 0; i < urb_sel->ConfigurationDescriptor->bNumInterfaces; i++) {
-		PUSB_INTERFACE_DESCRIPTOR	intf_desc;
-		unsigned int	j;
-
-		if ((char *)intf + sizeof(*intf) - sizeof(intf->Pipes[0]) - (char *)urb_sel > urb_sel->Hdr.Length) {
-			DBGW(DBG_IOCTL, "not all interface select\n");
-			return STATUS_SUCCESS;
-		}
-		intf_desc = seek_to_one_intf_desc((PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
-			&offset, intf->InterfaceNumber, intf->AlternateSetting);
-		if (intf_desc == NULL) {
-			DBGW(DBG_IOCTL, "no interface desc\n");
-			return STATUS_INVALID_DEVICE_REQUEST;
-		}
-		if (intf_desc->bNumEndpoints != intf->NumberOfPipes) {
-			DBGW(DBG_IOCTL, "number of pipes is no same%d %d\n", intf_desc->bNumEndpoints, intf->NumberOfPipes);
-			return STATUS_INVALID_DEVICE_REQUEST;
-		}
-		if (intf->NumberOfPipes > 0) {
-			if ((char *)intf + sizeof(*intf) + (intf->NumberOfPipes - 1) * sizeof(intf->Pipes[0]) - (char *)urb_sel
-			    > urb_sel->Hdr.Length) {
-				DBGW(DBG_IOCTL, "small for select config\n");
-				return STATUS_INVALID_PARAMETER;
-			}
-		}
-		if (intf->InterfaceNumber != i || intf->AlternateSetting != 0) {
-			DBGW(DBG_IOCTL, "Warning, I don't expect this");
-			return STATUS_INVALID_PARAMETER;
-		}
-		intf->Class = intf_desc->bInterfaceClass;
-		intf->SubClass = intf_desc->bInterfaceSubClass;
-		intf->Protocol = intf_desc->bInterfaceProtocol;
-		/* it has no means */
-		intf->InterfaceHandle = (USBD_INTERFACE_HANDLE)0x12345678;
-		for (j = 0; j<intf->NumberOfPipes; j++) {
-			PUSB_ENDPOINT_DESCRIPTOR	ep_desc;
-
-			show_pipe(j, &intf->Pipes[j]);
-
-			ep_desc = seek_to_next_desc(
-				(PUSB_CONFIGURATION_DESCRIPTOR)pdodata->dev_config,
-				&offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
-
-			if (ep_desc == NULL) {
-				DBGW(DBG_IOCTL, "no ep desc\n");
-				return STATUS_INVALID_DEVICE_REQUEST;
-			}
-
-			set_pipe(&intf->Pipes[j], ep_desc, pdodata->speed);
-			show_pipe(j, &intf->Pipes[j]);
-		}
-		intf = (USBD_INTERFACE_INFORMATION *)((char *)intf + sizeof(*intf) + (intf->NumberOfPipes - 1) *
-			sizeof(intf->Pipes[0]));
-	}
-	/* it seems we must return now */
-	return STATUS_SUCCESS;
+	return select_devconf(urb_sel, pdodata->devconf, pdodata->speed);
 }
 
 static NTSTATUS

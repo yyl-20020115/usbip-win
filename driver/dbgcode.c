@@ -108,26 +108,26 @@ struct namecode	namecodes_pnp_minor[] = {
 	K_V(IRP_MN_QUERY_RESOURCES)
 	K_V(IRP_MN_QUERY_RESOURCE_REQUIREMENTS)
 	K_V(IRP_MN_QUERY_DEVICE_TEXT)
-        K_V(IRP_MN_FILTER_RESOURCE_REQUIREMENTS)
-        K_V(IRP_MN_READ_CONFIG)
-        K_V(IRP_MN_WRITE_CONFIG)
-        K_V(IRP_MN_EJECT)
-        K_V(IRP_MN_SET_LOCK)
-        K_V(IRP_MN_QUERY_ID)
-        K_V(IRP_MN_QUERY_PNP_DEVICE_STATE)
-        K_V(IRP_MN_QUERY_BUS_INFORMATION)
-        K_V(IRP_MN_DEVICE_USAGE_NOTIFICATION)
-        K_V(IRP_MN_SURPRISE_REMOVAL)
-        K_V(IRP_MN_QUERY_LEGACY_BUS_INFORMATION)
+	K_V(IRP_MN_FILTER_RESOURCE_REQUIREMENTS)
+	K_V(IRP_MN_READ_CONFIG)
+	K_V(IRP_MN_WRITE_CONFIG)
+	K_V(IRP_MN_EJECT)
+	K_V(IRP_MN_SET_LOCK)
+	K_V(IRP_MN_QUERY_ID)
+	K_V(IRP_MN_QUERY_PNP_DEVICE_STATE)
+	K_V(IRP_MN_QUERY_BUS_INFORMATION)
+	K_V(IRP_MN_DEVICE_USAGE_NOTIFICATION)
+	K_V(IRP_MN_SURPRISE_REMOVAL)
+	K_V(IRP_MN_QUERY_LEGACY_BUS_INFORMATION)
 	{0,0}
 };
 
 struct namecode	namecodes_bus_query_id[] = {
 	K_V(BusQueryDeviceID)
-        K_V(BusQueryHardwareIDs)
-        K_V(BusQueryCompatibleIDs)
-        K_V(BusQueryInstanceID)
-        K_V(BusQueryDeviceSerialNumber)
+	K_V(BusQueryHardwareIDs)
+	K_V(BusQueryCompatibleIDs)
+	K_V(BusQueryInstanceID)
+	K_V(BusQueryDeviceSerialNumber)
 	K_V(BusQueryContainerID)
 	{0,0}
 };
@@ -205,13 +205,13 @@ dbg_namecode(struct namecode *namecodes, const char *codetype, unsigned int code
 const char *
 dbg_ioctl_code(unsigned int ioctl_code)
 {
-	return dbg_namecode(namecodes_urb_func, "ioctl", ioctl_code);
+	return dbg_namecode(namecodes_ioctl, "ioctl", ioctl_code);
 }
 
 const char *
 dbg_urbfunc(unsigned int urbfunc)
 {
-	return dbg_namecode(namecodes_ioctl, "urb function", urbfunc);
+	return dbg_namecode(namecodes_urb_func, "urb function", urbfunc);
 }
 
 const char *

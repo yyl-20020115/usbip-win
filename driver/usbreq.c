@@ -1,44 +1,11 @@
 #include "driver.h"
 
+#include "usbip_proto.h"
 #include "usbipenum_api.h"
 #include "usbreq.h"
 
-void
-show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)
-{
-	DBGI(DBG_GENERAL, "pipe num %d:\n"
-	     "MaximumPacketSize: %d\n"
-	     "EndpointAddress: 0x%02x\n"
-	     "Interval: %d\n"
-	     "PipeType: %d\n"
-	     "PiPeHandle: 0x%08x\n"
-	     "MaximumTransferSize %d\n"
-	     "PipeFlags 0x%08x\n", num,
-	     pipe->MaximumPacketSize,
-	     pipe->EndpointAddress,
-	     pipe->Interval,
-	     pipe->PipeType,
-	     pipe->PipeHandle,
-	     pipe->MaximumTransferSize,
-	     pipe->PipeFlags);
-}
-
-void
-set_pipe(PUSBD_PIPE_INFORMATION pipe, PUSB_ENDPOINT_DESCRIPTOR ep_desc, unsigned char speed)
-{
-	USHORT	mult;
-	pipe->MaximumPacketSize = ep_desc->wMaxPacketSize;
-	pipe->EndpointAddress = ep_desc->bEndpointAddress;
-	pipe->Interval = ep_desc->bInterval;
-	pipe->PipeType = ep_desc->bmAttributes & USB_ENDPOINT_TYPE_MASK;
-	/* From usb_submit_urb in linux */
-	if (pipe->PipeType == USB_ENDPOINT_TYPE_ISOCHRONOUS && speed == USB_SPEED_HIGH) {
-		mult = 1 + ((pipe->MaximumPacketSize >> 11) & 0x03);
-		pipe->MaximumPacketSize &= 0x7ff;
-		pipe->MaximumPacketSize *= mult;
-	}
-	pipe->PipeHandle = MAKE_PIPE(ep_desc->bEndpointAddress, pipe->PipeType, ep_desc->bInterval);
-}
+extern int
+process_urb_req(PIRP irp, struct urb_req *urb_r);
 
 void
 build_setup_packet(struct usb_ctrl_setup *setup,
@@ -51,47 +18,164 @@ build_setup_packet(struct usb_ctrl_setup *setup,
 	setup->bRequest = request;
 }
 
-void *
-seek_to_next_desc(PUSB_CONFIGURATION_DESCRIPTOR config, unsigned int *offset, unsigned char type)
+struct urb_req *
+find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr)
 {
-	unsigned int	o = *offset;
-	PUSB_COMMON_DESCRIPTOR desc;
+	struct urb_req	*urb_r = NULL;
+	KIRQL		oldirql;
+	PLIST_ENTRY	le;
 
-	if (config->wTotalLength <= o)
-		return NULL;
-	do {
-		if (o + sizeof(*desc) > config->wTotalLength)
-			return NULL;
-		desc = (PUSB_COMMON_DESCRIPTOR)((char *)config + o);
-		if (desc->bLength + o > config->wTotalLength)
-			return NULL;
-		o += desc->bLength;
-		if (desc->bDescriptorType == type) {
-			*offset = o;
-			return desc;
+	KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
+	for (le = pdodata->ioctl_q.Flink; le != &pdodata->ioctl_q; le = le->Flink) {
+		urb_r = CONTAINING_RECORD(le, struct urb_req, list);
+		if (urb_r->seq_num == hdr->base.seqnum) {
+			if (IoSetCancelRoutine(urb_r->irp, NULL) == NULL) {
+				/* already cancelled ? */
+				urb_r = NULL;
+			}
+			else
+				RemoveEntryList(le);
+			break;
 		}
-	} while (1);
+	}
+	KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+
+	return urb_r;
 }
 
-void *
-seek_to_one_intf_desc(PUSB_CONFIGURATION_DESCRIPTOR config, unsigned int *offset, unsigned int num, unsigned int alternatesetting)
+struct urb_req *
+find_pending_urb_req(PPDO_DEVICE_DATA pdodata)
 {
-	do {
-		PUSB_INTERFACE_DESCRIPTOR	intf_desc;
+	PLIST_ENTRY	le;
 
-		intf_desc = seek_to_next_desc(config, offset, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (intf_desc == NULL)
-			break;
-		if (intf_desc->bInterfaceNumber < num)
-			continue;
-		if (intf_desc->bInterfaceNumber > num)
-			break;
-		if (intf_desc->bAlternateSetting < alternatesetting)
-			continue;
-		if (intf_desc->bAlternateSetting > alternatesetting)
-			break;
-		return intf_desc;
-	} while (1);
+	for (le = pdodata->ioctl_q.Flink; le != &pdodata->ioctl_q; le = le->Flink) {
+		struct urb_req	*urb;
 
+		urb = CONTAINING_RECORD(le, struct urb_req, list);
+		if (!urb->sent) {
+			urb->sent = TRUE;
+			if (urb->seq_num != 0) {
+				DBGE(DBG_GENERAL, "non-zero seq_num: %d\n", urb->seq_num);
+			}
+			urb->seq_num = ++(pdodata->seq_num);
+			return urb;
+		}
+	}
 	return NULL;
+}
+
+static void
+cancel_irp(PDEVICE_OBJECT pdo, PIRP Irp)
+{
+	PLIST_ENTRY le = NULL;
+	int found = 0;
+	struct urb_req * urb_r = NULL;
+	PPDO_DEVICE_DATA pdodata;
+	KIRQL oldirql = Irp->CancelIrql;
+
+	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
+	//	IoReleaseCancelSpinLock(DISPATCH_LEVEL);
+	DBGI(DBG_GENERAL, "Cancel Irp %p called\n", Irp);
+	KeAcquireSpinLockAtDpcLevel(&pdodata->q_lock);
+	for (le = pdodata->ioctl_q.Flink;
+		le != &pdodata->ioctl_q;
+		le = le->Flink) {
+		urb_r = CONTAINING_RECORD(le, struct urb_req, list);
+		if (urb_r->irp == Irp) {
+			found = 1;
+			RemoveEntryList(le);
+			break;
+		}
+	}
+	KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+	if (found) {
+		ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+	}
+	else {
+		DBGW(DBG_GENERAL, "why we can't found it?\n");
+	}
+	Irp->IoStatus.Status = STATUS_CANCELLED;
+	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	IoReleaseCancelSpinLock(Irp->CancelIrql);
+}
+
+static struct urb_req *
+create_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
+{
+	struct urb_req	*urb_r;
+
+	urb_r = ExAllocateFromNPagedLookasideList(&g_lookaside);
+	if (urb_r == NULL) {
+		DBGE(DBG_URB, "create_urb_req: out of memory\n");
+		return NULL;
+	}
+	RtlZeroMemory(urb_r, sizeof(*urb_r));
+	urb_r->pdodata = pdodata;
+	urb_r->irp = irp;
+	return urb_r;
+}
+
+static BOOLEAN
+insert_urb_req(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r)
+{
+	PIRP	irp = urb_r->irp;
+
+	IoSetCancelRoutine(irp, cancel_irp);
+	if (irp->Cancel && IoSetCancelRoutine(irp, NULL)) {
+		return FALSE;
+	}
+	else {
+		IoMarkIrpPending(irp);
+		InsertTailList(&pdodata->ioctl_q, &urb_r->list);
+	}
+	return TRUE;
+}
+
+NTSTATUS
+submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
+{
+	struct urb_req	*urb_r;
+	KIRQL oldirql;
+	PIRP read_irp;
+	NTSTATUS status = STATUS_PENDING;
+
+	if ((urb_r = create_urb_req(pdodata, irp)) == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+
+	KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
+	read_irp = pdodata->pending_read_irp;
+	pdodata->pending_read_irp = NULL;
+	if (read_irp == NULL) {
+		if (!insert_urb_req(pdodata, urb_r)) {
+			KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+			ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+			DBGI(DBG_URB, "submit_urb_req: urb cancelled\n");
+			return STATUS_CANCELLED;
+		}
+		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+		DBGI(DBG_URB, "submit_urb_req: urb pending\n");
+		return STATUS_PENDING;
+	}
+
+	urb_r->seq_num = ++(pdodata->seq_num);
+	KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+
+	read_irp->IoStatus.Status = process_urb_req(read_irp, urb_r);
+
+	if (read_irp->IoStatus.Status == STATUS_SUCCESS) {
+		KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
+		urb_r->sent = TRUE;
+		status = insert_urb_req(pdodata, urb_r) ? STATUS_PENDING: STATUS_CANCELLED;
+		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+		if (status == STATUS_CANCELLED) {
+			ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+		}
+	}
+	else {
+		ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+		status = STATUS_INVALID_PARAMETER;
+	}
+	IoCompleteRequest(read_irp, IO_NO_INCREMENT);
+	DBGI(DBG_URB, "submit_urb_req: urb requested: status:%x\n", status);
+	return status;
 }

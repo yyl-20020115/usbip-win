@@ -25,10 +25,10 @@
     <ClCompile Include="busread.c" />
     <ClCompile Include="buswrite.c" />
     <ClCompile Include="dbgcode.c" />
+    <ClCompile Include="devconf.c" />
     <ClCompile Include="plugin.c" />
     <ClCompile Include="pnp.c" />
     <ClCompile Include="power.c" />
-    <ClCompile Include="urbq.c" />
     <ClCompile Include="usbip_proto.c" />
     <ClCompile Include="usbreq.c" />
     <ClCompile Include="wmi.c" />
@@ -38,6 +38,7 @@
     <ClInclude Include="..\include\usbip_proto.h" />
     <ClInclude Include="basetype.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="devconf.h" />
     <ClInclude Include="device.h" />
     <ClInclude Include="driver.h" />
     <ClInclude Include="globals.h" />

@@ -3,6 +3,8 @@
 #include <ntddk.h>
 #include <wmilib.h>	// required for WMILIB_CONTEXT
 
+#include "devconf.h"
+
 //
 // These are the states a PDO or FDO transition upon
 // receiving a specific PnP Irp. Refer to the PnP Device States
@@ -94,7 +96,7 @@ typedef struct _PDO_DEVICE_DATA
 	PFILE_OBJECT	fo;
 	unsigned int	devid;
 	unsigned long	seq_num;
-	char	*dev_config;
+	devconf_t	devconf;
 	KTIMER	timer;
 	KDPC	dpc;
 	UNICODE_STRING	usb_dev_interface;
