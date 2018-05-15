@@ -7,6 +7,19 @@
 extern int
 process_urb_req(PIRP irp, struct urb_req *urb_r);
 
+#ifdef DBG
+const char *
+dbg_urb_req(struct urb_req *urb_r)
+{
+	static char	buf[128];
+
+	if (urb_r == NULL)
+		return "[null]";
+	RtlStringCchPrintfA(buf, 128, "[%sseq:%d]", urb_r->sent ? "sent,": "", urb_r->seq_num);
+	return buf;
+}
+#endif
+
 void
 build_setup_packet(struct usb_ctrl_setup *setup,
 	unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request)

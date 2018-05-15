@@ -4,11 +4,25 @@
 
 #ifdef DBG
 
-#define K_V(a) {#a, a},
+#define K_V(a) {#a, (unsigned int)a},
 
 struct namecode {
 	const char		*name;
 	unsigned int	code;
+};
+
+struct namecode namecodes_ntstatus[] = {
+	K_V(STATUS_SUCCESS)
+	K_V(STATUS_PENDING)
+	K_V(STATUS_INVALID_PARAMETER)
+	K_V(STATUS_INVALID_DEVICE_REQUEST)
+	K_V(STATUS_DEVICE_NOT_CONNECTED)
+	K_V(STATUS_INSUFFICIENT_RESOURCES)
+	K_V(STATUS_NOT_SUPPORTED)
+	K_V(STATUS_UNSUCCESSFUL)
+	K_V(STATUS_BUFFER_TOO_SMALL)
+	K_V(STATUS_NO_SUCH_DEVICE)
+{0,0}
 };
 
 struct namecode namecodes_ioctl[] = {
@@ -200,6 +214,12 @@ dbg_namecode(struct namecode *namecodes, const char *codetype, unsigned int code
 	}
 	RtlStringCchPrintfA(buf, 128, "Unknown %s code: %x", codetype, code);
 	return buf;
+}
+
+const char *
+dbg_ntstatus(NTSTATUS status)
+{
+	return dbg_namecode(namecodes_ntstatus, "ntstatus", status);
 }
 
 const char *

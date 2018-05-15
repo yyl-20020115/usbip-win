@@ -2,6 +2,9 @@
 
 #ifdef DBG
 
+#include <ntddk.h>
+#include "usbreq.h"
+
 #define DBG_GENERAL	0x00000001
 #define DBG_READ	0x00000010
 #define DBG_WRITE	0x00000100
@@ -15,9 +18,9 @@
 #define DBGW(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 1), "USBIPEnum:(WW) " fmt, ## __VA_ARGS__)
 #define DBGI(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 2), "USBIPEnum: " fmt, ## __VA_ARGS__)
 
-#define DbgRaiseIrql(_x_,_y_) KeRaiseIrql(_x_,_y_)
-#define DbgLowerIrql(_x_) KeLowerIrql(_x_)
+extern const char *dbg_urb_req(struct urb_req *urb_r);
 
+extern const char *dbg_ntstatus(NTSTATUS status);
 extern const char *dbg_ioctl_code(unsigned int ioctl_code);
 extern const char *dbg_urbfunc(unsigned int urbfunc);
 extern const char *dbg_pnp_minor(UCHAR minor);
@@ -33,8 +36,5 @@ extern const char *dbg_device_power(DEVICE_POWER_STATE state);
 #define DBGE(part, fmt, ...)
 #define DBGW(part, fmt, ...)
 #define DBGI(part, fmt, ...)
-
-#define DbgRaiseIrql(_x_,_y_)
-#define DbgLowerIrql(_x_)
 
 #endif	

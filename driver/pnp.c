@@ -943,7 +943,7 @@ Bus_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = Bus_PDO_PnP(DeviceObject, Irp, irpStack, (PPDO_DEVICE_DATA)commonData);
 	}
 
-	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Leave\n");
+	DBGI(DBG_GENERAL | DBG_PNP, "Bus_PnP: Leave: %s\n", dbg_ntstatus(status));
 
 	return status;
 }

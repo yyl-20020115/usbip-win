@@ -18,22 +18,6 @@ extern PAGEABLE NTSTATUS
 Bus_EjectDevice(PBUSENUM_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData);
 
 static NTSTATUS
-process_urb_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
-{
-	struct _URB_SELECT_CONFIGURATION	*urb_sel = &urb->UrbSelectConfiguration;
-
-	if (pdodata->devconf == NULL) {
-		DBGW(DBG_IOCTL, "select config when have no get config\n");
-		return STATUS_INVALID_DEVICE_REQUEST;
-	}
-	if (urb_sel->ConfigurationDescriptor == NULL) {
-		DBGI(DBG_IOCTL, "Device unconfigured\n");
-		return STATUS_SUCCESS;
-	}
-	return select_devconf(urb_sel, pdodata->devconf, pdodata->speed);
-}
-
-static NTSTATUS
 process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
 {
 	UNREFERENCED_PARAMETER(pdodata);
@@ -76,14 +60,13 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	DBGI(DBG_IOCTL, "process_irp_urb_req: function: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
 
 	switch (urb->UrbHeader.Function) {
-	case URB_FUNCTION_SELECT_CONFIGURATION:
-		return process_urb_select_config(pdodata, urb);
 	case URB_FUNCTION_RESET_PIPE:
 		return process_urb_reset_pipe(pdodata);
 	case URB_FUNCTION_ABORT_PIPE:
 		return process_urb_abort_pipe(pdodata, urb);
 	case URB_FUNCTION_GET_CURRENT_FRAME_NUMBER:
 		return process_urb_get_frame(pdodata, urb);
+	case URB_FUNCTION_SELECT_CONFIGURATION:
 	case URB_FUNCTION_ISOCH_TRANSFER:
 	case URB_FUNCTION_CLASS_DEVICE:
 	case URB_FUNCTION_CLASS_INTERFACE:
@@ -162,7 +145,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	}
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Leave: %08x\n", status);
+	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Leave: %s\n", dbg_ntstatus(status));
 	return status;
 }
 
@@ -249,5 +232,8 @@ END:
 	Irp->IoStatus.Status = status;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	Bus_DecIoCount(fdoData);
+
+	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Ioctl: Leave: %s\n", dbg_ntstatus(status));
+
 	return status;
 }

@@ -141,7 +141,7 @@ store_urb_class_vendor(PIRP irp, PURB urb, struct urb_req *urb_r)
 
 	in = urb_vc->TransferFlags & USBD_TRANSFER_DIRECTION_IN;
 	len = sizeof(struct usbip_header);
-	if (in)
+	if (!in)
 		len += urb_vc->TransferBufferLength;
 
 	irp->IoStatus.Information = 0;
@@ -286,7 +286,7 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urb_r)
 
 	set_cmd_submit_usbip_header(hdr, urb_r->seq_num, urb_r->pdodata->devid, in, urb_bi->PipeHandle,
 				    urb_bi->TransferFlags, urb_bi->TransferBufferLength);
-
+	RtlZeroMemory(hdr->u.cmd_submit.setup, 8);
 	if (!in) {
 		PVOID	buf = get_buf(urb_bi->TransferBuffer, urb_bi->TransferBufferMDL);
 		if (buf == NULL)
@@ -367,23 +367,36 @@ process_urb_req_submit(PIRP irp, struct urb_req *urb_r)
 {
 	PURB	urb;
 	PIO_STACK_LOCATION	irpstack;
+	USHORT		code_func;
+	NTSTATUS	status;
+
+	DBGI(DBG_READ, "process_urb_req_submit: urb_r: %s\n", dbg_urb_req(urb_r));
 
 	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
 	urb = irpstack->Parameters.Others.Argument1;
 	if (urb == NULL) {
+		DBGE(DBG_READ, "process_urb_req_submit: null urb\n");
+
 		irp->IoStatus.Information = 0;
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	switch (urb->UrbHeader.Function) {
+	code_func = urb->UrbHeader.Function;
+	DBGI(DBG_READ, "process_urb_req_submit: urb_r: %s, func:%s\n", dbg_urb_req(urb_r), dbg_urbfunc(code_func));
+
+	switch (code_func) {
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
-		return store_urb_bulk(irp, urb, urb_r);
+		status = store_urb_bulk(irp, urb, urb_r);
+		break;
 	case URB_FUNCTION_ISOCH_TRANSFER:
-		return store_urb_iso(irp, urb, urb_r);
+		status = store_urb_iso(irp, urb, urb_r);
+		break;
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
-		return store_urb_get_dev_desc(irp, urb, urb_r);
+		status = store_urb_get_dev_desc(irp, urb, urb_r);
+		break;
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
-		return store_urb_get_intf_desc(irp, urb, urb_r);
+		status = store_urb_get_intf_desc(irp, urb, urb_r);
+		break;
 	case URB_FUNCTION_CLASS_DEVICE:
 	case URB_FUNCTION_CLASS_INTERFACE:
 	case URB_FUNCTION_CLASS_ENDPOINT:
@@ -391,36 +404,50 @@ process_urb_req_submit(PIRP irp, struct urb_req *urb_r)
 	case URB_FUNCTION_VENDOR_DEVICE:
 	case URB_FUNCTION_VENDOR_INTERFACE:
 	case URB_FUNCTION_VENDOR_ENDPOINT:
-		return store_urb_class_vendor(irp, urb, urb_r);
+		status = store_urb_class_vendor(irp, urb, urb_r);
+		break;
 	case URB_FUNCTION_SELECT_CONFIGURATION:
-		return store_urb_select_config(irp, urb_r);
+		status = store_urb_select_config(irp, urb_r);
+		break;
 	case URB_FUNCTION_SELECT_INTERFACE:
-		return store_urb_select_interface(irp, urb, urb_r);
+		status = store_urb_select_interface(irp, urb, urb_r);
+		break;
 	default:
+		irp->IoStatus.Information = 0;
+		DBGE(DBG_READ, "unhandled urb function: %s\n", dbg_urbfunc(code_func));
+		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
 
-	irp->IoStatus.Information = 0;
-	DBGE(DBG_READ, "Unknown function: func:%x, len:%d\n", urb->UrbHeader.Function, urb->UrbHeader.Length);
-	return STATUS_INVALID_PARAMETER;
+	return status;
 }
 
 NTSTATUS
 process_urb_req(PIRP irp, struct urb_req *urb_r)
 {
 	PIO_STACK_LOCATION	irpstack;
+	ULONG		ioctl_code;
+	NTSTATUS	status;
+
+	DBGI(DBG_READ, "process_urb_req: urb_r: %s\n", dbg_urb_req(urb_r));
 
 	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
-
-	switch (irpstack->Parameters.DeviceIoControl.IoControlCode) {
+	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
+	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
-		return process_urb_req_submit(irp, urb_r);
+		status = process_urb_req_submit(irp, urb_r);
+		break;
 	case IOCTL_INTERNAL_USB_RESET_PORT:
-		return store_urb_reset_dev(irp, urb_r);
+		status = store_urb_reset_dev(irp, urb_r);
+		break;
 	default:
+		DBGW(DBG_READ, "unhandled ioctl: %s\n", dbg_ioctl_code(ioctl_code));
 		irp->IoStatus.Information = 0;
-		return STATUS_INVALID_PARAMETER;
+		status = STATUS_INVALID_PARAMETER;
+		break;
 	}
+
+	return status;
 }
 
 static NTSTATUS
@@ -443,8 +470,6 @@ process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
 		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
 		return status;
 	}
-
-	DBGI(DBG_READ, "process_read_irp: seq:%d, %p\n", urb_r->seq_num, urb_r->irp);
 
 	status = process_urb_req(read_irp, urb_r);
 	if (status == STATUS_SUCCESS || !IoSetCancelRoutine(urb_r->irp, NULL)) {
@@ -508,7 +533,7 @@ Bus_Read(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = process_read_irp(pdodata, Irp);
 	}
 END:
-	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Leave: 0x%08x\n", status);
+	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Leave: %s\n", dbg_ntstatus(status));
 	if (status != STATUS_PENDING) {
 		Irp->IoStatus.Status = status;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);

@@ -161,71 +161,59 @@ Return Value:
     DEVICE_CAPABILITIES     parentCapabilities;
     NTSTATUS                status;
 
-    PAGED_CODE ();
+	PAGED_CODE ();
 
-    stack = IoGetCurrentIrpStackLocation (Irp);
+	stack = IoGetCurrentIrpStackLocation(Irp);
 
-    //
-    // Get the packet.
-    //
-    deviceCapabilities=stack->Parameters.DeviceCapabilities.Capabilities;
+	//
+	// Get the packet.
+	//
+	deviceCapabilities = stack->Parameters.DeviceCapabilities.Capabilities;
 
-    //
-    // Set the capabilities.
-    //
+	//
+	// Set the capabilities.
+	//
+	if (deviceCapabilities->Version != 1 || deviceCapabilities->Size < sizeof(DEVICE_CAPABILITIES)) {
+		return STATUS_UNSUCCESSFUL;
+	}
 
-    if (deviceCapabilities->Version != 1 ||
-            deviceCapabilities->Size < sizeof(DEVICE_CAPABILITIES))
-    {
-       return STATUS_UNSUCCESSFUL;
-    }
+	//
+	// Get the device capabilities of the parent
+	//
+	status = Bus_GetDeviceCapabilities(FDO_FROM_PDO(DeviceData)->NextLowerDriver, &parentCapabilities);
+	if (!NT_SUCCESS(status)) {
+		DBGI(DBG_PNP, "QueryDeviceCaps failed\n");
+		return status;
+	}
 
-    //
-    // Get the device capabilities of the parent
-    //
-    status = Bus_GetDeviceCapabilities(
-        FDO_FROM_PDO(DeviceData)->NextLowerDriver, &parentCapabilities);
-    if (!NT_SUCCESS(status)) {
-
-        DBGI(DBG_PNP, "\tQueryDeviceCaps failed\n");
-        return status;
-
-    }
-
-    //
-    // The entries in the DeviceState array are based on the capabilities
-    // of the parent devnode. These entries signify the highest-powered
-    // state that the device can support for the corresponding system
-    // state. A driver can specify a lower (less-powered) state than the
-    // bus driver.  For eg: Suppose the USBIP bus controller supports
-    // D0, D2, and D3; and the USBIP Device supports D0, D1, D2, and D3.
-    // Following the above rule, the device cannot specify D1 as one of
-    // it's power state. A driver can make the rules more restrictive
-    // but cannot loosen them.
-    // First copy the parent's S to D state mapping
-    //
-
-    RtlCopyMemory(
-        deviceCapabilities->DeviceState,
-        parentCapabilities.DeviceState,
-        (PowerSystemShutdown + 1) * sizeof(DEVICE_POWER_STATE)
-        );
+	//
+	// The entries in the DeviceState array are based on the capabilities
+	// of the parent devnode. These entries signify the highest-powered
+	// state that the device can support for the corresponding system
+	// state. A driver can specify a lower (less-powered) state than the
+	// bus driver.  For eg: Suppose the USBIP bus controller supports
+	// D0, D2, and D3; and the USBIP Device supports D0, D1, D2, and D3.
+	// Following the above rule, the device cannot specify D1 as one of
+	// it's power state. A driver can make the rules more restrictive
+	// but cannot loosen them.
+	// First copy the parent's S to D state mapping
+	//
+	RtlCopyMemory(deviceCapabilities->DeviceState, parentCapabilities.DeviceState, (PowerSystemShutdown + 1) * sizeof(DEVICE_POWER_STATE));
 
     //
     // Adjust the caps to what your device supports.
     // Our device just supports D0 and D3.
     //
+	deviceCapabilities->DeviceState[PowerSystemWorking] = PowerDeviceD0;
 
-    deviceCapabilities->DeviceState[PowerSystemWorking] = PowerDeviceD0;
+	if (deviceCapabilities->DeviceState[PowerSystemSleeping1] != PowerDeviceD0)
+		deviceCapabilities->DeviceState[PowerSystemSleeping1] = PowerDeviceD1;
 
-    if (deviceCapabilities->DeviceState[PowerSystemSleeping1] != PowerDeviceD0)
-        deviceCapabilities->DeviceState[PowerSystemSleeping1] = PowerDeviceD1;
+	if (deviceCapabilities->DeviceState[PowerSystemSleeping2] != PowerDeviceD0)
+		deviceCapabilities->DeviceState[PowerSystemSleeping2] = PowerDeviceD3;
 
-    if (deviceCapabilities->DeviceState[PowerSystemSleeping2] != PowerDeviceD0)
-        deviceCapabilities->DeviceState[PowerSystemSleeping2] = PowerDeviceD3;
-
-    if (deviceCapabilities->DeviceState[PowerSystemSleeping3] != PowerDeviceD0)
-        deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
+	if (deviceCapabilities->DeviceState[PowerSystemSleeping3] != PowerDeviceD0)
+		deviceCapabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
 
     // We can wake the system from D1
     deviceCapabilities->DeviceWake = PowerDeviceD1;
@@ -234,7 +222,6 @@ Return Value:
     // Specifies whether the device hardware supports the D1 and D2
     // power state. Set these bits explicitly.
     //
-
     deviceCapabilities->DeviceD1 = TRUE; // Yes we can
     deviceCapabilities->DeviceD2 = FALSE;
 
@@ -243,7 +230,6 @@ Return Value:
     // signal while in the D0, D1, D2, and D3 state.
     // Set these bits explicitly.
     //
-
     deviceCapabilities->WakeFromD0 = FALSE;
     deviceCapabilities->WakeFromD1 = TRUE; //Yes we can
     deviceCapabilities->WakeFromD2 = FALSE;
@@ -251,13 +237,11 @@ Return Value:
 
 
     // We have no latencies
-
     deviceCapabilities->D1Latency = 0;
     deviceCapabilities->D2Latency = 0;
     deviceCapabilities->D3Latency = 0;
 
     // Ejection supported
-
     deviceCapabilities->EjectSupported = FALSE;
 
     //
@@ -278,7 +262,6 @@ Return Value:
     deviceCapabilities->SurpriseRemovalOK = TRUE;
 
     // We don't support system-wide unique IDs.
-
     deviceCapabilities->UniqueID = FALSE;
 
     //
@@ -286,7 +269,6 @@ Return Value:
     // installation pop-ups except required pop-ups such as
     // "no compatible drivers found."
     //
-
     deviceCapabilities->SilentInstall = FALSE;
 
     //
@@ -297,7 +279,6 @@ Return Value:
     // member at its default value of 0xFFFFFFFF. In this example
     // the location address is same as instance id.
     //
-
     deviceCapabilities->Address = DeviceData->SerialNo;
 
     //
@@ -763,17 +744,15 @@ Return Value:
 {
 
     PIO_STACK_LOCATION   stack;
-    PDEVICE_RELATIONS deviceRelations;
-    NTSTATUS status;
+    PDEVICE_RELATIONS	deviceRelations;
+    NTSTATUS	status;
 
     PAGED_CODE ();
 
     stack = IoGetCurrentIrpStackLocation (Irp);
 
     switch (stack->Parameters.QueryDeviceRelations.Type) {
-
     case TargetDeviceRelation:
-
         deviceRelations = (PDEVICE_RELATIONS) Irp->IoStatus.Information;
         if (deviceRelations) {
             //
@@ -783,10 +762,7 @@ Return Value:
             ASSERTMSG("Someone above is handling TagerDeviceRelation", !deviceRelations);
         }
 
-        deviceRelations = (PDEVICE_RELATIONS)
-                ExAllocatePoolWithTag (PagedPool,
-                                        sizeof(DEVICE_RELATIONS),
-                                        BUSENUM_POOL_TAG);
+        deviceRelations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag (PagedPool, sizeof(DEVICE_RELATIONS), BUSENUM_POOL_TAG);
         if (!deviceRelations) {
                 status = STATUS_INSUFFICIENT_RESOURCES;
                 break;
@@ -798,20 +774,19 @@ Return Value:
         // the reference to the PDO when the driver or application
         // un-registers for notification on the device.
         //
-
         deviceRelations->Count = 1;
         deviceRelations->Objects[0] = DeviceData->common.Self;
         ObReferenceObject(DeviceData->common.Self);
 
         status = STATUS_SUCCESS;
-        Irp->IoStatus.Information = (ULONG_PTR) deviceRelations;
+        Irp->IoStatus.Information = (ULONG_PTR)deviceRelations;
         break;
-
     case BusRelations: // Not handled by PDO
     case RemovalRelations: // // optional for PDO
     case EjectionRelations: // optional for PDO
     default:
         status = Irp->IoStatus.Status;
+		break;
     }
 
     return status;
@@ -1238,16 +1213,12 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 		break;
 
 	case IRP_MN_QUERY_CAPABILITIES:
-
 		//
 		// Return the capabilities of a device, such as whether the device
 		// can be locked or ejected..etc
 		//
-
 		status = Bus_PDO_QueryDeviceCaps(DeviceData, Irp);
-
 		break;
-
 	case IRP_MN_QUERY_ID:
 
 		// Query the IDs of the device
@@ -1260,13 +1231,9 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 		break;
 
 	case IRP_MN_QUERY_DEVICE_RELATIONS:
-		DBGI(DBG_PNP, "\tQueryDeviceRelation Type: %s\n",
-			dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
-
+		DBGI(DBG_PNP, "QueryDeviceRelation Type: %s\n", dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
 		status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
-
 		break;
-
 	case IRP_MN_QUERY_DEVICE_TEXT:
 
 		status = Bus_PDO_QueryDeviceText(DeviceData, Irp);

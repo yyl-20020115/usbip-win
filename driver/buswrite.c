@@ -107,12 +107,25 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 }
 
 static NTSTATUS
+post_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
+{
+	struct _URB_SELECT_CONFIGURATION	*urb_selc = &urb->UrbSelectConfiguration;
+
+	if (pdodata->devconf == NULL) {
+		DBGW(DBG_WRITE, "post_select_config: empty devconf\n");
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	return select_config(urb_selc, pdodata->devconf, pdodata->speed);
+}
+
+static NTSTATUS
 post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
 	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
 	if (pdodata->devconf == NULL) {
-		DBGW(DBG_WRITE, "select interface when have no get config\n");
+		DBGW(DBG_WRITE, "post_select_interface: empty devconf\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
@@ -262,6 +275,9 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 		case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
 			try_save_devconf(pdodata, urb);
 			break;
+		case URB_FUNCTION_SELECT_CONFIGURATION:
+			status = post_select_config(pdodata, urb);
+			break;
 		case URB_FUNCTION_SELECT_INTERFACE:
 			status = post_select_interface(pdodata, urb);
 			break;
@@ -276,14 +292,20 @@ static NTSTATUS
 process_urb_res(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r, struct usbip_header *hdr)
 {
 	PIO_STACK_LOCATION	irpstack;
+	ULONG	ioctl_code;
 
 	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
-	switch (irpstack->Parameters.DeviceIoControl.IoControlCode) {
+	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
+
+	DBGI(DBG_WRITE, "process_urb_res: urb_r:%s, ioctl:%s\n", dbg_urb_req(urb_r), dbg_ioctl_code(ioctl_code));
+
+	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
 		return process_urb_res_submit(pdodata, irpstack->Parameters.Others.Argument1, hdr);
 	case IOCTL_INTERNAL_USB_RESET_PORT:
 		return STATUS_SUCCESS;
 	default:
+		DBGE(DBG_WRITE, "unhandled ioctl: %s\n", dbg_ioctl_code(ioctl_code));
 		return STATUS_INVALID_PARAMETER;
 	}
 }
@@ -387,7 +409,7 @@ Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	Irp->IoStatus.Information = 0;
 	status = process_write_irp(pdodata, Irp);
 END:
-	DBGI(DBG_WRITE, "Bus_Write: Leave: %08x\n", status);
+	DBGI(DBG_WRITE, "Bus_Write: Leave: %s\n", dbg_ntstatus(status));
 	Irp->IoStatus.Status = status;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	Bus_DecIoCount(fdoData);

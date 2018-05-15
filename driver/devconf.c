@@ -196,7 +196,7 @@ setup_intf(USBD_INTERFACE_INFORMATION *intf, ULONG len, devconf_t devconf, unsig
 }
 
 NTSTATUS
-select_devconf(struct _URB_SELECT_CONFIGURATION *urb_selc, devconf_t devconf, UCHAR speed)
+select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, devconf_t devconf, UCHAR speed)
 {
 	USBD_INTERFACE_INFORMATION	*intf;
 	unsigned int	offset = 0;
