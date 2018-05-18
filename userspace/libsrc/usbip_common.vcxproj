@@ -151,7 +151,7 @@
   <ItemGroup>
     <ClInclude Include="..\config.h" />
     <ClInclude Include="names.h" />
-    <ClInclude Include="usbip.h" />
+    <ClInclude Include="types_for_win.h" />
     <ClInclude Include="usbip_common.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

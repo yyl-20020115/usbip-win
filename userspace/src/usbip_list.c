@@ -16,21 +16,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#include <errno.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <getopt.h>
+#include <ws2tcpip.h>
 
 #include "usbip_common.h"
 #include "usbip_network.h"
 
 #include "usbip_windows.h"
-
-#include "usbip.h"
 
 static const char usbip_list_usage_string[] =
 	"usbip list [-p|--parsable] <args>\n"
@@ -44,50 +35,58 @@ void usbip_list_usage(void)
 	printf("usage: %s", usbip_list_usage_string);
 }
 
-static int query_exported_devices(int sockfd)
+static int get_exported_devices(const char *host, int sockfd)
 {
-	int ret;
-	unsigned int i;
-	int j;
-	struct op_devlist_reply rep;
+	struct op_devlist_reply reply;
 	uint16_t code = OP_REP_DEVLIST;
+	unsigned int i;
+	int rc;
 
-	memset(&rep, 0, sizeof(rep));
-
-	ret = usbip_send_op_common(sockfd, OP_REQ_DEVLIST, 0);
-	if (ret < 0) {
-		err("send op_common");
+	rc = usbip_net_send_op_common(sockfd, OP_REQ_DEVLIST, 0);
+	if (rc < 0) {
+		dbg("usbip_net_send_op_common failed");
 		return -1;
 	}
 
-	ret = usbip_recv_op_common(sockfd, &code);
-	if (ret < 0) {
-		err("recv op_common");
+	rc = usbip_net_recv_op_common(sockfd, &code);
+	if (rc < 0) {
+		dbg("usbip_net_recv_op_common failed");
 		return -1;
 	}
 
-	ret = usbip_recv(sockfd, (void *) &rep, sizeof(rep));
-	if (ret < 0) {
-		err("recv op_devlist");
+	memset(&reply, 0, sizeof(reply));
+	rc = usbip_net_recv(sockfd, &reply, sizeof(reply));
+	if (rc < 0) {
+		dbg("usbip_net_recv_op_devlist failed");
 		return -1;
 	}
 
-	PACK_OP_DEVLIST_REPLY(0, &rep);
-	dbg("exportable %d devices", rep.ndev);
+	PACK_OP_DEVLIST_REPLY(0, &reply);
+	dbg("exportable devices: %d\n", reply.ndev);
 
-	for (i=0; i < rep.ndev; i++) {
+	if (reply.ndev == 0) {
+		info("no exportable devices found on %s", host);
+		return 0;
+	}
+
+	printf("Exportable USB devices\n");
+	printf("======================\n");
+	printf(" - %s\n", host);
+
+	for (i = 0; i < reply.ndev; i++) {
 		char product_name[100];
 		char class_name[100];
 		struct usbip_usb_device udev;
+		int j;
 
 		memset(&udev, 0, sizeof(udev));
 
-		ret = usbip_recv(sockfd, (void *) &udev, sizeof(udev));
-		if (ret < 0) {
-			err("recv usbip_usb_device[%d]", i);
+		rc = usbip_net_recv(sockfd, &udev, sizeof(udev));
+		if (rc < 0) {
+			dbg("usbip_net_recv failed: usbip_usb_device[%d]", i);
 			return -1;
 		}
-		pack_usb_device(0, &udev);
+		usbip_net_pack_usb_device(0, &udev);
 
 		usbip_names_get_product(product_name, sizeof(product_name),
 					udev.idVendor, udev.idProduct);
@@ -95,56 +94,56 @@ static int query_exported_devices(int sockfd)
 				      udev.bDeviceClass, udev.bDeviceSubClass,
 				      udev.bDeviceProtocol);
 
-		printf("%8s: %s\n", udev.busid, product_name);
-		printf("%8s: %s\n", " ", udev.path);
-		printf("%8s: %s\n", " ", class_name);
+		printf("%11s: %s\n", udev.busid, product_name);
+		printf("%11s: %s\n", "", udev.path);
+		printf("%11s: %s\n", "", class_name);
 
-		for (j=0; j < udev.bNumInterfaces; j++) {
-			struct usbip_usb_interface uinf;
+		for (j = 0; j < udev.bNumInterfaces; j++) {
+			struct usbip_usb_interface uintf;
 
-			ret = usbip_recv(sockfd, (void *) &uinf, sizeof(uinf));
-			if (ret < 0) {
-				err("recv usbip_usb_interface[%d]", j);
+			rc = usbip_net_recv(sockfd, &uintf, sizeof(uintf));
+			if (rc < 0) {
+				err("usbip_net_recv failed: usbip_usb_intf[%d]", j);
 				return -1;
 			}
 
-			pack_usb_interface(0, &uinf);
-			usbip_names_get_class(class_name, sizeof(class_name),
-					      uinf.bInterfaceClass,
-					      uinf.bInterfaceSubClass,
-					      uinf.bInterfaceProtocol);
+			usbip_net_pack_usb_interface(0, &uintf);
 
-			printf("%8s: %2d - %s\n", " ", j, class_name);
+			usbip_names_get_class(class_name, sizeof(class_name),
+					      uintf.bInterfaceClass,
+					      uintf.bInterfaceSubClass,
+					      uintf.bInterfaceProtocol);
+
+			printf("%11s: %2d - %s\n", "", j, class_name);
 		}
 
 		printf("\n");
 	}
 
-	return rep.ndev;
+	return 0;
 }
 
-static int show_exported_devices(char *host)
+static int list_exported_devices(char *host)
 {
-	int ret;
+	int rc;
 	int sockfd;
 
-	sockfd = usbip_net_tcp_connect(host, USBIP_PORT_STRING);
+	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
 	if (sockfd < 0) {
 		err("unable to connect to %s port %s: %s\n", host,
-		    USBIP_PORT_STRING, gai_strerror(sockfd));
+		    usbip_port_string, gai_strerror(sockfd));
 		return -1;
 	}
-	dbg("connected to %s port %s\n", host, USBIP_PORT_STRING);
+	dbg("connected to %s:%s\n", host, usbip_port_string);
 
-	printf("- %s\n", host);
-
-	ret = query_exported_devices(sockfd);
-	if (ret < 0) {
-		err("query");
+	rc = get_exported_devices(host, sockfd);
+	if (rc < 0) {
+		err("failed to get device list from %s", host);
 		return -1;
 	}
 
 	closesocket(sockfd);
+
 	return 0;
 }
 
@@ -158,7 +157,7 @@ int usbip_list(int argc, char *argv[])
 #endif
 		{ NULL, 0, NULL, 0 }
 	};
-	bool parsable = false;
+	BOOL parsable = FALSE;
 	int opt;
 	int ret = -1;
 
@@ -173,10 +172,10 @@ int usbip_list(int argc, char *argv[])
 
 		switch (opt) {
 		case 'p':
-			parsable = true;
+			parsable = TRUE;
 			break;
 		case 'r':
-			ret = show_exported_devices(optarg);
+			ret = list_exported_devices(optarg);
 			goto out;
 #if 0
 		case 'l':

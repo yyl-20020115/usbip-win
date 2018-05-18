@@ -150,17 +150,18 @@
     <ClCompile Include="usbip_detach.c" />
     <ClCompile Include="usbip_list.c" />
     <ClCompile Include="usbip_network.c" />
-    <ClCompile Include="usbip_windows.c" />
     <ClCompile Include="windows\getopt.c" />
     <ClCompile Include="windows\getopt_long.c" />
+    <ClCompile Include="windows\usbip_vhci.c" />
+    <ClCompile Include="windows\usbip_vhci_forward.c" />
+    <ClCompile Include="windows\usbip_windows.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\config.h" />
-    <ClInclude Include="..\libsrc\usbip.h" />
     <ClInclude Include="usbip.h" />
     <ClInclude Include="usbip_network.h" />
-    <ClInclude Include="usbip_windows.h" />
     <ClInclude Include="windows\getopt.h" />
+    <ClInclude Include="windows\usbip_windows.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\libsrc\usbip_common.vcxproj">

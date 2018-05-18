@@ -19,15 +19,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <getopt.h>
+#include "usbip_windows.h"
 
 #include "usbip_common.h"
+#include "usbip_network.h"
 #include "usbip.h"
-
-#include "usbip_windows.h"
 
 static int usbip_help(int argc, char *argv[]);
 static int usbip_version(int argc, char *argv[]);
@@ -35,7 +31,7 @@ static int usbip_version(int argc, char *argv[]);
 static const char usbip_version_string[] = PACKAGE_STRING;
 
 static const char usbip_usage_string[] =
-	"usbip [--debug] [version]\n"
+	"usbip [--debug] [--tcp-port PORT] [version]\n"
 	"             [help] <command> <args>\n";
 
 static void usbip_usage(void)
@@ -78,7 +74,7 @@ static const struct command cmds[] = {
 	{
 		"list",
 		usbip_list,
-		"List exported or local USB devices",
+		"List exportable or local USB devices",
 		usbip_list_usage
 	},
 #if 0
@@ -128,7 +124,7 @@ static int usbip_version(int argc, char *argv[])
 	(void) argc;
 	(void) argv;
 
-	printf("%s\n", usbip_version_string);
+	printf(PROGNAME " (%s)\n", usbip_version_string);
 	return 0;
 }
 
@@ -142,8 +138,10 @@ int main(int argc, char *argv[])
 {
 	static const struct option opts[] = {
 		{ "debug", no_argument, NULL, 'd' },
+		{ "tcp-port", required_argument, NULL, 't' },
 		{ NULL, 0, NULL, 0 }
 	};
+
 	char *cmd;
 	int opt;
 	int i, rc = -1;
@@ -151,9 +149,10 @@ int main(int argc, char *argv[])
 	if (init_socket())
 		return EXIT_FAILURE;
 
+	usbip_use_stderr = 1;
 	opterr = 0;
 	for (;;) {
-		opt = getopt_long(argc, argv, "+d", opts, NULL);
+		opt = getopt_long(argc, argv, "+dt:", opts, NULL);
 
 		if (opt == -1)
 			break;
@@ -161,10 +160,17 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'd':
 			usbip_use_debug = 1;
-			usbip_use_stderr = 1;
 			break;
+		case 't':
+			usbip_setup_port_number(optarg);
+			break;
+		case '?':
+			printf("usbip: invalid option\n");
+			/* Terminate after printing error */
+			/* FALLTHRU */
 		default:
-			goto err_out;
+			usbip_usage();
+			goto out;
 		}
 	}
 
@@ -180,8 +186,8 @@ int main(int argc, char *argv[])
 			}
 	}
 
-err_out:
-	usbip_usage();
+	/* invalid command */
+	usbip_help(0, NULL);
 out:
 	cleanup_socket();
 	return (rc > -1 ? EXIT_SUCCESS : EXIT_FAILURE);

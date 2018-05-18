@@ -16,22 +16,14 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <limits.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <fcntl.h>
-#include <getopt.h>
-
 #include "usbip_windows.h"
 
 #include "usbip_common.h"
 #include "usbip_network.h"
-#include "usbip.h"
 
 static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
-	"    -h, --host=<host>      The machine with exported USB devices\n"
+	"    -r, --remote=<host>    The machine with exported USB devices\n"
 	"    -b, --busid=<busid>    Busid of the device on <host>\n";
 
 void usbip_attach_usage(void)
@@ -39,42 +31,43 @@ void usbip_attach_usage(void)
 	printf("usage: %s", usbip_attach_usage_string);
 }
 
-static int import_device(SOCKET sockfd, struct usbip_usb_device *udev, HANDLE *devfd)
+static int import_device(SOCKET sockfd, struct usbip_usb_device *udev, HANDLE *phdev)
 {
-	HANDLE fd;
-	int port, ret;
+	HANDLE hdev;
+	int rc;
+	int port;
 
-	fd = usbip_vbus_open();
-	if (INVALID_HANDLE_VALUE == fd) {
+	hdev = usbip_vhci_driver_open();
+	if (hdev == INVALID_HANDLE_VALUE) {
 		err("open vbus driver");
-		return -1;
+		return 1;
 	}
 
-	port = usbip_vbus_get_free_port(fd);
+	port = usbip_vhci_get_free_port(hdev);
 	if (port <= 0) {
 		err("no free port");
-		CloseHandle(fd);
-		return -1;
+		usbip_vhci_driver_close(hdev);
+		return 1;
 	}
 
-	dbg("call from attch here\n");
-	ret = usbip_vbus_attach_device(fd, port, udev);
-	dbg("return from attch here\n");
+	dbg("got free port %d", port);
 
-	if (ret < 0) {
+	rc = usbip_vhci_attach_device(hdev, port, udev);
+
+	if (rc < 0) {
 		err("import device");
-		CloseHandle(fd);
-		return -1;
+		usbip_vhci_driver_close(hdev);
+		return 1;
 	}
-	dbg("devfd:%p\n", devfd);
-	*devfd = fd;
+
+	*phdev = hdev;
 
 	return port;
 }
 
-static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *fd)
+static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev)
 {
-	int ret;
+	int rc;
 	struct op_import_request request;
 	struct op_import_reply   reply;
 	uint16_t code = OP_REP_IMPORT;
@@ -83,34 +76,33 @@ static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *fd)
 	memset(&reply, 0, sizeof(reply));
 
 	/* send a request */
-	ret = usbip_send_op_common(sockfd, OP_REQ_IMPORT, 0);
-	if (ret < 0) {
+	rc = usbip_net_send_op_common(sockfd, OP_REQ_IMPORT, 0);
+	if (rc < 0) {
 		err("send op_common");
-		return -1;
+		return 1;
 	}
 
-	strncpy_s(request.busid, SYSFS_BUS_ID_SIZE, busid, sizeof(request.busid));
-	request.busid[sizeof(request.busid) - 1] = 0;
+	strncpy_s(request.busid, USBIP_BUS_ID_SIZE, busid, sizeof(request.busid));
 
 	PACK_OP_IMPORT_REQUEST(0, &request);
 
-	ret = usbip_send(sockfd, (void *)&request, sizeof(request));
-	if (ret < 0) {
+	rc = usbip_net_send(sockfd, (void *)&request, sizeof(request));
+	if (rc < 0) {
 		err("send op_import_request");
-		return -1;
+		return 1;
 	}
 
 	/* recieve a reply */
-	ret = usbip_recv_op_common(sockfd, &code);
-	if (ret < 0) {
+	rc = usbip_net_recv_op_common(sockfd, &code);
+	if (rc < 0) {
 		err("recv op_common");
-		return -1;
+		return 1;
 	}
 
-	ret = usbip_recv(sockfd, (void *)&reply, sizeof(reply));
-	if (ret < 0) {
+	rc = usbip_net_recv(sockfd, (void *)&reply, sizeof(reply));
+	if (rc < 0) {
 		err("recv op_import_reply");
-		return -1;
+		return 1;
 	}
 
 	PACK_OP_IMPORT_REPLY(0, &reply);
@@ -118,50 +110,47 @@ static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *fd)
 	/* check the reply */
 	if (strncmp(reply.udev.busid, busid, sizeof(reply.udev.busid))) {
 		err("recv different busid %s", reply.udev.busid);
-		return -1;
+		return 1;
 	}
 
 	/* import a device */
-	return import_device(sockfd, &reply.udev, fd);
+	return import_device(sockfd, &reply.udev, phdev);
 }
 
 static int
 attach_device(const char *host, const char *busid)
 {
 	SOCKET	sockfd;
-	int		rhport;
-	HANDLE	devfd = INVALID_HANDLE_VALUE;
+	int	rhport;
+	HANDLE	hdev = INVALID_HANDLE_VALUE;
 
-	sockfd = usbip_net_tcp_connect(host, USBIP_PORT_STRING);
-	if (INVALID_SOCKET == sockfd) {
+	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
+	if (sockfd == INVALID_SOCKET) {
 		err("tcp connect");
-		return 0;
+		return 1;
 	}
-	rhport = query_import_device(sockfd, busid, &devfd);
+
+	rhport = query_import_device(sockfd, busid, &hdev);
 	if (rhport < 0) {
 		err("query");
-		return 0;
+		return 1;
 	}
-	info("new usb device attached to usbvbus port %d\n", rhport);
-	usbip_vbus_forward(sockfd, devfd);
 
-	dbg("detaching device");
-	usbip_vbus_detach_device(devfd, rhport);
+	usbip_vhci_forward(sockfd, hdev);
 
-	dbg("closing connection to device");
-	CloseHandle(devfd);
+	usbip_vhci_detach_device(hdev, rhport);
 
-	dbg("closing connection to peer");
+	usbip_vhci_driver_close(hdev);
+
 	closesocket(sockfd);
 
-	dbg("done");
-	return 1;
+	return 0;
 }
 
 int usbip_attach(int argc, char *argv[])
 {
 	static const struct option opts[] = {
-		{ "host", required_argument, NULL, 'h' },
+		{ "remote", required_argument, NULL, 'r' },
 		{ "busid", required_argument, NULL, 'b' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -171,13 +160,13 @@ int usbip_attach(int argc, char *argv[])
 	int ret = -1;
 
 	for (;;) {
-		opt = getopt_long(argc, argv, "h:b:", opts, NULL);
+		opt = getopt_long(argc, argv, "r:b:", opts, NULL);
 
 		if (opt == -1)
 			break;
 
 		switch (opt) {
-		case 'h':
+		case 'r':
 			host = optarg;
 			break;
 		case 'b':

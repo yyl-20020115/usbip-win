@@ -29,52 +29,45 @@
 /*****************************************************************************/
 
 #include <string.h>
-#include <errno.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <ctype.h>
 
-#include "usbip.h"
 #include "names.h"
-
-#define isspace(x) isspace((unsigned char)(x))
-
-
-/* ---------------------------------------------------------------------- */
+#include "usbip_common.h"
 
 struct vendor {
 	struct vendor *next;
-	u_int16_t vendorid;
+	uint16_t vendorid;
 	char name[1];
 };
 
 struct product {
 	struct product *next;
-	u_int16_t vendorid, productid;
+	uint16_t vendorid, productid;
 	char name[1];
 };
 
 struct class {
 	struct class *next;
-	u_int8_t classid;
+	uint8_t classid;
 	char name[1];
 };
 
 struct subclass {
 	struct subclass *next;
-	u_int8_t classid, subclassid;
+	uint8_t classid, subclassid;
 	char name[1];
 };
 
 struct protocol {
 	struct protocol *next;
-	u_int8_t classid, subclassid, protocolid;
+	uint8_t classid, subclassid, protocolid;
 	char name[1];
 };
 
 struct audioterminal {
 	struct audioterminal *next;
-	u_int16_t termt;
+	uint16_t termt;
 	char name[1];
 };
 
@@ -84,7 +77,6 @@ struct genericstrtable {
         char name[1];
 };
 
-/* ---------------------------------------------------------------------- */
 
 #define HASH1  0x10
 #define HASH2  0x02
@@ -100,76 +92,14 @@ static unsigned int hashnum(unsigned int num)
 	return num & (HASHSZ-1);
 }
 
-/* ---------------------------------------------------------------------- */
 
 static struct vendor *vendors[HASHSZ] = { NULL, };
 static struct product *products[HASHSZ] = { NULL, };
 static struct class *classes[HASHSZ] = { NULL, };
 static struct subclass *subclasses[HASHSZ] = { NULL, };
 static struct protocol *protocols[HASHSZ] = { NULL, };
-static struct audioterminal *audioterminals[HASHSZ] = { NULL, };
-static struct genericstrtable *hiddescriptors[HASHSZ] = { NULL, };
-static struct genericstrtable *reports[HASHSZ] = { NULL, };
-static struct genericstrtable *huts[HASHSZ] = { NULL, };
-static struct genericstrtable *biass[HASHSZ] = { NULL, };
-static struct genericstrtable *physdess[HASHSZ] = { NULL, };
-static struct genericstrtable *hutus[HASHSZ] = { NULL, };
-static struct genericstrtable *langids[HASHSZ] = { NULL, };
-static struct genericstrtable *countrycodes[HASHSZ] = { NULL, };
 
-/* ---------------------------------------------------------------------- */
-
-static const char *names_genericstrtable(struct genericstrtable *t[HASHSZ], unsigned int index)
-{
-        struct genericstrtable *h;
-
-        for (h = t[hashnum(index)]; h; h = h->next)
-                if (h->num == index)
-                        return h->name;
-        return NULL;
-}
-
-const char *names_hid(u_int8_t hidd)
-{
-	return names_genericstrtable(hiddescriptors, hidd);
-}
-
-const char *names_reporttag(u_int8_t rt)
-{
-	return names_genericstrtable(reports, rt);
-}
-
-const char *names_huts(unsigned int data)
-{
-	return names_genericstrtable(huts, data);
-}
-
-const char *names_hutus(unsigned int data)
-{
-	return names_genericstrtable(hutus, data);
-}
-
-const char *names_langid(u_int16_t langid)
-{
-	return names_genericstrtable(langids, langid);
-}
-
-const char *names_physdes(u_int8_t ph)
-{
-	return names_genericstrtable(physdess, ph);
-}
-
-const char *names_bias(u_int8_t b)
-{
-	return names_genericstrtable(biass, b);
-}
-
-const char *names_countrycode(unsigned int countrycode)
-{
-	return names_genericstrtable(countrycodes, countrycode);
-}
-
-const char *names_vendor(u_int16_t vendorid)
+const char *names_vendor(uint16_t vendorid)
 {
 	struct vendor *v;
 
@@ -180,7 +110,7 @@ const char *names_vendor(u_int16_t vendorid)
 	return NULL;
 }
 
-const char *names_product(u_int16_t vendorid, u_int16_t productid)
+const char *names_product(uint16_t vendorid, uint16_t productid)
 {
 	struct product *p;
 
@@ -191,7 +121,7 @@ const char *names_product(u_int16_t vendorid, u_int16_t productid)
 	return NULL;
 }
 
-const char *names_class(u_int8_t classid)
+const char *names_class(uint8_t classid)
 {
 	struct class *c;
 
@@ -202,7 +132,7 @@ const char *names_class(u_int8_t classid)
 	return NULL;
 }
 
-const char *names_subclass(u_int8_t classid, u_int8_t subclassid)
+const char *names_subclass(uint8_t classid, uint8_t subclassid)
 {
 	struct subclass *s;
 
@@ -213,7 +143,7 @@ const char *names_subclass(u_int8_t classid, u_int8_t subclassid)
 	return NULL;
 }
 
-const char *names_protocol(u_int8_t classid, u_int8_t subclassid, u_int8_t protocolid)
+const char *names_protocol(uint8_t classid, uint8_t subclassid, uint8_t protocolid)
 {
 	struct protocol *p;
 
@@ -224,18 +154,6 @@ const char *names_protocol(u_int8_t classid, u_int8_t subclassid, u_int8_t proto
 	return NULL;
 }
 
-const char *names_audioterminal(u_int16_t termt)
-{
-	struct audioterminal *at;
-
-	at = audioterminals[hashnum(termt)];
-	for (; at; at = at->next)
-		if (at->termt == termt)
-			return at->name;
-	return NULL;
-}
-
-/* ---------------------------------------------------------------------- */
 /* add a cleanup function by takahiro */
 
 struct pool {
@@ -243,7 +161,7 @@ struct pool {
 	void *mem;
 };
 
-static struct pool *pool_head = NULL;
+static struct pool *pool_head;
 
 static void *my_malloc(size_t size)
 {
@@ -284,9 +202,7 @@ void names_free(void)
 	}
 }
 
-/* ---------------------------------------------------------------------- */
-
-static int new_vendor(const char *name, u_int16_t vendorid)
+static int new_vendor(const char *name, uint16_t vendorid)
 {
 	struct vendor *v;
 	unsigned int h = hashnum(vendorid);
@@ -307,7 +223,7 @@ static int new_vendor(const char *name, u_int16_t vendorid)
 	return 0;
 }
 
-static int new_product(const char *name, u_int16_t vendorid, u_int16_t productid)
+static int new_product(const char *name, uint16_t vendorid, uint16_t productid)
 {
 	struct product *p;
 	unsigned int h = hashnum((vendorid << 16) | productid);
@@ -329,7 +245,7 @@ static int new_product(const char *name, u_int16_t vendorid, u_int16_t productid
 	return 0;
 }
 
-static int new_class(const char *name, u_int8_t classid)
+static int new_class(const char *name, uint8_t classid)
 {
 	struct class *c;
 	unsigned int h = hashnum(classid);
@@ -350,7 +266,7 @@ static int new_class(const char *name, u_int8_t classid)
 	return 0;
 }
 
-static int new_subclass(const char *name, u_int8_t classid, u_int8_t subclassid)
+static int new_subclass(const char *name, uint8_t classid, uint8_t subclassid)
 {
 	struct subclass *s;
 	unsigned int h = hashnum((classid << 8) | subclassid);
@@ -372,7 +288,7 @@ static int new_subclass(const char *name, u_int8_t classid, u_int8_t subclassid)
 	return 0;
 }
 
-static int new_protocol(const char *name, u_int8_t classid, u_int8_t subclassid, u_int8_t protocolid)
+static int new_protocol(const char *name, uint8_t classid, uint8_t subclassid, uint8_t protocolid)
 {
 	struct protocol *p;
 	unsigned int h = hashnum((classid << 16) | (subclassid << 8) | protocolid);
@@ -395,257 +311,84 @@ static int new_protocol(const char *name, u_int8_t classid, u_int8_t subclassid,
 	return 0;
 }
 
-static int new_audioterminal(const char *name, u_int16_t termt)
-{
-	struct audioterminal *at;
-	unsigned int h = hashnum(termt);
-	size_t	namelen;
-
-	at = audioterminals[h];
-	for (; at; at = at->next)
-		if (at->termt == termt)
-			return -1;
-	namelen = strlen(name);
-	at = my_malloc(sizeof(struct audioterminal) + namelen);
-	if (!at)
-		return -1;
-	strcpy_s(at->name, namelen + 1, name);
-	at->termt = termt;
-	at->next = audioterminals[h];
-	audioterminals[h] = at;
-	return 0;
-}
-
-static int new_genericstrtable(struct genericstrtable *t[HASHSZ], const char *name, unsigned int index)
-{
-	struct genericstrtable *g;
-	unsigned int h = hashnum(index);
-	size_t	namelen;
-
-	for (g = t[h]; g; g = g->next)
-		if (g->num == index)
-			return -1;
-	namelen = strlen(name);
-	g = my_malloc(sizeof(struct genericstrtable) + namelen);
-	if (!g)
-		return -1;
-	strcpy_s(g->name, namelen + 1, name);
-	g->num = index;
-	g->next = t[h];
-	t[h] = g;
-	return 0;
-}
-
-static int new_hid(const char *name, u_int8_t hidd)
-{
-	return new_genericstrtable(hiddescriptors, name, hidd);
-}
-
-static int new_reporttag(const char *name, u_int8_t rt)
-{
-	return new_genericstrtable(reports, name, rt);
-}
-
-static int new_huts(const char *name, unsigned int data)
-{
-	return new_genericstrtable(huts, name, data);
-}
-
-static int new_hutus(const char *name, unsigned int data)
-{
-	return new_genericstrtable(hutus, name, data);
-}
-
-static int new_langid(const char *name, u_int16_t langid)
-{
-	return new_genericstrtable(langids, name, langid);
-}
-
-static int new_physdes(const char *name, u_int8_t ph)
-{
-	return new_genericstrtable(physdess, name, ph);
-}
-static int new_bias(const char *name, u_int8_t b)
-{
-	return new_genericstrtable(biass, name, b);
-}
-
-static int new_countrycode(const char *name, unsigned int countrycode)
-{
-	return new_genericstrtable(countrycodes, name, countrycode);
-}
-
-/* ---------------------------------------------------------------------- */
-
-#define DBG(x)
-
 static void parse(FILE *f)
 {
 	char buf[512], *cp;
 	unsigned int linectr = 0;
-	int lastvendor = -1, lastclass = -1, lastsubclass = -1, lasthut=-1, lastlang=-1;
+	int lastvendor = -1;
+	int lastclass = -1;
+	int lastsubclass = -1;
+	int lasthut = -1;
+	int lastlang = -1;
 	unsigned int u;
 
 	while (fgets(buf, sizeof(buf), f)) {
 		linectr++;
 		/* remove line ends */
-		if ((cp = strchr(buf, 13)))
+		cp = strchr(buf, '\r');
+		if (cp)
 			*cp = 0;
-		if ((cp = strchr(buf, 10)))
+		cp = strchr(buf, '\n');
+		if (cp)
 			*cp = 0;
 		if (buf[0] == '#' || !buf[0])
 			continue;
 		cp = buf;
-                if (buf[0] == 'P' && buf[1] == 'H' && buf[2] == 'Y' && buf[3] == 'S' && buf[4] == 'D' &&
-                    buf[5] == 'E' && buf[6] == 'S' && /*isspace(buf[7])*/ buf[7] == ' ') {
-                        cp = buf + 8;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid Physdes type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid Physdes type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_physdes(cp, u))
-                                fprintf(stderr, "Duplicate Physdes  type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u physdes type %02x %s\n", linectr, u, cp));
-                        continue;
-
-                }
-                if (buf[0] == 'P' && buf[1] == 'H' && buf[2] == 'Y' && /*isspace(buf[3])*/ buf[3] == ' ') {
-                        cp = buf + 4;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid PHY type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid PHY type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_physdes(cp, u))
-                                fprintf(stderr, "Duplicate PHY type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u PHY type %02x %s\n", linectr, u, cp));
-                        continue;
-
-                }
-                if (buf[0] == 'B' && buf[1] == 'I' && buf[2] == 'A' && buf[3] == 'S' && /*isspace(buf[4])*/ buf[4] == ' ') {
-                        cp = buf + 5;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid BIAS type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid BIAS type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_bias(cp, u))
-                                fprintf(stderr, "Duplicate BIAS  type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u BIAS type %02x %s\n", linectr, u, cp));
-                        continue;
-
-                }
-                if (buf[0] == 'L' && /*isspace(buf[1])*/ buf[1] == ' ') {
-                        cp =  buf+2;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid LANGID spec at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid LANGID spec at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_langid(cp, u))
-                                fprintf(stderr, "Duplicate LANGID spec at line %u language-id %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u LANGID %02x %s\n", linectr, u, cp));
-                        lasthut = lastclass = lastvendor = lastsubclass = -1;
-                        lastlang = u;
-                        continue;
-                }
+		if (buf[0] == 'P' && buf[1] == 'H' && buf[2] == 'Y' &&
+		    buf[3] == 'S' && buf[4] == 'D' &&
+		    buf[5] == 'E' && buf[6] == 'S' && /*isspace(buf[7])*/
+		    buf[7] == ' ') {
+			continue;
+		}
+		if (buf[0] == 'P' && buf[1] == 'H' &&
+		    buf[2] == 'Y' && /*isspace(buf[3])*/ buf[3] == ' ') {
+			continue;
+		}
+		if (buf[0] == 'B' && buf[1] == 'I' && buf[2] == 'A' &&
+		    buf[3] == 'S' && /*isspace(buf[4])*/ buf[4] == ' ') {
+			continue;
+		}
+		if (buf[0] == 'L' && /*isspace(buf[1])*/ buf[1] == ' ') {
+			lasthut = lastclass = lastvendor = lastsubclass = -1;
+			/*
+			 * set 1 as pseudo-id to indicate that the parser is
+			 * in a `L' section.
+			 */
+			lastlang = 1;
+			continue;
+		}
 		if (buf[0] == 'C' && /*isspace(buf[1])*/ buf[1] == ' ') {
 			/* class spec */
 			cp = buf+2;
 			while (isspace(*cp))
 				cp++;
 			if (!isxdigit(*cp)) {
-				fprintf(stderr, "Invalid class spec at line %u\n", linectr);
+				err("Invalid class spec at line %u", linectr);
 				continue;
 			}
 			u = strtoul(cp, &cp, 16);
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				fprintf(stderr, "Invalid class spec at line %u\n", linectr);
+				err("Invalid class spec at line %u", linectr);
 				continue;
 			}
 			if (new_class(cp, u))
-				fprintf(stderr, "Duplicate class spec at line %u class %04x %s\n", linectr, u, cp);
-			DBG(printf("line %5u class %02x %s\n", linectr, u, cp));
+				err("Duplicate class spec at line %u class %04x %s",
+				    linectr, u, cp);
+			dbg("line %5u class %02x %s", linectr, u, cp);
 			lasthut = lastlang = lastvendor = lastsubclass = -1;
 			lastclass = u;
 			continue;
 		}
 		if (buf[0] == 'A' && buf[1] == 'T' && isspace(buf[2])) {
 			/* audio terminal type spec */
-			cp = buf+3;
-			while (isspace(*cp))
-				cp++;
-			if (!isxdigit(*cp)) {
-				fprintf(stderr, "Invalid audio terminal type at line %u\n", linectr);
-				continue;
-			}
-			u = strtoul(cp, &cp, 16);
-			while (isspace(*cp))
-				cp++;
-			if (!*cp) {
-				fprintf(stderr, "Invalid audio terminal type at line %u\n", linectr);
-				continue;
-			}
-			if (new_audioterminal(cp, u))
-				fprintf(stderr, "Duplicate audio terminal type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-			DBG(printf("line %5u audio terminal type %02x %s\n", linectr, u, cp));
 			continue;
 		}
-		if (buf[0] == 'H' && buf[1] == 'C' && buf[2] == 'C' && isspace(buf[3])) {
+		if (buf[0] == 'H' && buf[1] == 'C' && buf[2] == 'C'
+		    && isspace(buf[3])) {
 			/* HID Descriptor bCountryCode */
-                        cp =  buf+3;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid HID country code at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 10);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid HID country code at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_countrycode(cp, u))
-                                fprintf(stderr, "Duplicate HID country code at line %u country %02u %s\n", linectr, u, cp);
-                        DBG(printf("line %5u keyboard country code %02u %s\n", linectr, u, cp));
-                        continue;
+			continue;
 		}
 		if (isxdigit(*cp)) {
 			/* vendor */
@@ -653,12 +396,13 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				fprintf(stderr, "Invalid vendor spec at line %u\n", linectr);
+				err("Invalid vendor spec at line %u", linectr);
 				continue;
 			}
 			if (new_vendor(cp, u))
-				fprintf(stderr, "Duplicate vendor spec at line %u vendor %04x %s\n", linectr, u, cp);
-			DBG(printf("line %5u vendor %04x %s\n", linectr, u, cp));
+				err("Duplicate vendor spec at line %u vendor %04x %s",
+				    linectr, u, cp);
+			dbg("line %5u vendor %04x %s", linectr, u, cp);
 			lastvendor = u;
 			lasthut = lastlang = lastclass = lastsubclass = -1;
 			continue;
@@ -669,33 +413,37 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				fprintf(stderr, "Invalid product/subclass spec at line %u\n", linectr);
+				err("Invalid product/subclass spec at line %u",
+				    linectr);
 				continue;
 			}
 			if (lastvendor != -1) {
 				if (new_product(cp, lastvendor, u))
-					fprintf(stderr, "Duplicate product spec at line %u product %04x:%04x %s\n", linectr, lastvendor, u, cp);
-				DBG(printf("line %5u product %04x:%04x %s\n", linectr, lastvendor, u, cp));
+					err("Duplicate product spec at line %u product %04x:%04x %s",
+					    linectr, lastvendor, u, cp);
+				dbg("line %5u product %04x:%04x %s", linectr,
+				    lastvendor, u, cp);
 				continue;
 			}
 			if (lastclass != -1) {
 				if (new_subclass(cp, lastclass, u))
-					fprintf(stderr, "Duplicate subclass spec at line %u class %02x:%02x %s\n", linectr, lastclass, u, cp);
-				DBG(printf("line %5u subclass %02x:%02x %s\n", linectr, lastclass, u, cp));
+					err("Duplicate subclass spec at line %u class %02x:%02x %s",
+					    linectr, lastclass, u, cp);
+				dbg("line %5u subclass %02x:%02x %s", linectr,
+				    lastclass, u, cp);
 				lastsubclass = u;
 				continue;
 			}
 			if (lasthut != -1) {
-				if (new_hutus(cp, (lasthut << 16)+u))
-					fprintf(stderr, "Duplicate HUT Usage Spec at line %u\n", linectr);
+				/* do not store hut */
 				continue;
 			}
 			if (lastlang != -1) {
-                                if (new_langid(cp, lastlang+(u<<10)))
-                                        fprintf(stderr, "Duplicate LANGID Usage Spec at line %u\n", linectr);
-                                continue;
-                        }
-			fprintf(stderr, "Product/Subclass spec without prior Vendor/Class spec at line %u\n", linectr);
+				/* do not store langid */
+				continue;
+			}
+			err("Product/Subclass spec without prior Vendor/Class spec at line %u",
+			    linectr);
 			continue;
 		}
 		if (buf[0] == '\t' && buf[1] == '\t' && isxdigit(buf[2])) {
@@ -704,102 +452,56 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				fprintf(stderr, "Invalid protocol spec at line %u\n", linectr);
+				err("Invalid protocol spec at line %u",
+				    linectr);
 				continue;
 			}
 			if (lastclass != -1 && lastsubclass != -1) {
-				if (new_protocol(cp, lastclass, lastsubclass, u))
-					fprintf(stderr, "Duplicate protocol spec at line %u class %02x:%02x:%02x %s\n", linectr, lastclass, lastsubclass, u, cp);
-				DBG(printf("line %5u protocol %02x:%02x:%02x %s\n", linectr, lastclass, lastsubclass, u, cp));
+				if (new_protocol(cp, lastclass, lastsubclass,
+						 u))
+					err("Duplicate protocol spec at line %u class %02x:%02x:%02x %s",
+					    linectr, lastclass, lastsubclass,
+					    u, cp);
+				dbg("line %5u protocol %02x:%02x:%02x %s",
+				    linectr, lastclass, lastsubclass, u, cp);
 				continue;
 			}
-			fprintf(stderr, "Protocol spec without prior Class and Subclass spec at line %u\n", linectr);
+			err("Protocol spec without prior Class and Subclass spec at line %u",
+			    linectr);
 			continue;
 		}
-		if (buf[0] == 'H' && buf[1] == 'I' && buf[2] == 'D' && /*isspace(buf[3])*/ buf[3] == ' ') {
-			cp = buf + 4;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid HID type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid HID type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_hid(cp, u))
-                                fprintf(stderr, "Duplicate HID type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u HID type %02x %s\n", linectr, u, cp));
-                        continue;
-
+		if (buf[0] == 'H' && buf[1] == 'I' &&
+		    buf[2] == 'D' && /*isspace(buf[3])*/ buf[3] == ' ') {
+			continue;
 		}
-                if (buf[0] == 'H' && buf[1] == 'U' && buf[2] == 'T' && /*isspace(buf[3])*/ buf[3] == ' ') {
-                        cp = buf + 4;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid HUT type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid HUT type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_huts(cp, u))
-                                fprintf(stderr, "Duplicate HUT type spec at line %u terminal type %04x %s\n", linectr, u, cp);
+		if (buf[0] == 'H' && buf[1] == 'U' &&
+		    buf[2] == 'T' && /*isspace(buf[3])*/ buf[3] == ' ') {
 			lastlang = lastclass = lastvendor = lastsubclass = -1;
-			lasthut = u;
-                        DBG(printf("line %5u HUT type %02x %s\n", linectr, u, cp));
-                        continue;
-
-                }
-                if (buf[0] == 'R' && buf[1] == ' ') {
-                        cp = buf + 2;
-                        while (isspace(*cp))
-                                cp++;
-                        if (!isxdigit(*cp)) {
-                                fprintf(stderr, "Invalid Report type at line %u\n", linectr);
-                                continue;
-                        }
-                        u = strtoul(cp, &cp, 16);
-                        while (isspace(*cp))
-                                cp++;
-                        if (!*cp) {
-                                fprintf(stderr, "Invalid Report type at line %u\n", linectr);
-                                continue;
-                        }
-                        if (new_reporttag(cp, u))
-                                fprintf(stderr, "Duplicate Report type spec at line %u terminal type %04x %s\n", linectr, u, cp);
-                        DBG(printf("line %5u Report type %02x %s\n", linectr, u, cp));
-                        continue;
-
-                }
-                if (buf[0] == 'V' && buf[1] == 'T') {
-			/* add here */
+			/*
+			 * set 1 as pseudo-id to indicate that the parser is
+			 * in a `HUT' section.
+			 */
+			lasthut = 1;
 			continue;
 		}
-		fprintf(stderr, "Unknown line at line %u\n", linectr);
+		if (buf[0] == 'R' && buf[1] == ' ')
+			continue;
+
+		if (buf[0] == 'V' && buf[1] == 'T')
+			continue;
+
+		err("Unknown line at line %u", linectr);
 	}
 }
 
-/* ---------------------------------------------------------------------- */
-
-int names_init(char *n)
+int names_init(const char *path)
 {
 	FILE *f;
-	int	errno;
+	errno_t	err;
 
-	errno = fopen_s(&f, n, "r");
-	if (errno != 0) {
-		return errno;
-	}
+	if ((err = fopen_s(&f, path, "r")) != 0)
+		return err;
+
 	parse(f);
 	fclose(f);
 	return 0;

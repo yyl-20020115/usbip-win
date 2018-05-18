@@ -1,5 +1,7 @@
 #pragma once
 
+#include <guiddef.h>
+
 //
 // Define an Interface Guid for bus enumerator class.
 // This GUID is used to register (IoRegisterDeviceInterface) 
@@ -94,17 +96,10 @@ typedef struct _ioctl_usbvbus_unplug
 
 typedef struct _BUSENUM_EJECT_HARDWARE
 {
-    //
-    // sizeof (struct _EJECT_HARDWARE)
-    //
+	// sizeof (struct _EJECT_HARDWARE)
+	ULONG	Size;
 
-    ULONG Size;                                    
-
-    //
-    // Serial number of the device to be ejected
-    //
-
-    ULONG   SerialNo;
-
-    ULONG Reserved[2];
+	// Serial number of the device to be ejected
+	ULONG	SerialNo;
+	ULONG	Reserved[2];
 } BUSENUM_EJECT_HARDWARE, *PBUSENUM_EJECT_HARDWARE;

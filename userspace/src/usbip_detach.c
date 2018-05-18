@@ -16,23 +16,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#include <ctype.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <getopt.h>
-
 #include "usbip_windows.h"
 
 #include "usbip_common.h"
-#include "usbip_network.h"
-#include "usbip.h"
 
 static const char usbip_detach_usage_string[] =
 	"usbip detach <args>\n"
-	"    -p, --port=<port>    " USBIP_VHCI_DRV_NAME
+	"    -p, --port=<port>    "
 	" port the device is on\n";
 
 void usbip_detach_usage(void)
@@ -40,20 +30,25 @@ void usbip_detach_usage(void)
 	printf("usage: %s", usbip_detach_usage_string);
 }
 
-int detach_port(char *port)
+static int detach_port(const char *portstr)
 {
-	signed char addr = atoi(port);
-	HANDLE fd;
+	HANDLE hdev;
+	uint8_t portnum;
 	int ret;
 
-	fd = usbip_vbus_open();
-	if (INVALID_HANDLE_VALUE == fd) {
-		err("open vbus driver");
-		return -1;
+	if (sscanf_s(portstr, "%hhu", &portnum) != 1) {
+		err("invalid port %s", portstr);
+		return 1;
 	}
-	ret = usbip_vbus_detach_device(fd, addr);
-	CloseHandle(fd);
-	return ret;
+	hdev = usbip_vhci_driver_open();
+	if (hdev == INVALID_HANDLE_VALUE) {
+		err("open vhci_driver");
+		return 1;
+	}
+
+	ret = usbip_vhci_detach_device(hdev, portnum);
+	usbip_vhci_driver_close(hdev);
+	return (ret == 0) ? 0: 1;
 }
 
 int usbip_detach(int argc, char *argv[])
@@ -85,3 +80,4 @@ err_out:
 out:
 	return ret;
 }
+
