@@ -46,35 +46,38 @@ extern int usbip_use_debug ;
 
 #define PROGNAME	"usbip"
 
-#define err(fmt, ...)	do { \
-	if (usbip_use_stderr) { \
-		fprintf(stderr, "usbip err: %13s:%4d (%-12s) " fmt "\n", \
-		__FILE__, __LINE__, __FUNCTION__,  ##__VA_ARGS__); \
-	} \
-} while (0)
+#define pr_fmt(fmt)	"%s: %s: " fmt "\n", PROGNAME
+#define dbg_fmt(fmt)	pr_fmt("%s:%d:[%s] " fmt), "debug",	\
+		        __FILE__, __LINE__, __func__
 
-#define notice(fmt, ...)	do { \
-	if (usbip_use_stderr) { \
-		fprintf(stderr, "usbip: " fmt "\n", ##__VA_ARGS__); \
-	} \
-} while (0)
+#define err(fmt, ...)								\
+	do {									\
+		if (usbip_use_stderr) {						\
+			fprintf(stderr, pr_fmt(fmt), "error", ##__VA_ARGS__);	\
+		}								\
+	} while (0)
 
-#define info(fmt, ...)	do { \
-	if (usbip_use_stderr) { \
-		fprintf(stderr, fmt "\n", ##__VA_ARGS__); \
-	} \
-} while (0)
+#define info(fmt, ...)								\
+	do {									\
+		if (usbip_use_stderr) {						\
+			fprintf(stderr, pr_fmt(fmt), "info", ##__VA_ARGS__);	\
+		}								\
+	} while (0)
 
-#define dbg(fmt, ...)	do { \
-	if (usbip_use_debug) { \
-		if (usbip_use_stderr) { \
-			fprintf(stderr, "usbip dbg: %13s:%4d (%-12s) " fmt "\n", \
-				__FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-		} \
-	} \
-} while (0)
+#define dbg(fmt, ...)								\
+	do {									\
+		if (usbip_use_debug) {						\
+			if (usbip_use_stderr) {					\
+				fprintf(stderr, dbg_fmt(fmt), ##__VA_ARGS__);	\
+			}							\
+		}								\
+	} while (0)
 
-#define BUG()	do { err("sorry, it's a bug"); abort(); } while (0)
+#define BUG()						\
+	do {						\
+		  err("sorry, it's a bug");		\
+		  abort();				\
+	} while (0)
 
 #pragma pack(push, 1)
 

@@ -3,10 +3,6 @@
  * Copyright (C) 2005-2007 Takahiro Hirofuchi
  */
 
-#ifndef EAI_SYSTEM
-#define EAI_SYSTEM -11
-#endif
-
 #include <ws2tcpip.h>
 
 #include "usbip_common.h"
@@ -172,7 +168,7 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code)
 	}
 
 	if (op_common.status != ST_OK) {
-		dbg("request failed at peer: %d", op_common.status);
+		dbg("request failed: status: %d", op_common.status);
 		goto err;
 	}
 
@@ -222,10 +218,10 @@ int usbip_net_set_keepalive(SOCKET sockfd)
 /*
  * IPv6 Ready
  */
-int usbip_net_tcp_connect(const char *hostname, const char *port)
+SOCKET usbip_net_tcp_connect(const char *hostname, const char *port)
 {
 	struct addrinfo hints, *res, *rp;
-	int sockfd;
+	SOCKET sockfd = INVALID_SOCKET;
 	int ret;
 
 	memset(&hints, 0, sizeof(hints));
@@ -237,14 +233,13 @@ int usbip_net_tcp_connect(const char *hostname, const char *port)
 	if (ret < 0) {
 		dbg("getaddrinfo: %s port %s: %s", hostname, port,
 		    gai_strerror(ret));
-		return ret;
+		return INVALID_SOCKET;
 	}
 
 	/* try the addresses */
 	for (rp = res; rp; rp = rp->ai_next) {
-		sockfd = (int)socket(rp->ai_family, rp->ai_socktype,
-				rp->ai_protocol);
-		if (sockfd < 0)
+		sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (sockfd == INVALID_SOCKET)
 			continue;
 
 		/* should set TCP_NODELAY for usbip */
@@ -261,7 +256,7 @@ int usbip_net_tcp_connect(const char *hostname, const char *port)
 	freeaddrinfo(res);
 
 	if (!rp)
-		return EAI_SYSTEM;
+		return INVALID_SOCKET;
 
 	return sockfd;
 }

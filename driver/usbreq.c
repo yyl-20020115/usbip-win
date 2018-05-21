@@ -8,6 +8,7 @@ extern int
 process_urb_req(PIRP irp, struct urb_req *urb_r);
 
 #ifdef DBG
+
 const char *
 dbg_urb_req(struct urb_req *urb_r)
 {
@@ -18,6 +19,7 @@ dbg_urb_req(struct urb_req *urb_r)
 	RtlStringCchPrintfA(buf, 128, "[%sseq:%d]", urb_r->sent ? "sent,": "", urb_r->seq_num);
 	return buf;
 }
+
 #endif
 
 void
@@ -78,38 +80,44 @@ find_pending_urb_req(PPDO_DEVICE_DATA pdodata)
 }
 
 static void
-cancel_irp(PDEVICE_OBJECT pdo, PIRP Irp)
+remove_cancelled_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 {
-	PLIST_ENTRY le = NULL;
-	int found = 0;
-	struct urb_req * urb_r = NULL;
-	PPDO_DEVICE_DATA pdodata;
-	KIRQL oldirql = Irp->CancelIrql;
+	KIRQL	oldirql = irp->CancelIrql;
+	PLIST_ENTRY	le;
 
-	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
-	//	IoReleaseCancelSpinLock(DISPATCH_LEVEL);
-	DBGI(DBG_GENERAL, "Cancel Irp %p called\n", Irp);
 	KeAcquireSpinLockAtDpcLevel(&pdodata->q_lock);
-	for (le = pdodata->ioctl_q.Flink;
-		le != &pdodata->ioctl_q;
-		le = le->Flink) {
+
+	for (le = pdodata->ioctl_q.Flink; le != &pdodata->ioctl_q; le = le->Flink) {
+		struct urb_req	*urb_r;
+
 		urb_r = CONTAINING_RECORD(le, struct urb_req, list);
-		if (urb_r->irp == Irp) {
-			found = 1;
+		if (urb_r->irp == irp) {
 			RemoveEntryList(le);
-			break;
+			KeReleaseSpinLock(&pdodata->q_lock, oldirql);
+
+			DBGI(DBG_GENERAL, "urb cancelled: %s\n", dbg_urb_req(urb_r));
+			ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+			return;
 		}
 	}
 	KeReleaseSpinLock(&pdodata->q_lock, oldirql);
-	if (found) {
-		ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
-	}
-	else {
-		DBGW(DBG_GENERAL, "why we can't found it?\n");
-	}
-	Irp->IoStatus.Status = STATUS_CANCELLED;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	IoReleaseCancelSpinLock(Irp->CancelIrql);
+
+	DBGW(DBG_GENERAL, "no matching urb req\n");
+}
+
+static void
+cancel_urb_req(PDEVICE_OBJECT pdo, PIRP irp)
+{
+	PPDO_DEVICE_DATA	pdodata;
+
+	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
+	DBGI(DBG_GENERAL, "Irp will be cancelled: %p\n", irp);
+
+	remove_cancelled_urb_req(pdodata, irp);
+
+	irp->IoStatus.Status = STATUS_CANCELLED;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+	IoReleaseCancelSpinLock(irp->CancelIrql);
 }
 
 static struct urb_req *
@@ -133,7 +141,7 @@ insert_urb_req(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r)
 {
 	PIRP	irp = urb_r->irp;
 
-	IoSetCancelRoutine(irp, cancel_irp);
+	IoSetCancelRoutine(irp, cancel_urb_req);
 	if (irp->Cancel && IoSetCancelRoutine(irp, NULL)) {
 		return FALSE;
 	}

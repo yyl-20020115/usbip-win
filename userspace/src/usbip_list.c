@@ -35,7 +35,7 @@ void usbip_list_usage(void)
 	printf("usage: %s", usbip_list_usage_string);
 }
 
-static int get_exported_devices(const char *host, int sockfd)
+static int get_exported_devices(const char *host, SOCKET sockfd)
 {
 	struct op_devlist_reply reply;
 	uint16_t code = OP_REP_DEVLIST;
@@ -126,12 +126,12 @@ static int get_exported_devices(const char *host, int sockfd)
 static int list_exported_devices(char *host)
 {
 	int rc;
-	int sockfd;
+	SOCKET sockfd;
 
 	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
-	if (sockfd < 0) {
+	if (sockfd == INVALID_SOCKET) {
 		err("unable to connect to %s port %s: %s\n", host,
-		    usbip_port_string, gai_strerror(sockfd));
+		    usbip_port_string, gai_strerror((int)sockfd));
 		return -1;
 	}
 	dbg("connected to %s:%s\n", host, usbip_port_string);
