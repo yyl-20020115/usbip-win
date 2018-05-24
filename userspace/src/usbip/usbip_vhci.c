@@ -5,10 +5,10 @@
 
 #include <setupapi.h>
 
-#include "usbipenum_api.h"
+#include "usbip_vhci_api.h"
 
 static int
-find_usbipenum_index(HDEVINFO dev_info)
+find_vhci_index(HDEVINFO dev_info)
 {
 	SP_DEVINFO_DATA	dev_info_data;
 	int		idx;
@@ -38,23 +38,23 @@ find_usbipenum_index(HDEVINFO dev_info)
 		}
 
 		// Check if we got the correct device.
-		if (strcmp(hardwareID, "root\\usbipenum") == 0)
+		if (strcmp(hardwareID, "root\\usbip_vhci") == 0)
 			return idx;
 	}
 }
 
 static BOOL
-get_usbipenum_intf(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
+get_vhci_intf(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
 {
 	int	idx;
 
-	idx = find_usbipenum_index(dev_info);
+	idx = find_vhci_index(dev_info);
 	if (idx < 0)
 		return FALSE;
 
 	pdev_interface_data->cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 	// Get device interfaces.
-	if (!SetupDiEnumDeviceInterfaces(dev_info, NULL, (LPGUID)&GUID_DEVINTERFACE_BUSENUM_USBIP,
+	if (!SetupDiEnumDeviceInterfaces(dev_info, NULL, (LPGUID)&GUID_DEVINTERFACE_VHCI_USBIP,
 		idx, pdev_interface_data)) {
 		DWORD	err;
 
@@ -62,7 +62,7 @@ get_usbipenum_intf(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_d
 		// No more items here isn't supposed to happen since we checked that on the
 		// SetupDiEnumDeviceInfo, but there's no harm checking again.
 		if (err == ERROR_NO_MORE_ITEMS) {
-			err("usbipenum interface is not registered\n");
+			err("usbip vhci interface is not registered\n");
 		}
 		else {
 			err("unknown error when get interface_data: err: %d\n", err);
@@ -73,7 +73,7 @@ get_usbipenum_intf(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_d
 }
 
 static PSP_DEVICE_INTERFACE_DETAIL_DATA
-get_usbipenum_intf_detail(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
+get_vhci_intf_detail(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
 {
 	PSP_DEVICE_INTERFACE_DETAIL_DATA	pdev_interface_detail;
 	unsigned long len = 0;
@@ -109,7 +109,7 @@ get_usbipenum_intf_detail(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_inte
 }
 
 static char *
-get_usbipenum_devpath(void)
+get_vhci_devpath(void)
 {
 	HDEVINFO	dev_info;
 	SP_DEVICE_INTERFACE_DATA	dev_interface_data;
@@ -117,19 +117,19 @@ get_usbipenum_devpath(void)
 	char	*devpath;
 
 	// Get devices info.
-	dev_info = SetupDiGetClassDevs((LPGUID) &GUID_DEVINTERFACE_BUSENUM_USBIP, NULL,	NULL,
-		DIGCF_PRESENT|DIGCF_DEVICEINTERFACE);
+	dev_info = SetupDiGetClassDevs((LPGUID) &GUID_DEVINTERFACE_VHCI_USBIP, NULL, NULL,
+				       DIGCF_PRESENT|DIGCF_DEVICEINTERFACE);
 	if (dev_info == INVALID_HANDLE_VALUE) {
 		err("SetupDiGetClassDevs failed: %ld\n", GetLastError());
 		return FALSE;
 	}
 
-	if (!get_usbipenum_intf(dev_info, &dev_interface_data)) {
+	if (!get_vhci_intf(dev_info, &dev_interface_data)) {
 		SetupDiDestroyDeviceInfoList(dev_info);
 		return FALSE;
 	}
 
-	pdev_interface_detail = get_usbipenum_intf_detail(dev_info, &dev_interface_data);
+	pdev_interface_detail = get_vhci_intf_detail(dev_info, &dev_interface_data);
 	if (pdev_interface_detail == NULL) {
 		SetupDiDestroyDeviceInfoList(dev_info);
 		return FALSE;
@@ -149,7 +149,7 @@ usbip_vhci_driver_open(void)
 	HANDLE	hdev;
 	char	*devpath;
 
-	devpath = get_usbipenum_devpath();
+	devpath = get_vhci_devpath();
 	if (devpath == NULL) {
 		return INVALID_HANDLE_VALUE;
 	}
@@ -168,17 +168,17 @@ usbip_vhci_driver_close(HANDLE hdev)
 static int
 usbip_vhci_get_ports_status(HANDLE hdev, char *buf, int l)
 {
-	ioctl_usbvbus_get_ports_status	*st;
+	ioctl_usbip_vhci_get_ports_status	*st;
 	unsigned long len;
 
-	st = (ioctl_usbvbus_get_ports_status *)buf;
+	st = (ioctl_usbip_vhci_get_ports_status *)buf;
 
-	if (l != sizeof(ioctl_usbvbus_get_ports_status))
+	if (l != sizeof(ioctl_usbip_vhci_get_ports_status))
 		return -1;
 
-	if (DeviceIoControl(hdev, IOCTL_USBVBUS_GET_PORTS_STATUS,
-		NULL, 0, st, sizeof(ioctl_usbvbus_get_ports_status), &len, NULL)) {
-		if (len == sizeof(ioctl_usbvbus_get_ports_status))
+	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_GET_PORTS_STATUS,
+		NULL, 0, st, sizeof(ioctl_usbip_vhci_get_ports_status), &len, NULL)) {
+		if (len == sizeof(ioctl_usbip_vhci_get_ports_status))
 			return 0;
 	}
 	return -1;
@@ -202,7 +202,7 @@ usbip_vhci_get_free_port(HANDLE hdev)
 int
 usbip_vhci_attach_device(HANDLE hdev, int port, struct usbip_usb_device *udev)
 {
-	ioctl_usbvbus_plugin  plugin;
+	ioctl_usbip_vhci_plugin  plugin;
 	unsigned long	unused;
 
 	plugin.devid  = ((udev->busnum << 16) | udev->devnum);
@@ -217,7 +217,7 @@ usbip_vhci_attach_device(HANDLE hdev, int port, struct usbip_usb_device *udev)
 
 	plugin.addr = port;
 
-	if (DeviceIoControl(hdev, IOCTL_USBVBUS_PLUGIN_HARDWARE,
+	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_PLUGIN_HARDWARE,
 		&plugin, sizeof(plugin), NULL, 0, &unused, NULL))
 		return 0;
 	return -1;
@@ -226,11 +226,11 @@ usbip_vhci_attach_device(HANDLE hdev, int port, struct usbip_usb_device *udev)
 int
 usbip_vhci_detach_device(HANDLE hdev, int port)
 {
-	ioctl_usbvbus_unplug  unplug;
+	ioctl_usbip_vhci_unplug  unplug;
 	unsigned long	unused;
 
 	unplug.addr = port;
-	if (DeviceIoControl(hdev, IOCTL_USBVBUS_UNPLUG_HARDWARE,
+	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_UNPLUG_HARDWARE,
 		&unplug, sizeof(unplug), NULL, 0, &unused, NULL))
 		return 0;
 	return -1;
@@ -245,7 +245,7 @@ show_port_status(void)
 
 	fd = usbip_vhci_driver_open();
 	if (INVALID_HANDLE_VALUE == fd) {
-		err("open vbus driver");
+		err("open vhci driver");
 		return -1;
 	}
 	if (usbip_vhci_get_ports_status(fd, buf, sizeof(buf))) {

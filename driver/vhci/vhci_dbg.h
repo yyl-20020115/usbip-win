@@ -14,9 +14,9 @@
 #define DBG_WMI		0x01000000
 #define DBG_URB		0x10000000
 
-#define DBGE(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | (part), "USBIPEnum:(EE) " fmt, ## __VA_ARGS__)
-#define DBGW(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 1), "USBIPEnum:(WW) " fmt, ## __VA_ARGS__)
-#define DBGI(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 2), "USBIPEnum: " fmt, ## __VA_ARGS__)
+#define DBGE(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | (part), "usbip_vhci:(EE) " fmt, ## __VA_ARGS__)
+#define DBGW(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 1), "usbip_vhci:(WW) " fmt, ## __VA_ARGS__)
+#define DBGI(part, fmt, ...)	DbgPrintEx(DPFLTR_SYSTEM_ID, DPFLTR_MASK | ((part) << 2), "usbip_vhci: " fmt, ## __VA_ARGS__)
 
 extern const char *dbg_urb_req(struct urb_req *urb_r);
 

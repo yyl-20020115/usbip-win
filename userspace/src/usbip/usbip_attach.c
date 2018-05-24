@@ -39,7 +39,7 @@ static int import_device(SOCKET sockfd, struct usbip_usb_device *udev, HANDLE *p
 
 	hdev = usbip_vhci_driver_open();
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("open vbus driver");
+		err("open vhci driver");
 		return 1;
 	}
 

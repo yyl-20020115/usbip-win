@@ -1,11 +1,11 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include <usbdi.h>
 #include <wdmguid.h>
 #include <usbbusif.h>
 
-#include "usbipenum_api.h"
-#include "pnp.h"
+#include "usbip_vhci_api.h"
+#include "vhci_pnp.h"
 
 #define FDO_FROM_PDO(pdoData)	((PFDO_DEVICE_DATA) (pdoData)->ParentFdo->DeviceExtension)
 
@@ -341,12 +341,12 @@ Return Value:
 	#define DEVICEE_ID_SAMPLE L"USB\\Vid_1234&Pid_1234"
 
 	length = sizeof(DEVICEE_ID_SAMPLE);
-    buffer = ExAllocatePoolWithTag (PagedPool, length, BUSENUM_POOL_TAG);
-    if (!buffer) {
-        status = STATUS_INSUFFICIENT_RESOURCES;
-        break;
-    }
-    RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
+	buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
+	if (!buffer) {
+		status = STATUS_INSUFFICIENT_RESOURCES;
+		break;
+	}
+	RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
 	*(unsigned short *)((char *)buffer+length -2)=0;
 	DBGI(DBG_GENERAL, "dev id:%LS\r\n", buffer);
         Irp->IoStatus.Information = (ULONG_PTR) buffer;
@@ -358,7 +358,7 @@ Return Value:
         //
         length = 11 * sizeof(WCHAR);
 
-        buffer = ExAllocatePoolWithTag (PagedPool, length, BUSENUM_POOL_TAG);
+        buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
         if (!buffer) {
            status = STATUS_INSUFFICIENT_RESOURCES;
            break;
@@ -374,7 +374,7 @@ Return Value:
 	#define HARDWARE_IDS_SAMPLE L"USB\\Vid_1234&Pid_1234&Rev_1234\0USB\\Vid_1234&Pid_1234\0"
 
 		length = sizeof(HARDWARE_IDS_SAMPLE);
-		buffer = ExAllocatePoolWithTag (PagedPool, length, BUSENUM_POOL_TAG);
+		buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
 		if (!buffer) {
 			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
@@ -391,7 +391,7 @@ Return Value:
         //
 
         buffer = ExAllocatePoolWithTag (PagedPool, DeviceData->compatible_ids_len,
-				BUSENUM_POOL_TAG);
+					USBIP_VHCI_POOL_TAG);
         if (!buffer) {
            status = STATUS_INSUFFICIENT_RESOURCES;
            break;
@@ -471,8 +471,7 @@ Return Value:
             if (!Irp->IoStatus.Information) {
                 // 10 for number of digits in the serial number
                 length  = 256;
-                buffer = ExAllocatePoolWithTag (PagedPool,
-                                            length, BUSENUM_POOL_TAG);
+                buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
                 if (buffer == NULL ) {
                     status = STATUS_INSUFFICIENT_RESOURCES;
                     break;
@@ -497,14 +496,13 @@ Return Value:
            if (!Irp->IoStatus.Information) {
                 // 10 for number of digits in the serial number
                 length  = 100;
-                buffer = ExAllocatePoolWithTag (PagedPool,
-                                            length, BUSENUM_POOL_TAG);
+                buffer = ExAllocatePoolWithTag(PagedPool, length, USBIP_VHCI_POOL_TAG);
                 if (buffer == NULL ) {
                     status = STATUS_INSUFFICIENT_RESOURCES;
                     break;
                 }
 
-                RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"on USB/IP Enumerator");
+                RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"on USB/IP VHCI");
 
                 DBGI(DBG_PNP, "\tDeviceTextLocationInformation :%ws\n", buffer);
 
@@ -567,8 +565,7 @@ Return Value:
 
     resourceListSize = sizeof(CM_RESOURCE_LIST);
 
-    resourceList = ExAllocatePoolWithTag (PagedPool,
-                        resourceListSize, BUSENUM_POOL_TAG);
+    resourceList = ExAllocatePoolWithTag (PagedPool, resourceListSize, USBIP_VHCI_POOL_TAG);
 
     if (resourceList == NULL ) {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -666,7 +663,7 @@ Return Value:
     resourceList = ExAllocatePoolWithTag (
                        PagedPool,
                        resourceListSize,
-                       BUSENUM_POOL_TAG);
+                       USBIP_VHCI_POOL_TAG);
 
     if (resourceList == NULL ) {
         status = STATUS_INSUFFICIENT_RESOURCES;
@@ -762,7 +759,7 @@ Return Value:
             ASSERTMSG("Someone above is handling TagerDeviceRelation", !deviceRelations);
         }
 
-        deviceRelations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag (PagedPool, sizeof(DEVICE_RELATIONS), BUSENUM_POOL_TAG);
+        deviceRelations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag (PagedPool, sizeof(DEVICE_RELATIONS), USBIP_VHCI_POOL_TAG);
         if (!deviceRelations) {
                 status = STATUS_INSUFFICIENT_RESOURCES;
                 break;
@@ -820,8 +817,7 @@ Return Value:
 
 	UNREFERENCED_PARAMETER(DeviceData);
 
-    busInfo = ExAllocatePoolWithTag (PagedPool, sizeof(PNP_BUS_INFORMATION),
-                                        BUSENUM_POOL_TAG);
+    busInfo = ExAllocatePoolWithTag (PagedPool, sizeof(PNP_BUS_INFORMATION), USBIP_VHCI_POOL_TAG);
 
     if (busInfo == NULL) {
       return STATUS_INSUFFICIENT_RESOURCES;

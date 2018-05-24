@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27428.2043
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "USBIPEnum", "driver\USBIPEnum.vcxproj", "{F35A874E-E790-44B5-9C14-749C8854A0C4}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vhci", "driver\vhci\usbip_vhci.vcxproj", "{F35A874E-E790-44B5-9C14-749C8854A0C4}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip_common", "userspace\libsrc\usbip_common.vcxproj", "{2C173853-88C0-4334-85BF-0B46CFD5A007}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip_common", "userspace\lib\usbip_common.vcxproj", "{2C173853-88C0-4334-85BF-0B46CFD5A007}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip", "userspace\src\usbip.vcxproj", "{36CEE68D-D6CF-4413-978C-794488F44555}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip", "userspace\src\usbip\usbip.vcxproj", "{36CEE68D-D6CF-4413-978C-794488F44555}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

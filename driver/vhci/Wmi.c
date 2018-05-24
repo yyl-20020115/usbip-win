@@ -1,9 +1,9 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include <wmistr.h>
 
 #include "device.h"
-#include "usbipenum_api.h"
+#include "usbip_vhci_api.h"
 #include "globals.h"
 
 WMI_SET_DATAITEM_CALLBACK Bus_SetWmiDataItem;
@@ -18,7 +18,7 @@ WMI_QUERY_REGINFO_CALLBACK Bus_QueryWmiRegInfo;
 #pragma alloc_text(PAGE,Bus_QueryWmiRegInfo)
 #endif
 
-#define MOFRESOURCENAME L"BusEnumWMI"
+#define MOFRESOURCENAME L"USBIPVhciWMI"
 
 #define NUMBER_OF_WMI_GUIDS                 1
 #define WMI_USBIP_BUS_DRIVER_INFORMATION  0

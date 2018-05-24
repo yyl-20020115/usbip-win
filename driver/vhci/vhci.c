@@ -1,10 +1,10 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include <usbdi.h>
 
 #include "globals.h"
 #include "usbreq.h"
-#include "pnp.h"
+#include "vhci_pnp.h"
 
 //
 // Global Debug Level
@@ -207,7 +207,7 @@ DriverEntry(__in  PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING RegistryPath
 
 	Globals.RegistryPath.MaximumLength = RegistryPath->Length + sizeof(UNICODE_NULL);
 	Globals.RegistryPath.Length = RegistryPath->Length;
-	Globals.RegistryPath.Buffer = ExAllocatePoolWithTag(PagedPool, Globals.RegistryPath.MaximumLength, BUSENUM_POOL_TAG);
+	Globals.RegistryPath.Buffer = ExAllocatePoolWithTag(PagedPool, Globals.RegistryPath.MaximumLength, USBIP_VHCI_POOL_TAG);
 
 	if (!Globals.RegistryPath.Buffer) {
 		return STATUS_INSUFFICIENT_RESOURCES;

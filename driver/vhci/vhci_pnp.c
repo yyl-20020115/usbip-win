@@ -1,7 +1,7 @@
-#include "driver.h"
+#include "vhci.h"
 
-#include "usbipenum_api.h"
-#include "pnp.h"
+#include "usbip_vhci_api.h"
+#include "vhci_pnp.h"
 #include "usbreq.h"
 
 #define INITIALIZE_PNP_STATE(_Data_)    \
@@ -124,7 +124,7 @@ Arguments:
 
     status = IoRegisterDeviceInterface (
                 PhysicalDeviceObject,
-                (LPGUID) &GUID_DEVINTERFACE_BUSENUM_USBIP,
+                (LPGUID) &GUID_DEVINTERFACE_VHCI_USBIP,
                 NULL,
                 &deviceData->InterfaceName);
 
@@ -167,8 +167,7 @@ Arguments:
 	    goto End;
     }
 
-    deviceName = ExAllocatePoolWithTag (NonPagedPool,
-                            nameLength, BUSENUM_POOL_TAG);
+    deviceName = ExAllocatePoolWithTag (NonPagedPool, nameLength, USBIP_VHCI_POOL_TAG);
 
     if (NULL == deviceName) {
 	    DBGE(DBG_PNP, "AddDevice: no memory to alloc for deviceName(0x%x)\n", nameLength);
@@ -283,7 +282,7 @@ query Device relations IRPS.
 	PAGED_CODE();
 
 	//
-	// BusEnum does not queue any irps at this time so we have nothing to do.
+	// VHCI does not queue any irps at this time so we have nothing to do.
 	//
 	//
 	// Free any resources.
@@ -822,7 +821,7 @@ Routine Description:
                 ((numPdosPresent + prevcount) * sizeof (PDEVICE_OBJECT)) -1;
 
         relations = (PDEVICE_RELATIONS) ExAllocatePoolWithTag (PagedPool,
-                                        length, BUSENUM_POOL_TAG);
+                                        length, USBIP_VHCI_POOL_TAG);
 
         if (NULL == relations) {
             //
@@ -1060,7 +1059,7 @@ bus_init_pdo(__out PDEVICE_OBJECT pdo, PFDO_DEVICE_DATA fdodata)
 }
 
 PAGEABLE NTSTATUS
-bus_get_ports_status(ioctl_usbvbus_get_ports_status *st, PFDO_DEVICE_DATA  fdodata, ULONG *info)
+bus_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, PFDO_DEVICE_DATA  fdodata, ULONG *info)
 {
     PPDO_DEVICE_DATA    pdodata;
     PLIST_ENTRY         entry;
@@ -1172,7 +1171,7 @@ bus_unplug_dev (
 }
 
 PAGEABLE NTSTATUS
-Bus_EjectDevice(PBUSENUM_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData)
+Bus_EjectDevice(PUSBIP_VHCI_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData)
 /*++
 Routine Description:
     The user application has told us to eject the device from the bus.

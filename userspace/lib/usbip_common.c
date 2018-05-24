@@ -7,7 +7,7 @@
 #include "usbip_common.h"
 #include "names.h"
 
-#include "usbipenum_api.h"
+#include "usbip_vhci_api.h"
 
 int usbip_use_stderr;
 int usbip_use_debug;

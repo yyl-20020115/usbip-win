@@ -1,4 +1,4 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include "usbip_proto.h"
 #include "usbreq.h"

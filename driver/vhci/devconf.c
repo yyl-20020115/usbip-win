@@ -1,7 +1,7 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include "devconf.h"
-#include "usbipenum_api.h"
+#include "usbip_vhci_api.h"
 
 #define MAKE_PIPE(ep, type, interval) ((USBD_PIPE_HANDLE)((ep) | ((interval) << 8) | ((type) << 16)))
 
@@ -63,7 +63,7 @@ alloc_devconf_from_urb(struct _URB_CONTROL_DESCRIPTOR_REQUEST *urb_desc)
 		return NULL;
 	}
 
-	devconf = ExAllocatePoolWithTag(NonPagedPool, len, BUSENUM_POOL_TAG);
+	devconf = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
 	if (devconf == NULL) {
 		DBGE(DBG_GENERAL, "out of memory");
 		return NULL;

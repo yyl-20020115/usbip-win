@@ -1,21 +1,21 @@
-#include "driver.h"
+#include "vhci.h"
 
 #include "usbreq.h"
 #include "devconf.h"
-#include "pnp.h"
-#include "usbipenum_api.h"
+#include "vhci_pnp.h"
+#include "usbip_vhci_api.h"
 
 extern NTSTATUS
 submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP Irp);
 
 extern PAGEABLE NTSTATUS
-bus_plugin_dev(ioctl_usbvbus_plugin *plugin, PFDO_DEVICE_DATA dev_data, PFILE_OBJECT fo);
+bus_plugin_dev(ioctl_usbip_vhci_plugin *plugin, PFDO_DEVICE_DATA dev_data, PFILE_OBJECT fo);
 
 extern PAGEABLE NTSTATUS
-bus_get_ports_status(ioctl_usbvbus_get_ports_status *st, PFDO_DEVICE_DATA dev_data, ULONG *info);
+bus_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, PFDO_DEVICE_DATA dev_data, ULONG *info);
 
 extern PAGEABLE NTSTATUS
-Bus_EjectDevice(PBUSENUM_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData);
+Bus_EjectDevice(PUSBIP_VHCI_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData);
 
 static NTSTATUS
 process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
@@ -202,24 +202,24 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	status = STATUS_INVALID_PARAMETER;
 
 	switch (ioctl_code) {
-	case IOCTL_USBVBUS_PLUGIN_HARDWARE:
-		if (sizeof(ioctl_usbvbus_plugin) == inlen) {
-			status = bus_plugin_dev((ioctl_usbvbus_plugin *)buffer, fdoData, irpStack->FileObject);
+	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
+		if (sizeof(ioctl_usbip_vhci_plugin) == inlen) {
+			status = bus_plugin_dev((ioctl_usbip_vhci_plugin *)buffer, fdoData, irpStack->FileObject);
 		}
 		break;
-	case IOCTL_USBVBUS_GET_PORTS_STATUS:
-		if (sizeof(ioctl_usbvbus_get_ports_status) == outlen) {
-			status = bus_get_ports_status((ioctl_usbvbus_get_ports_status *)buffer, fdoData, &info);
+	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
+		if (sizeof(ioctl_usbip_vhci_get_ports_status) == outlen) {
+			status = bus_get_ports_status((ioctl_usbip_vhci_get_ports_status *)buffer, fdoData, &info);
 		}
 		break;
-	case IOCTL_USBVBUS_UNPLUG_HARDWARE:
-		if (sizeof(ioctl_usbvbus_unplug) == inlen) {
-			status = bus_unplug_dev(((ioctl_usbvbus_unplug *)buffer)->addr, fdoData);
+	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
+		if (sizeof(ioctl_usbip_vhci_unplug) == inlen) {
+			status = bus_unplug_dev(((ioctl_usbip_vhci_unplug *)buffer)->addr, fdoData);
 		}
 		break;
-	case IOCTL_USBVBUS_EJECT_HARDWARE:
-		if (inlen == sizeof(BUSENUM_EJECT_HARDWARE) && ((PBUSENUM_EJECT_HARDWARE)buffer)->Size == inlen) {
-			status = Bus_EjectDevice((PBUSENUM_EJECT_HARDWARE)buffer, fdoData);
+	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
+		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen) {
+			status = Bus_EjectDevice((PUSBIP_VHCI_EJECT_HARDWARE)buffer, fdoData);
 		}
 		break;
 	default:

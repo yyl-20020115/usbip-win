@@ -1,6 +1,6 @@
 ;/*++
 ;
-;    INF file for installing USB/IP bus enumerator driver
+;    INF file for installing USB/IP vhci driver
 ;
 ;--*/
 [Version]
@@ -11,13 +11,13 @@ Signature="$WINDOWS NT$"
 Class=System
 ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
 Provider=%OpenSource%
-CatalogFile=USBIPEnum.cat
+CatalogFile=usbip_vhci.cat
 
 [Manufacturer]
 %StdMfg%=Standard,NT$ARCH$
 
 [Standard.NT$ARCH$]
-%DeviceDesc%=USBIPEnum_Device, root\USBIPEnum
+%DeviceDesc%=usbip_vhci_Device, root\usbip_vhci
 
 [DestinationDirs]
 DefaultDestDir = 12
@@ -26,34 +26,34 @@ DefaultDestDir = 12
 1 = %DiskId1%,,,""
 
 [SourceDisksFiles]
-USBIPEnum.sys  = 1,,
+usbip_vhci.sys  = 1,,
 
 [Drivers_Dir]
-USBIPEnum.sys
+usbip_vhci.sys
 
-[USBIPEnum_Device.NT$ARCH$]
+[usbip_vhci_Device.NT$ARCH$]
 CopyFiles=Drivers_Dir
 
-[USBIPEnum_Device.NT$ARCH$.HW]
-AddReg=USBIPEnum_Device_AddReg
+[usbip_vhci_Device.NT$ARCH$.HW]
+AddReg=usbip_vhci_Device_AddReg
 
-[USBIPEnum_Device_AddReg]                            
+[usbip_vhci_Device_AddReg]                            
 HKR,,DeviceCharacteristics,0x10001,0x0100         ; Use same security checks on relative opens
 ;Using default permissions so comment out next lines
 ;HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GRGWGX;;;BA)(A;;GRGWGX;;;WD)(A;;GRGWGX;;;RC)"      ; Allow generic-all access to all users
 ;HKR,,Security,,"D:P(A;;GA;;;BA)(A;;GA;;;SY)"      ; Allow generic-all access to Built-in administrators and Local system 
 
 ;-------------- Service installation
-[USBIPEnum_Device.NT$ARCH$.Services]
-AddService = USBIPEnum,%SPSVCINST_ASSOCSERVICE%, USBIPEnum_Service_Inst
+[usbip_vhci_Device.NT$ARCH$.Services]
+AddService = usbip_vhci,%SPSVCINST_ASSOCSERVICE%, usbip_vhci_Service_Inst
 
-; -------------- busenum driver install sections
-[USBIPEnum_Service_Inst]
+; -------------- vhci driver install sections
+[usbip_vhci_Service_Inst]
 DisplayName    = %ServiceDesc%
 ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
 StartType      = 3               ; SERVICE_DEMAND_START 
 ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
-ServiceBinary  = %12%\USBIPEnum.sys
+ServiceBinary  = %12%\usbip_vhci.sys
 LoadOrderGroup = Extended Base
 
 
@@ -61,6 +61,6 @@ LoadOrderGroup = Extended Base
 SPSVCINST_ASSOCSERVICE= 0x00000002
 OpenSource = "Open Source"
 StdMfg = "USB/IP Project"
-DiskId1 = "USB/IP Enumerator Disk"
-DeviceDesc = "USB/IP Enumerator"
-ServiceDesc = "USB/IP Enumerator Service"
+DiskId1 = "USB/IP VHCI Disk"
+DeviceDesc = "USB/IP VHCI"
+ServiceDesc = "USB/IP VHCI Service"
