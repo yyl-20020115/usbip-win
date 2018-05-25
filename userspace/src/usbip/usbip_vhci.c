@@ -4,6 +4,7 @@
 #include "usbip_windows.h"
 
 #include <setupapi.h>
+#include <stdlib.h>
 
 #include "usbip_vhci_api.h"
 

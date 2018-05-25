@@ -178,6 +178,7 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code);
 int usbip_net_set_reuseaddr(SOCKET sockfd);
 int usbip_net_set_nodelay(SOCKET sockfd);
 int usbip_net_set_keepalive(SOCKET sockfd);
+int usbip_net_set_v6only(SOCKET sockfd);
 SOCKET usbip_net_tcp_connect(const char *hostname, const char *port);
 
 #endif /* __USBIP_NETWORK_H */

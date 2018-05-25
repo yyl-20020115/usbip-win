@@ -3,6 +3,8 @@
  * Copyright (C) 2005-2007 Takahiro Hirofuchi
  */
 
+#include <winsock2.h>
+
 #include "usbip_windows.h"
 
 #include "usbip_common.h"

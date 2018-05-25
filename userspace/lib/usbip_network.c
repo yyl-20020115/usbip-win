@@ -208,9 +208,21 @@ int usbip_net_set_keepalive(SOCKET sockfd)
 	const int val = 1;
 	int ret;
 
-	ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void*)&val, sizeof(val));
+	ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void *)&val, sizeof(val));
 	if (ret < 0)
 		dbg("setsockopt: SO_KEEPALIVE");
+
+	return ret;
+}
+
+int usbip_net_set_v6only(SOCKET sockfd)
+{
+	const int val = 1;
+	int ret;
+
+	ret = setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&val, sizeof(val));
+	if (ret < 0)
+		dbg("setsockopt: IPV6_V6ONLY");
 
 	return ret;
 }

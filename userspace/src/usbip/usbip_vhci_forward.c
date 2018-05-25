@@ -1,9 +1,10 @@
 #include "usbip_windows.h"
 
 #include <signal.h>
+#include <stdlib.h>
 
 #include "usbip_proto.h"
-#include "../usbip_network.h"
+#include "usbip_network.h"
 
 #define FORWARD_BUFSIZE 1000000
 

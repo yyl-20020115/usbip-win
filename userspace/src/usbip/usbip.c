@@ -25,6 +25,8 @@
 #include "usbip_network.h"
 #include "usbip.h"
 
+#include <stdlib.h>
+
 static int usbip_help(int argc, char *argv[]);
 static int usbip_version(int argc, char *argv[]);
 

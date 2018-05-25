@@ -1,6 +1,11 @@
 #pragma once
 
 #include <guiddef.h>
+#ifdef _NTDDK_
+#include <ntddk.h>
+#else
+#include <winioctl.h>
+#endif
 
 //
 // Define an Interface Guid for bus vhci class.

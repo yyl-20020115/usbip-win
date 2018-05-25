@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -19,8 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{36CEE68D-D6CF-4413-978C-794488F44555}</ProjectGuid>
-    <RootNamespace>usbip</RootNamespace>
+    <ProjectGuid>{0C5C92AA-37F0-4521-86EA-76F32B43E7B4}</ProjectGuid>
+    <RootNamespace>usbipd</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -145,17 +145,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="usbip.c" />
-    <ClCompile Include="usbip_attach.c" />
-    <ClCompile Include="usbip_detach.c" />
-    <ClCompile Include="usbip_list.c" />
-    <ClCompile Include="usbip_vhci.c" />
-    <ClCompile Include="usbip_vhci_forward.c" />
+    <ClCompile Include="usbipd.c" />
+    <ClCompile Include="usbipd_accept.c" />
+    <ClCompile Include="usbipd_import.c" />
+    <ClCompile Include="usbipd_list.c" />
+    <ClCompile Include="usbipd_sock.c" />
+    <ClCompile Include="usbip_host.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\config.h" />
-    <ClInclude Include="usbip.h" />
-    <ClInclude Include="usbip_vhci.h" />
+    <ClInclude Include="usbipd.h" />
+    <ClInclude Include="usbip_host.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\lib\usbip_common.vcxproj">

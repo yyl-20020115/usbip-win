@@ -19,6 +19,7 @@
 #include "usbip_windows.h"
 
 #include "usbip_common.h"
+#include "usbip_vhci.h"
 
 static const char usbip_detach_usage_string[] =
 	"usbip detach <args>\n"

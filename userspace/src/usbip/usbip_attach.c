@@ -20,6 +20,7 @@
 
 #include "usbip_common.h"
 #include "usbip_network.h"
+#include "usbip_vhci.h"
 
 static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
