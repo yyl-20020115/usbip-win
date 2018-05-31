@@ -19,38 +19,26 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="vhci.c" />
-    <ClCompile Include="vhci_dbg.c" />
-    <ClCompile Include="vhci_ioctl.c" />
-    <ClCompile Include="vhci_pdo.c" />
-    <ClCompile Include="vhci_read.c" />
-    <ClCompile Include="vhci_write.c" />
-    <ClCompile Include="devconf.c" />
-    <ClCompile Include="vhci_plugin.c" />
-    <ClCompile Include="vhci_pnp.c" />
-    <ClCompile Include="vhci_power.c" />
-    <ClCompile Include="usbip_proto.c" />
-    <ClCompile Include="usbreq.c" />
-    <ClCompile Include="wmi.c" />
+    <ClCompile Include="stub_dbg.c" />
+    <ClCompile Include="stub_dev.c" />
+    <ClCompile Include="stub_dispatch.c" />
+    <ClCompile Include="stub_driver.c" />
+    <ClCompile Include="stub_ioctl.c" />
+    <ClCompile Include="stub_irp.c" />
+    <ClCompile Include="stub_pnp.c" />
+    <ClCompile Include="stub_power.c" />
+    <ClCompile Include="stub_reg.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\usbip_vhci_api.h" />
-    <ClInclude Include="..\..\include\usbip_proto.h" />
-    <ClInclude Include="basetype.h" />
-    <ClInclude Include="vhci.h" />
-    <ClInclude Include="vhci_dbg.h" />
-    <ClInclude Include="devconf.h" />
-    <ClInclude Include="device.h" />
-    <ClInclude Include="globals.h" />
-    <ClInclude Include="vhci_pnp.h" />
-    <ClInclude Include="trace.h" />
-    <ClInclude Include="usbreq.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Inf Include="usbip_vhci.inf" />
+    <ClInclude Include="..\..\include\usbip_stub_api.h" />
+    <ClInclude Include="stub_dbg.h" />
+    <ClInclude Include="stub_dev.h" />
+    <ClInclude Include="stub_driver.h" />
+    <ClInclude Include="stub_irp.h" />
+    <ClInclude Include="stub_reg.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{F35A874E-E790-44B5-9C14-749C8854A0C4}</ProjectGuid>
+    <ProjectGuid>{08230AFF-8015-437B-9DF1-AF8D0112DF59}</ProjectGuid>
     <TemplateGuid>{497e31cb-056b-4f31-abb8-447fd55ee5a5}</TemplateGuid>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <MinimumVisualStudioVersion>12.0</MinimumVisualStudioVersion>
@@ -130,7 +118,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <WppEnabled>true</WppEnabled>
+      <WppEnabled>false</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
@@ -145,7 +133,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <WppEnabled>true</WppEnabled>
+      <WppEnabled>false</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
@@ -160,7 +148,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WppEnabled>true</WppEnabled>
+      <WppEnabled>false</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
@@ -175,7 +163,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <WppEnabled>true</WppEnabled>
+      <WppEnabled>false</WppEnabled>
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>

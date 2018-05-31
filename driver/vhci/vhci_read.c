@@ -441,7 +441,7 @@ process_urb_req(PIRP irp, struct urb_req *urb_r)
 		status = store_urb_reset_dev(irp, urb_r);
 		break;
 	default:
-		DBGW(DBG_READ, "unhandled ioctl: %s\n", dbg_ioctl_code(ioctl_code));
+		DBGW(DBG_READ, "unhandled ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 		irp->IoStatus.Information = 0;
 		status = STATUS_INVALID_PARAMETER;
 		break;

@@ -104,7 +104,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
 
-	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_ioctl_code(ioctl_code));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 
 	if (commonData->IsFDO) {
 		DBGW(DBG_IOCTL, "internal ioctl for fdo is not allowed\n");
@@ -134,7 +134,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = submit_urb_req(pdoData, Irp);
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", dbg_ioctl_code(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", dbg_vhci_ioctl_code(ioctl_code));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
@@ -183,7 +183,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
-	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_ioctl_code(ioctl_code));
+	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 
 	Bus_IncIoCount(fdoData);
 
@@ -223,7 +223,7 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		}
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled ioctl: %s", dbg_ioctl_code(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled ioctl: %s", dbg_vhci_ioctl_code(ioctl_code));
 		break;
 	}
 

@@ -297,7 +297,7 @@ process_urb_res(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r, struct usbip_he
 	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
 	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
 
-	DBGI(DBG_WRITE, "process_urb_res: urb_r:%s, ioctl:%s\n", dbg_urb_req(urb_r), dbg_ioctl_code(ioctl_code));
+	DBGI(DBG_WRITE, "process_urb_res: urb_r:%s, ioctl:%s\n", dbg_urb_req(urb_r), dbg_vhci_ioctl_code(ioctl_code));
 
 	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
@@ -305,7 +305,7 @@ process_urb_res(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r, struct usbip_he
 	case IOCTL_INTERNAL_USB_RESET_PORT:
 		return STATUS_SUCCESS;
 	default:
-		DBGE(DBG_WRITE, "unhandled ioctl: %s\n", dbg_ioctl_code(ioctl_code));
+		DBGE(DBG_WRITE, "unhandled ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 		return STATUS_INVALID_PARAMETER;
 	}
 }
