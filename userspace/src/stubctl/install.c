@@ -1,9 +1,9 @@
 #include "stubctl.h"
 
-extern BOOL install_driver_service(void);
-extern BOOL uninstall_driver_service(void);
-extern BOOL insert_device_filter(const char *id_hw);
-extern BOOL remove_device_filter(const char *id_hw);
+#include "usbip_stub.h"
+
+BOOL install_driver_service(void);
+BOOL uninstall_driver_service(void);
 
 static BOOL
 is_admin(void)
@@ -25,7 +25,7 @@ is_admin(void)
 }
 
 int
-install_stub_driver(const char *id_hw)
+install_stub_driver(devno_t devno)
 {
 	if (!is_admin()) {
 		err("requires administrative privileges.\n");
@@ -47,15 +47,15 @@ install_stub_driver(const char *id_hw)
 	}
 #endif
 
-	if (id_hw == NULL) {
+	if (devno == 0) {
 		install_driver_service();
 	}
 	else {
-		if (insert_device_filter(id_hw)) {
-			info("filter inserted successfully: %s", id_hw);
+		if (attach_stub_driver(devno)) {
+			info("filter inserted successfully: %hhu", devno);
 		}
 		else {
-			info("failed to insert filter: %s", id_hw);
+			info("failed to insert filter: %hhu", devno);
 		}
 	}
 #if 0 ///TODO
@@ -102,7 +102,7 @@ install_stub_driver(const char *id_hw)
 }
 
 int
-uninstall_stub_driver(const char *id_hw)
+uninstall_stub_driver(devno_t devno)
 {
 #if 0 ////TODO
 	if (filter_context->switches.switches_value ||
@@ -127,10 +127,10 @@ uninstall_stub_driver(const char *id_hw)
 	}
 #endif
 
-	if (id_hw == NULL)
+	if (devno == 0)
 		uninstall_driver_service();
 	else
-		remove_device_filter(id_hw);
+		detach_stub_driver(devno);
 
 #if 0
 	// rollback/uninstall devices using inf files

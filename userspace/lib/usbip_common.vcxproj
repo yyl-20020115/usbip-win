@@ -149,6 +149,8 @@
     <ClCompile Include="usbip_common.c" />
     <ClCompile Include="getopt.c" />
     <ClCompile Include="getopt_long.c" />
+    <ClCompile Include="usbip_setupdi.c" />
+    <ClCompile Include="usbip_stub.c" />
     <ClCompile Include="usbip_windows.c" />
     <ClCompile Include="usbip_network.c" />
   </ItemGroup>
@@ -156,9 +158,10 @@
     <ClInclude Include="..\config.h" />
     <ClInclude Include="list.h" />
     <ClInclude Include="names.h" />
-    <ClInclude Include="types_for_win.h" />
     <ClInclude Include="usbip_common.h" />
     <ClInclude Include="getopt.h" />
+    <ClInclude Include="usbip_setupdi.h" />
+    <ClInclude Include="usbip_stub.h" />
     <ClInclude Include="usbip_windows.h" />
     <ClInclude Include="usbip_network.h" />
   </ItemGroup>

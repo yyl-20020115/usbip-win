@@ -1,11 +1,13 @@
 #include "stubctl.h"
 
+#include "usbip_setupdi.h"
+
 #include <stdlib.h>
 
 extern int install_stub_driver(const char *id_hw);
 extern int uninstall_stub_driver(const char *id_hw);
 
-const char	*id_hw_arg;
+devno_t	devno;
 
 typedef enum {
 	MODE_NONE,
@@ -19,8 +21,8 @@ static void
 stubctl_usage(void)
 {
 	printf(
-"stubctl --install/-i [id hw]\n"
-"        --uninstall/-u [hw id]\n"
+"stubctl --install/-i [devno]\n"
+"        --uninstall/-u [devno]\n"
 	);
 }
 
@@ -60,7 +62,7 @@ parse_args(int argc, char *argv[])
 			exit(1);
 		}
 	}
-	id_hw_arg = argv[optind];
+	scanf_s(argv[optind], "%hhu", &devno);
 }
 
 int
@@ -72,9 +74,9 @@ main(int argc, char *argv[])
 
 	switch (mode) {
 	case MODE_INSTALL:
-		return install_stub_driver(id_hw_arg);
+		return install_stub_driver(devno);
 	case MODE_UNINSTALL:
-		return uninstall_stub_driver(id_hw_arg);
+		return uninstall_stub_driver(devno);
 	default:
 		stubctl_usage();
 		return 1;

@@ -79,20 +79,18 @@ static const struct command cmds[] = {
 		"List exportable or local USB devices",
 		usbip_list_usage
 	},
-#if 0
 	{
 		"bind",
 		usbip_bind,
-		"Bind device to " USBIP_HOST_DRV_NAME ".ko",
+		"Bind device to usbip stub",
 		usbip_bind_usage
 	},
 	{
 		"unbind",
 		usbip_unbind,
-		"Unbind device from " USBIP_HOST_DRV_NAME ".ko",
+		"Unbind device from usbip stub",
 		usbip_unbind_usage
 	},
-#endif
 	{ NULL, NULL, NULL, NULL }
 };
 

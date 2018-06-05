@@ -1,5 +1,7 @@
 #include "stubctl.h"
 
+#include "usbip_stub.h"
+
 #define DRIVER_DISPLAY	"usbip stub driver"
 #define DRIVER_PATH	"system32\\drivers\\usbip_stub.sys"
 
@@ -19,7 +21,7 @@ create_driver_service(void)
 		return FALSE;
 	}
 
-	hSvc = OpenService(hScm, DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
+	hSvc = OpenService(hScm, STUB_DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
 	if (hSvc != NULL) {
 		if (ChangeServiceConfig(hSvc, SERVICE_KERNEL_DRIVER, SERVICE_DEMAND_START,
 					SERVICE_ERROR_NORMAL, DRIVER_PATH,
@@ -30,7 +32,7 @@ create_driver_service(void)
 		}
 	}
 	else if (GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
-		hSvc = CreateService(hScm, DRIVER_SVCNAME, DRIVER_DISPLAY, GENERIC_EXECUTE,
+		hSvc = CreateService(hScm, STUB_DRIVER_SVCNAME, DRIVER_DISPLAY, GENERIC_EXECUTE,
 				     SERVICE_KERNEL_DRIVER, SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL, DRIVER_PATH,
 				     NULL, NULL, NULL, NULL, NULL);
 		if (hSvc != NULL)
@@ -88,7 +90,7 @@ stop_driver_service(void)
 		return FALSE;
 	}
 
-	hSvc = OpenService(hScm, DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
+	hSvc = OpenService(hScm, STUB_DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
 	if (hSvc != NULL) {
 		if (check_service_stopped(hSvc))
 			res = TRUE;
@@ -117,7 +119,7 @@ delete_driver_service(void)
 		return FALSE;
 	}
 
-	hSvc = OpenService(hScm, DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
+	hSvc = OpenService(hScm, STUB_DRIVER_SVCNAME, SERVICE_ALL_ACCESS);
 	if (hSvc != NULL) {
 		if (DeleteService(hSvc))
 			res = TRUE;
