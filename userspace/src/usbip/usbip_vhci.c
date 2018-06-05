@@ -3,144 +3,44 @@
 #include "usbip_common.h"
 #include "usbip_windows.h"
 
-#include <setupapi.h>
 #include <stdlib.h>
 
+#include "usbip_setupdi.h"
 #include "usbip_vhci_api.h"
 
 static int
-find_vhci_index(HDEVINFO dev_info)
+walker_devpath(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
 {
-	SP_DEVINFO_DATA	dev_info_data;
-	int		idx;
-
-	dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
-
-	// Loop reading information from the devices until we get some error.
-	for (idx = 0;; idx++) {
-		char	hardwareID[256];
-
-		// Get device info data.
-		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data)) {
-			DWORD	err = GetLastError();
-
-			if (err != ERROR_NO_MORE_ITEMS) {
-				err("failed to get device information: err: %d\n", err);
-			}
-			return -1;
-		}
-
-		// Get hardware ID.
-		if (!SetupDiGetDeviceRegistryProperty(dev_info, &dev_info_data,
-			SPDRP_HARDWAREID, 0L, (PBYTE)hardwareID, sizeof(hardwareID), 0L)) {
-			// We got some error reading the hardware id. I'm pretty sure this isn't supposed
-			// to happen, but let's continue anyway.
-			continue;
-		}
-
-		// Check if we got the correct device.
-		if (strcmp(hardwareID, "root\\usbip_vhci") == 0)
-			return idx;
-	}
-}
-
-static BOOL
-get_vhci_intf(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
-{
-	int	idx;
-
-	idx = find_vhci_index(dev_info);
-	if (idx < 0)
-		return FALSE;
-
-	pdev_interface_data->cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
-	// Get device interfaces.
-	if (!SetupDiEnumDeviceInterfaces(dev_info, NULL, (LPGUID)&GUID_DEVINTERFACE_VHCI_USBIP,
-		idx, pdev_interface_data)) {
-		DWORD	err;
-
-		err = GetLastError();
-		// No more items here isn't supposed to happen since we checked that on the
-		// SetupDiEnumDeviceInfo, but there's no harm checking again.
-		if (err == ERROR_NO_MORE_ITEMS) {
-			err("usbip vhci interface is not registered\n");
-		}
-		else {
-			err("unknown error when get interface_data: err: %d\n", err);
-		}
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static PSP_DEVICE_INTERFACE_DETAIL_DATA
-get_vhci_intf_detail(HDEVINFO dev_info, PSP_DEVICE_INTERFACE_DATA pdev_interface_data)
-{
+	char	**pdevpath = (char **)ctx;
+	char	*id_hw;
 	PSP_DEVICE_INTERFACE_DETAIL_DATA	pdev_interface_detail;
-	unsigned long len = 0;
-	DWORD	err;
 
-	// Get required length for dev_interface_detail.
-	SetupDiGetDeviceInterfaceDetail(dev_info, pdev_interface_data, NULL, 0, &len, NULL);
-	err = GetLastError();
-	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err("SetupDiGetDeviceInterfaceDetail failed: err: %ld\n", err);
-		return NULL;
+	id_hw = get_id_hw(dev_info, pdev_info_data);
+	if (id_hw == NULL || strcmp(id_hw, "root\\usbip_vhci") != 0) {
+		err("invalid hw id: %s\n", id_hw ? id_hw : "");
+		if (id_hw != NULL)
+			free(id_hw);
+		return 0;
 	}
+	free(id_hw);
 
-	// Allocate the required memory and set the cbSize.
-	pdev_interface_detail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(len);
+	pdev_interface_detail = get_intf_detail(dev_info, pdev_info_data, (LPCGUID)&GUID_DEVINTERFACE_VHCI_USBIP);
 	if (pdev_interface_detail == NULL) {
-		err("can't malloc %lu size memory", len);
-		return NULL;
+		return 0;
 	}
 
-	pdev_interface_detail->cbSize = sizeof(PSP_DEVICE_INTERFACE_DETAIL_DATA);
-
-	// Try to get device details.
-	if (!SetupDiGetDeviceInterfaceDetail(dev_info, pdev_interface_data,
-		pdev_interface_detail, len, &len, NULL)) {
-		// Errors.
-		err("SetupDiGetDeviceInterfaceDetail failed: err: %ld", GetLastError());
-		free(pdev_interface_detail);
-		return NULL;
-	}
-
-	return pdev_interface_detail;
+	*pdevpath = _strdup(pdev_interface_detail->DevicePath);
+	free(pdev_interface_detail);
+	return -100;
 }
 
 static char *
 get_vhci_devpath(void)
 {
-	HDEVINFO	dev_info;
-	SP_DEVICE_INTERFACE_DATA	dev_interface_data;
-	PSP_DEVICE_INTERFACE_DETAIL_DATA	pdev_interface_detail;
 	char	*devpath;
 
-	// Get devices info.
-	dev_info = SetupDiGetClassDevs((LPGUID) &GUID_DEVINTERFACE_VHCI_USBIP, NULL, NULL,
-				       DIGCF_PRESENT|DIGCF_DEVICEINTERFACE);
-	if (dev_info == INVALID_HANDLE_VALUE) {
-		err("SetupDiGetClassDevs failed: %ld\n", GetLastError());
-		return FALSE;
-	}
-
-	if (!get_vhci_intf(dev_info, &dev_interface_data)) {
-		SetupDiDestroyDeviceInfoList(dev_info);
-		return FALSE;
-	}
-
-	pdev_interface_detail = get_vhci_intf_detail(dev_info, &dev_interface_data);
-	if (pdev_interface_detail == NULL) {
-		SetupDiDestroyDeviceInfoList(dev_info);
-		return FALSE;
-	}
-
-	devpath = _strdup(pdev_interface_detail->DevicePath);
-	free(pdev_interface_detail);
-
-	SetupDiDestroyDeviceInfoList(dev_info);
-
+	if (traverse_intfdevs(walker_devpath, &GUID_DEVINTERFACE_VHCI_USBIP, &devpath) != -100)
+		return NULL;
 	return devpath;
 }
 

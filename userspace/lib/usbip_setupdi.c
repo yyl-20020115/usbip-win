@@ -83,6 +83,47 @@ get_id_inst(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 	return id_inst;
 }
 
+PSP_DEVICE_INTERFACE_DETAIL_DATA
+get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pguid)
+{
+	SP_DEVICE_INTERFACE_DATA	dev_interface_data;
+	PSP_DEVICE_INTERFACE_DETAIL_DATA	pdev_interface_detail;
+	unsigned long len = 0;
+	DWORD	err;
+
+	dev_interface_data.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+	if (!SetupDiEnumDeviceInterfaces(dev_info, pdev_info_data, pguid, 0, &dev_interface_data)) {
+		err("SetupDiEnumDeviceInterfaces failed: err: 0x%lx\n", GetLastError());
+		return NULL;
+	}
+	SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data, NULL, 0, &len, NULL);
+	err = GetLastError();
+	if (err != ERROR_INSUFFICIENT_BUFFER) {
+		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx\n", err);
+		return NULL;
+	}
+
+	// Allocate the required memory and set the cbSize.
+	pdev_interface_detail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(len);
+	if (pdev_interface_detail == NULL) {
+		err("can't malloc %lu size memory", len);
+		return NULL;
+	}
+
+	pdev_interface_detail->cbSize = sizeof(PSP_DEVICE_INTERFACE_DETAIL_DATA);
+
+	// Try to get device details.
+	if (!SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data,
+		pdev_interface_detail, len, &len, NULL)) {
+		// Errors.
+		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", GetLastError());
+		free(pdev_interface_detail);
+		return NULL;
+	}
+
+	return pdev_interface_detail;
+}
+
 static unsigned char
 get_devno_from_inst_id(unsigned char devno_map[], const char *id_inst)
 {
@@ -152,6 +193,39 @@ traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
 		if (devno == 0)
 			continue;
 		ret = walker(dev_info, &dev_info_data, devno, ctx);
+		if (ret != 0)
+			break;
+	}
+
+	SetupDiDestroyDeviceInfoList(dev_info);
+	return ret;
+}
+
+int
+traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
+{
+	HDEVINFO	dev_info;
+	SP_DEVINFO_DATA	dev_info_data;
+	int	ret = 0;
+	int	idx;
+
+	dev_info = SetupDiGetClassDevs(pguid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+	if (dev_info == INVALID_HANDLE_VALUE) {
+		err("SetupDiGetClassDevs failed: 0x%lx\n", GetLastError());
+		return -1;
+	}
+
+	dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
+	for (idx = 0;; idx++) {
+		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data)) {
+			DWORD	err = GetLastError();
+
+			if (err != ERROR_NO_MORE_ITEMS) {
+				err("failed to get device information: err: %d\n", err);
+			}
+			break;
+		}
+		ret = walker(dev_info, &dev_info_data, 0, ctx);
 		if (ret != 0)
 			break;
 	}
