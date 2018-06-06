@@ -6,33 +6,6 @@
 #include "usbip_setupdi.h"
 #include "usbip_stub.h"
 
-static BOOL
-set_device_state(DWORD state, HDEVINFO dev_info, SP_DEVINFO_DATA *dev_info_data)
-{
-	SP_PROPCHANGE_PARAMS	prop_params;
-
-	memset(&prop_params, 0, sizeof(SP_PROPCHANGE_PARAMS));
-
-	prop_params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
-	prop_params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
-	prop_params.StateChange = state;
-	prop_params.Scope = DICS_FLAG_CONFIGSPECIFIC;//DICS_FLAG_GLOBAL;
-	prop_params.HwProfile = 0;
-
-	if (!SetupDiSetClassInstallParams(dev_info, dev_info_data,
-					  (SP_CLASSINSTALL_HEADER *)&prop_params, sizeof(SP_PROPCHANGE_PARAMS))) {
-		err("failed to set class install parameters\n");
-		return FALSE;
-	}
-
-	if (!SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, dev_info, dev_info_data)) {
-		err("failed to call class installer\n");
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
 static int
 walker_ctl(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
 {
@@ -40,7 +13,7 @@ walker_ctl(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, vo
 
 	info("%s devices..", *pis_start ? "starting" : "stopping");
 	if (is_service_usbip_stub(dev_info, pdev_info_data)) {
-		set_device_state(*pis_start ? DICS_ENABLE : DICS_DISABLE, dev_info, pdev_info_data);
+		set_device_state(dev_info, pdev_info_data, *pis_start ? DICS_ENABLE : DICS_DISABLE);
 	}
 	return 0;
 }

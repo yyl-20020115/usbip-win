@@ -3,7 +3,6 @@
 #include <ws2tcpip.h>
 
 #include "usbip_network.h"
-#include "usbip_host.h"
 
 static void
 setup_addrinfo_desc(struct addrinfo *ainfo, char buf[], size_t size)

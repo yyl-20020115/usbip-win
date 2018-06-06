@@ -14,7 +14,6 @@
 #include "usbipd.h"
 
 #include "usbip_network.h"
-#include "usbip_host.h"
 #include "getopt.h"
 #include "usbip_windows.h"
 
@@ -25,6 +24,7 @@
 
 extern SOCKET *get_listen_sockfds(int family);
 extern void accept_request(SOCKET *sockfds, fd_set *pfds);
+extern void init_edev(void);
 
 static const char usbip_version_string[] = PACKAGE_STRING;
 
@@ -95,11 +95,7 @@ do_standalone_mode(void)
 	int	n_sockfds;
 
 	init_socket();
-
-	if (usbip_driver_open()) {
-		cleanup_socket();
-		return 1;
-	}
+	init_edev();
 
 	set_signal();
 
@@ -108,7 +104,6 @@ do_standalone_mode(void)
 	sockfds = get_listen_sockfds(family);
 	if (sockfds == NULL) {
 		err("failed to open a listening socket");
-		usbip_driver_close();
 		cleanup_socket();
 		return 1;
 	}
@@ -133,7 +128,6 @@ do_standalone_mode(void)
 	}
 
 	info("shutting down " PROGNAME);
-	usbip_driver_close();
 	cleanup_socket();
 
 	return 0;

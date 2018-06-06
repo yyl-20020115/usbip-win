@@ -4,8 +4,8 @@
 
 #include <stdlib.h>
 
-extern int install_stub_driver(const char *id_hw);
-extern int uninstall_stub_driver(const char *id_hw);
+extern int install_stub_driver(devno_t devno);
+extern int uninstall_stub_driver(devno_t devno);
 
 devno_t	devno;
 

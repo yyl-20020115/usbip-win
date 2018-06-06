@@ -3,7 +3,7 @@
 #include <ws2tcpip.h>
 
 #include "usbip_network.h"
-#include "usbip_host.h"
+#include "usbipd_stub.h"
 
 static void
 recv_pdu(SOCKET connfd)
@@ -17,7 +17,7 @@ recv_pdu(SOCKET connfd)
 		return;
 	}
 
-	ret = usbip_refresh_device_list();
+	ret = usbipd_refresh_edevs();
 	if (ret < 0) {
 		dbg("could not refresh device list: %d", ret);
 		return;

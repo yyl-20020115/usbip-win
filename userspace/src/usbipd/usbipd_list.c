@@ -1,22 +1,22 @@
 #include "usbipd.h"
 
 #include "usbip_network.h"
-#include "usbip_host.h"
+#include "usbipd_stub.h"
 
-static LIST_HEAD(edev_list);
-static int	n_edevs;
+void get_edev_list(struct list_head **phead, int *pn_edevs);
+void put_edev_list(void);
 
 static int
-send_reply_devlist_devices(SOCKET connfd)
+send_reply_devlist_devices(SOCKET connfd, struct list_head *pedev_list)
 {
 	struct list_head	*p;
 
-	list_for_each(p, &edev_list) {
-		struct usbip_exported_device	*edev;
+	list_for_each(p, pedev_list) {
+		struct usbip_exportable_device	*edev;
 		struct usbip_usb_device			pdu_udev;
 		int	rc, i;
 
-		edev = list_entry(p, struct usbip_exported_device, node);
+		edev = list_entry(p, struct usbip_exportable_device, node);
 		dump_usb_device(&edev->udev);
 		memcpy(&pdu_udev, &edev->udev, sizeof(pdu_udev));
 		usbip_net_pack_usb_device(1, &pdu_udev);
@@ -34,8 +34,7 @@ send_reply_devlist_devices(SOCKET connfd)
 			memcpy(&pdu_uinf, &edev->uinf[i], sizeof(pdu_uinf));
 			usbip_net_pack_usb_interface(1, &pdu_uinf);
 
-			rc = usbip_net_send(connfd, &pdu_uinf,
-				sizeof(pdu_uinf));
+			rc = usbip_net_send(connfd, &pdu_uinf, sizeof(pdu_uinf));
 			if (rc < 0) {
 				err("usbip_net_send failed: pdu_uinf");
 				return -1;
@@ -48,9 +47,12 @@ send_reply_devlist_devices(SOCKET connfd)
 static int
 send_reply_devlist(SOCKET connfd)
 {
+	struct list_head	*pedev_list;
 	struct op_devlist_reply			reply;
+	int	n_edevs;
 	int	rc;
 
+	get_edev_list(&pedev_list, &n_edevs);
 	info("exportable devices: %d", n_edevs);
 
 	reply.ndev = n_edevs;
@@ -58,6 +60,7 @@ send_reply_devlist(SOCKET connfd)
 	rc = usbip_net_send_op_common(connfd, OP_REP_DEVLIST, ST_OK);
 	if (rc < 0) {
 		dbg("usbip_net_send_op_common failed: %#0x", OP_REP_DEVLIST);
+		put_edev_list();
 		return -1;
 	}
 	PACK_OP_DEVLIST_REPLY(1, &reply);
@@ -65,28 +68,23 @@ send_reply_devlist(SOCKET connfd)
 	rc = usbip_net_send(connfd, &reply, sizeof(reply));
 	if (rc < 0) {
 		dbg("usbip_net_send failed: %#0x", OP_REP_DEVLIST);
+		put_edev_list();
 		return -1;
 	}
 
-	if (send_reply_devlist_devices(connfd) < 0)
+	if (send_reply_devlist_devices(connfd, pedev_list) < 0) {
+		put_edev_list();
 		return -1;
+	}
 
+	put_edev_list();
 	return 0;
 }
 
 int
 recv_request_devlist(SOCKET connfd)
 {
-	struct op_devlist_request	req;
 	int	rc;
-
-	memset(&req, 0, sizeof(req));
-
-	rc = usbip_net_recv(connfd, &req, sizeof(req));
-	if (rc < 0) {
-		dbg("usbip_net_recv failed: devlist request");
-		return -1;
-	}
 
 	rc = send_reply_devlist(connfd);
 	if (rc < 0) {
@@ -95,20 +93,4 @@ recv_request_devlist(SOCKET connfd)
 	}
 
 	return 0;
-}
-
-struct usbip_exported_device *
-find_edev(const char *busid)
-{
-	struct list_head	*p;
-
-	list_for_each(p, &edev_list) {
-		struct usbip_exported_device *edev;
-
-		edev = list_entry(p, struct usbip_exported_device, node);
-		if (!strncmp(busid, edev->udev.busid, USBIP_BUS_ID_SIZE)) {
-			return edev;
-		}
-	}
-	return NULL;
 }

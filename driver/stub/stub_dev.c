@@ -12,13 +12,13 @@ typedef WCHAR	namebuf_t[NAMEBUF_LEN];
 static void
 build_devname(namebuf_t namebuf, int idx)
 {
-	RtlStringCchPrintfW(namebuf, sizeof(namebuf) / sizeof(WCHAR), L"\\Device\\usbip_stub_%04d", idx);
+	RtlStringCchPrintfW(namebuf, sizeof(namebuf_t) / sizeof(WCHAR), L"\\Device\\usbip_stub_%04d", idx);
 }
 
 static void
 build_linkname(namebuf_t namebuf, int idx)
 {
-	RtlStringCchPrintfW(namebuf, sizeof(namebuf) / sizeof(WCHAR), L"\\DosDevices\\usbip_stub_%04d", idx);
+	RtlStringCchPrintfW(namebuf, sizeof(namebuf_t) / sizeof(WCHAR), L"\\DosDevices\\usbip_stub_%04d", idx);
 }
 
 void
@@ -77,6 +77,7 @@ create_devobj_idx(PDRIVER_OBJECT drvobj, ULONG devtype, int idx)
 	PDEVICE_OBJECT	devobj;
 	UNICODE_STRING	devname_uni, linkname_uni;
 	namebuf_t	devname, linkname;
+	usbip_stub_dev_t	*devstub;
 	NTSTATUS	status;
 
 	build_devname(devname, idx);
@@ -84,23 +85,25 @@ create_devobj_idx(PDRIVER_OBJECT drvobj, ULONG devtype, int idx)
 
 	/* create the object */
 	status = IoCreateDevice(drvobj, sizeof(usbip_stub_dev_t), &devname_uni, devtype, 0, FALSE, &devobj);
-	if (NT_ERROR(status))
+	if (NT_ERROR(status)) {
+		if (status != STATUS_OBJECT_NAME_COLLISION)
+			DBGE(DBG_GENERAL, "create_devobj_idx: IoCreateDevice failed: %S: err: %s\n", devname, dbg_ntstatus(status));
 		return NULL;
+	}
 
 	build_linkname(linkname, idx);
 	RtlInitUnicodeString(&linkname_uni, linkname);
 	status = IoCreateSymbolicLink(&linkname_uni, &devname_uni);
-	if (NT_SUCCESS(status)) {
-		usbip_stub_dev_t	*devstub;
-
-		devstub = (usbip_stub_dev_t *)devobj->DeviceExtension;
-		RtlZeroMemory(devstub, sizeof(usbip_stub_dev_t));
-		devstub->id = idx;
-		return devobj;
+	if (NT_ERROR(status)) {
+		DBGE(DBG_GENERAL, "create_devobj_idx: IoCreateSymbolicLink failed: %S: err: %s\n", devname, dbg_ntstatus(status));
+		IoDeleteDevice(devobj);
+		return NULL;
 	}
 
-	IoDeleteDevice(devobj);
-	return NULL;
+	devstub = (usbip_stub_dev_t *)devobj->DeviceExtension;
+	RtlZeroMemory(devstub, sizeof(usbip_stub_dev_t));
+	devstub->id = idx;
+	return devobj;
 }
 
 static PDEVICE_OBJECT

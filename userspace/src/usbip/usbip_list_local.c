@@ -48,35 +48,6 @@ create_usbdev_list(void)
 	return usbdev_list;
 }
 
-static BOOL
-is_valid_usb_dev(const char *id_hw)
-{
-	if (strncmp(id_hw, "USB\\", 4) != 0)
-		return FALSE;
-	if (strncmp(id_hw + 4, "VID_", 4) != 0)
-		return FALSE;
-	if (strlen(id_hw + 8) < 4)
-		return FALSE;
-	if (strncmp(id_hw + 12, "&PID_", 5) != 0)
-		return FALSE;
-	if (strlen(id_hw + 17) < 4)
-		return FALSE;
-	return TRUE;
-}
-
-static void
-get_usbdev_info(const char *cid_hw, unsigned short *pvendor, unsigned short *pproduct)
-{
-	char	*id_hw = _strdup(cid_hw);
-
-	if (id_hw == NULL)
-		return;
-	id_hw[12] = '\0';
-	sscanf_s(id_hw + 8, "%hx", pvendor);
-	id_hw[21] = '\0';
-	sscanf_s(id_hw + 17, "%hx", pproduct);
-}
-
 static void
 add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 {
@@ -87,9 +58,10 @@ add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 		err("add_usbdev: exceed maximum usb devices");
 		return;
 	}
-	if (!is_valid_usb_dev(id_hw))
+	if (!get_usbdev_info(id_hw, &vendor, &product)) {
+		err("add_usbdev: invalid hw id: %s", id_hw);
 		return;
-	get_usbdev_info(id_hw, &vendor, &product);
+	}
 	usbdevs = (usbdev_t *)realloc(usbdev_list->usbdevs, sizeof(usbdev_t) * (usbdev_list->n_usbdevs + 1));
 	if (usbdevs == NULL) {
 		err("add_usbdev: out of memory");

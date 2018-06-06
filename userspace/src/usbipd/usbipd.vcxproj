@@ -147,15 +147,16 @@
   <ItemGroup>
     <ClCompile Include="usbipd.c" />
     <ClCompile Include="usbipd_accept.c" />
+    <ClCompile Include="usbipd_edev.c" />
     <ClCompile Include="usbipd_import.c" />
     <ClCompile Include="usbipd_list.c" />
     <ClCompile Include="usbipd_sock.c" />
-    <ClCompile Include="usbip_host.c" />
+    <ClCompile Include="usbipd_stub.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\config.h" />
     <ClInclude Include="usbipd.h" />
-    <ClInclude Include="usbip_host.h" />
+    <ClInclude Include="usbipd_stub.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\lib\usbip_common.vcxproj">

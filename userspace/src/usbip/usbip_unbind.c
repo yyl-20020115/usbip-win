@@ -40,8 +40,10 @@ walker_unbind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 
 	if (devno == *pdevno) {
 		/* gotcha */
-		if (detach_stub_driver(devno))
+		if (detach_stub_driver(devno)) {
+			restart_device(dev_info, pdev_info_data);
 			return -100;
+		}
 	}
 	return 0;
 }

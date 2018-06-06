@@ -93,13 +93,15 @@ get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pgui
 
 	dev_interface_data.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 	if (!SetupDiEnumDeviceInterfaces(dev_info, pdev_info_data, pguid, 0, &dev_interface_data)) {
-		err("SetupDiEnumDeviceInterfaces failed: err: 0x%lx\n", GetLastError());
+		DWORD	err = GetLastError();
+		if (err != ERROR_NO_MORE_ITEMS)
+			err("SetupDiEnumDeviceInterfaces failed: err: 0x%lx", err);
 		return NULL;
 	}
 	SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data, NULL, 0, &len, NULL);
 	err = GetLastError();
 	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx\n", err);
+		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", err);
 		return NULL;
 	}
 
@@ -122,6 +124,42 @@ get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pgui
 	}
 
 	return pdev_interface_detail;
+}
+
+BOOL
+set_device_state(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD state)
+{
+	SP_PROPCHANGE_PARAMS	prop_params;
+
+	memset(&prop_params, 0, sizeof(SP_PROPCHANGE_PARAMS));
+
+	prop_params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
+	prop_params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
+	prop_params.StateChange = state;
+	prop_params.Scope = DICS_FLAG_CONFIGSPECIFIC;//DICS_FLAG_GLOBAL;
+	prop_params.HwProfile = 0;
+
+	if (!SetupDiSetClassInstallParams(dev_info, pdev_info_data, (SP_CLASSINSTALL_HEADER *)&prop_params, sizeof(SP_PROPCHANGE_PARAMS))) {
+		err("failed to set class install parameters\n");
+		return FALSE;
+	}
+
+	if (!SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, dev_info, pdev_info_data)) {
+		err("failed to call class installer\n");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+BOOL
+restart_device(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
+{
+	if (!set_device_state(dev_info, pdev_info_data, DICS_DISABLE))
+		return FALSE;
+	if (!set_device_state(dev_info, pdev_info_data, DICS_ENABLE))
+		return FALSE;
+	return TRUE;
 }
 
 static unsigned char
@@ -232,4 +270,36 @@ traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 
 	SetupDiDestroyDeviceInfoList(dev_info);
 	return ret;
+}
+
+static BOOL
+is_valid_usb_dev(const char *id_hw)
+{
+	if (id_hw == NULL)
+		return FALSE;
+	if (strncmp(id_hw, "USB\\", 4) != 0)
+		return FALSE;
+	if (strncmp(id_hw + 4, "VID_", 4) != 0)
+		return FALSE;
+	if (strlen(id_hw + 8) < 4)
+		return FALSE;
+	if (strncmp(id_hw + 12, "&PID_", 5) != 0)
+		return FALSE;
+	if (strlen(id_hw + 17) < 4)
+		return FALSE;
+	return TRUE;
+}
+
+BOOL
+get_usbdev_info(const char *cid_hw, unsigned short *pvendor, unsigned short *pproduct)
+{
+	char	*id_hw = _strdup(cid_hw);
+
+	if (!is_valid_usb_dev(id_hw))
+		return FALSE;
+	id_hw[12] = '\0';
+	sscanf_s(id_hw + 8, "%hx", pvendor);
+	id_hw[21] = '\0';
+	sscanf_s(id_hw + 17, "%hx", pproduct);
+	return TRUE;
 }

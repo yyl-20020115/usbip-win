@@ -56,8 +56,10 @@ walker_bind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 
 	if (devno == *pdevno) {
 		/* gotcha */
-		if (attach_stub_driver(devno))
+		if (attach_stub_driver(devno)) {
+			restart_device(dev_info, pdev_info_data);
 			return -100;
+		}
 	}
 	return 0;
 }

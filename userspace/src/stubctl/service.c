@@ -146,21 +146,6 @@ install_driver_service(void)
 
 	start_usbip_stub_devs();
 
-#if 0 ///TODO
-	/* insert device filter drivers */
-	usb_registry_insert_device_filters(filter_context);
-
-	/* insert class filter driver */
-	usb_registry_insert_class_filter(filter_context);
-
-	if (filter_context->class_filters_modified)
-	{
-		/* restart the whole USB system so that the new drivers will be loaded */
-		usb_registry_restart_all_devices();
-		filter_context->class_filters_modified = FALSE;
-	}
-	return ret;
-#endif
 	return TRUE;
 }
 
@@ -172,21 +157,5 @@ uninstall_driver_service(void)
 		return FALSE;
 	delete_driver_service();
 
-#if 0 ///TODO
-	/* remove user specified device filters */
-	if (filter_context->device_filters || filter_context->remove_all_device_filters)
-	{
-		usb_registry_remove_device_filter(filter_context);
-	}
-	/* remove class filter driver */
-	usb_registry_remove_class_filter(filter_context);
-
-	/* unload filter drivers */
-	if (filter_context->class_filters_modified)
-	{
-		usb_registry_restart_all_devices();
-		filter_context->class_filters_modified = FALSE;
-	}
-#endif
 	return 0;
 }

@@ -1,15 +1,15 @@
 #include "usbipd.h"
 
 #include "usbip_network.h"
-#include "usbip_host.h"
+#include "usbipd_stub.h"
 
-extern struct usbip_exported_device *find_edev(const char *busid);
+extern struct usbip_exportable_device *find_edev(const char *busid);
 
 int
 recv_request_import(SOCKET sockfd)
 {
 	struct op_import_request req;
-	struct usbip_exported_device *edev;
+	struct usbip_exportable_device *edev;
 	struct usbip_usb_device pdu_udev;
 	BOOL	error = FALSE;
 	int rc;

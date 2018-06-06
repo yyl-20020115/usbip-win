@@ -134,11 +134,30 @@ on_query_capabilities_complete(PDEVICE_OBJECT devobj, IRP *irp, void *context)
 	return STATUS_SUCCESS;
 }
 
+static void
+disable_interface(usbip_stub_dev_t *devstub)
+{
+	NTSTATUS	status;
+
+	///TODO set_filter_interface_key(dev, (ULONG)-1);
+
+	status = IoSetDeviceInterfaceState(&devstub->interface_name, FALSE);
+	if (NT_ERROR(status)) {
+		DBGE(DBG_PNP, "failed to disable interface: err: %s\n", dbg_ntstatus(status));
+	}
+	if (devstub->interface_name.Buffer) {
+		RtlFreeUnicodeString(&devstub->interface_name);
+		devstub->interface_name.Buffer = NULL;
+	}
+}
+
 NTSTATUS
 stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	IO_STACK_LOCATION	*irpstack = IoGetCurrentIrpStackLocation(irp);
 	NTSTATUS	status;
+
+	DBGI(DBG_DISPATCH, "dispatch_pnp: minor: %s\n", dbg_pnp_minor(irpstack->MinorFunction));
 
 	status = lock_dev_removal(devstub);
 	if (NT_ERROR(status)) {
@@ -149,14 +168,7 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 	switch (irpstack->MinorFunction) {
 	case IRP_MN_REMOVE_DEVICE:
 		if (devstub->is_started) {
-			/////TODO set_filter_interface_key(devstub, (ULONG)-1);
-
-#if 0 /////TODO
-			status = IoSetDeviceInterfaceState(&devstub->device_interface_name, FALSE);
-			if (!NT_SUCCESS(status)) {
-				DBGE(DBG_PNP, "IRP_MN_REMOVE_DEVICE: disabling device interface failed\n");
-			}
-#endif
+			disable_interface(devstub);
 		}
 
 		devstub->is_started = FALSE;
@@ -171,9 +183,6 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		remove_devlink(devstub);
 
 #if 0 ////TODO
-		if (dev->device_interface_in_use && dev->device_interface_name.Buffer) {
-			RtlFreeUnicodeString(&dev->device_interface_name);
-		}
 		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
 #endif
 		/* delete the device object */
@@ -184,17 +193,8 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 	case IRP_MN_SURPRISE_REMOVAL:
 		devstub->is_started = FALSE;
 
-#if 0
-		if (dev->device_interface_in_use) {
-			set_filter_interface_key(dev,(ULONG)-1);
-			IoSetDeviceInterfaceState(&dev->device_interface_name, FALSE);
-			dev->device_interface_in_use=FALSE;
-			if (dev->device_interface_name.Buffer)
-			{
-				RtlFreeUnicodeString(&dev->device_interface_name);
-				dev->device_interface_name.Buffer = NULL;
-			}
-		}
+		disable_interface(devstub);
+#if 0 /////TODO
 		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
 #endif
 		status = STATUS_SUCCESS;
@@ -207,14 +207,11 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		// in the D0 state.
 		//
 		PoSetPowerState(devstub->self, DevicePowerState, devstub->power_state);
-#if 0 ///TODO
-		if (devstub->interface_in_use) {
-			status = IoSetDeviceInterfaceState(&dev->device_interface_name, TRUE);
-			if (!NT_SUCCESS(status)) {
-				DBGE(DBG_PNP, "IRP_MN_START_DEVICE: enabling device interface failed\n");
-			}
+
+		status = IoSetDeviceInterfaceState(&devstub->interface_name, TRUE);
+		if (NT_ERROR(status)) {
+			DBGE(DBG_PNP, "failed to enable interface: err: %s\n", dbg_ntstatus(status));
 		}
-#endif
 		return pass_irp_down(devstub, irp, on_start_complete, NULL);
 	case IRP_MN_STOP_DEVICE:
 		devstub->is_started = FALSE;
