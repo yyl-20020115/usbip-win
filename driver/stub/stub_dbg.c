@@ -2,6 +2,8 @@
 #include "stub_dev.h"
 
 #include <ntstrsafe.h>
+#include "dbgcode.h"
+#include "usbip_stub_api.h"
 
 #ifdef DBG
 
@@ -57,6 +59,17 @@ dbg_devstub(usbip_stub_dev_t *devstub)
 		return "<null>";
 	RtlStringCchPrintfA(buf, 512, "id:%d,hw:%s", devstub->id, devstub->id_hw);
 	return buf;
+}
+
+static namecode_t	namecodes_stub_ioctl[] = {
+	K_V(IOCTL_USBIP_STUB_GET_DESC)
+	{0,0}
+};
+
+const char *
+dbg_stub_ioctl_code(unsigned int ioctl_code)
+{
+	return dbg_namecode(namecodes_stub_ioctl, "ioctl", ioctl_code);
 }
 
 #endif

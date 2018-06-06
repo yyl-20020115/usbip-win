@@ -301,8 +301,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
-	devstub->target_dev = devstub->pdo;
-
 	/* use the same flags as the underlying object */
 	devobj->Flags |= devstub->next_stack_dev->Flags & (DO_BUFFERED_IO | DO_DIRECT_IO | DO_POWER_PAGABLE);
 

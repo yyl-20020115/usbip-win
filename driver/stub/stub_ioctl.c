@@ -20,11 +20,59 @@
 #include "stub_driver.h"
 #include "stub_dbg.h"
 #include "stub_irp.h"
+#include "usbip_stub_api.h"
+
+BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc);
+
+static NTSTATUS
+process_get_desc(usbip_stub_dev_t *devstub, IRP *irp)
+{
+	PIO_STACK_LOCATION	irpStack;
+	ULONG	outlen;
+	NTSTATUS	status = STATUS_SUCCESS;
+
+	irpStack = IoGetCurrentIrpStackLocation(irp);
+
+	outlen = irpStack->Parameters.DeviceIoControl.OutputBufferLength;
+	irp->IoStatus.Information = 0;
+	if (outlen < sizeof(ioctl_usbip_stub_getdesc_t))
+		status = STATUS_INVALID_PARAMETER;
+	else {
+		USB_DEVICE_DESCRIPTOR	desc;
+
+		if (get_usb_device_desc(devstub, &desc)) {
+			ioctl_usbip_stub_getdesc_t	*getdesc;
+			getdesc = (ioctl_usbip_stub_getdesc_t *)irp->AssociatedIrp.SystemBuffer;
+			getdesc->class = desc.bDeviceClass;
+			getdesc->subclass = desc.bDeviceSubClass;
+			getdesc->protocol = desc.bDeviceProtocol;
+			irp->IoStatus.Information = sizeof(ioctl_usbip_stub_getdesc_t);
+		}
+		else {
+			status = STATUS_UNSUCCESSFUL;
+		}
+	}
+
+	irp->IoStatus.Status = status;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+	return status;
+}
 
 NTSTATUS
 stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp)
 {
-	UNREFERENCED_PARAMETER(devstub);
+	PIO_STACK_LOCATION	irpStack;
+	ULONG			ioctl_code;
 
+	irpStack = IoGetCurrentIrpStackLocation(irp);
+	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
+	DBGI(DBG_IOCTL, "dispatch_ioctl: code: %s\n", dbg_stub_ioctl_code(ioctl_code));
+
+	switch (ioctl_code) {
+	case IOCTL_USBIP_STUB_GET_DESC:
+		return process_get_desc(devstub, irp);
+	default:
+		break;
+	}
 	return complete_irp(irp, STATUS_SUCCESS, 0);
 }

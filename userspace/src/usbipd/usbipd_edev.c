@@ -3,6 +3,7 @@
 #include "usbip_network.h"
 #include "usbipd_stub.h"
 #include "usbip_setupdi.h"
+#include "usbip_stub_api.h"
 
 static SRWLOCK	lock;
 
@@ -39,10 +40,37 @@ cleanup_edevs(void)
 	}
 }
 
+static BOOL
+get_device_desc(const char *devpath, ioctl_usbip_stub_getdesc_t *getdesc)
+{
+	HANDLE	hdev;
+	DWORD	len;
+
+	hdev = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+	if (hdev == INVALID_HANDLE_VALUE) {
+		err("cannot open device: %s", devpath);
+		return FALSE;
+	}
+	if (!DeviceIoControl(hdev, IOCTL_USBIP_STUB_GET_DESC, NULL, 0, getdesc, sizeof(ioctl_usbip_stub_getdesc_t), &len, NULL)) {
+		err("DeviceIoControl failed: err: 0x%lx", GetLastError());
+		CloseHandle(hdev);
+		return FALSE;
+	}
+	CloseHandle(hdev);
+
+	if (len != sizeof(ioctl_usbip_stub_getdesc_t)) {
+		err("DeviceIoControl failed: invalid size: len: %d", len);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 void
 add_edev(devno_t devno, const char *devpath, unsigned short vendor, unsigned short product)
 {
 	struct usbip_exportable_device	*edev;
+	ioctl_usbip_stub_getdesc_t	Getdesc;
 
 	edev = (struct usbip_exportable_device *)malloc(sizeof(struct usbip_exportable_device));
 	if (edev == NULL) {
@@ -56,7 +84,11 @@ add_edev(devno_t devno, const char *devpath, unsigned short vendor, unsigned sho
 	snprintf(edev->udev.busid, USBIP_BUS_ID_SIZE, "1-%hhu", devno);
 	edev->udev.idVendor = vendor;
 	edev->udev.idProduct = product;
-
+	if (get_device_desc(devpath, &Getdesc)) {
+		edev->udev.bDeviceClass = Getdesc.class;
+		edev->udev.bDeviceSubClass = Getdesc.subclass;
+		edev->udev.bDeviceProtocol = Getdesc.protocol;
+	}
 	list_add(&edev->node, edev_list.prev);
 	n_edevs++;
 }

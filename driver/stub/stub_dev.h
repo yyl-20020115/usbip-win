@@ -16,7 +16,6 @@ typedef struct {
 	PDEVICE_OBJECT	self;
 	PDEVICE_OBJECT	pdo;
 	PDEVICE_OBJECT	next_stack_dev;
-	PDEVICE_OBJECT	target_dev;
 	usbip_stub_remove_lock_t	remove_lock;
 	BOOLEAN		is_started;
 	POWER_STATE		power_state;

@@ -28,6 +28,7 @@
     <ClCompile Include="stub_pnp.c" />
     <ClCompile Include="stub_power.c" />
     <ClCompile Include="stub_reg.c" />
+    <ClCompile Include="stub_usbd.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\usbip_stub_api.h" />
