@@ -18,10 +18,6 @@ typedef struct {
 	PDEVICE_OBJECT	next_stack_dev;
 	usbip_stub_remove_lock_t	remove_lock;
 	BOOLEAN		is_started;
-	POWER_STATE		power_state;
-	DEVICE_POWER_STATE	device_power_states[PowerSystemMaximum];
-	BOOLEAN			power_control_disabled;
-	BOOLEAN			surprise_removal_ok;
 	int	id;
 
 	char	id_hw[256];

@@ -72,7 +72,6 @@ stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp)
 	case IOCTL_USBIP_STUB_GET_DESC:
 		return process_get_desc(devstub, irp);
 	default:
-		break;
+		return pass_irp_down(devstub, irp, NULL, NULL);
 	}
-	return complete_irp(irp, STATUS_SUCCESS, 0);
 }

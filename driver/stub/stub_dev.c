@@ -182,39 +182,6 @@ is_addable_pdo(DEVICE_OBJECT *pdo)
 	return TRUE;
 }
 
-static BOOLEAN
-is_special_wdf(PDEVICE_OBJECT pdo)
-{
-	// Device objects with an attached device using the 
-	// driver names listed here have wdf below them.  Special
-	// restrictions apply to these devices.
-	const wchar_t	*drivers_wdf[] = {
-		L"\\driver\\winusb",
-		L"\\driver\\wudfrd",
-		NULL
-	};
-	DEVICE_OBJECT	*attached;
-
-	attached = pdo->AttachedDevice;
-	while (attached) {
-		PDRIVER_OBJECT	drvobj = attached->DriverObject;
-
-		if (drvobj != NULL) {
-			int	i;
-
-			for (i = 0; drivers_wdf[i] != NULL; i++) {
-				UNICODE_STRING	name_uni;
-				RtlInitUnicodeString(&name_uni, drivers_wdf[i]);
-				if (RtlEqualUnicodeString(&drvobj->DriverName, &name_uni, TRUE))
-					return TRUE;
-			}
-		}
-
-		attached = attached->AttachedDevice;
-	}
-	return FALSE;
-}
-
 static ULONG
 get_device_type(PDEVICE_OBJECT pdo)
 {
@@ -236,7 +203,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 	DEVICE_OBJECT	*devobj;
 	usbip_stub_dev_t	*devstub;
 	ULONG		devtype;
-	BOOLEAN		has_wdf;
 	NTSTATUS	status;
 
 	DBGI(DBG_DEV, "add_device: %s\n", dbg_devices(pdo, TRUE));
@@ -244,7 +210,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 	if (!is_addable_pdo(pdo))
 		return STATUS_SUCCESS;
 
-	has_wdf = is_special_wdf(pdo);
 	devtype = get_device_type(pdo);
 
 	devobj = create_devobj(drvobj, devtype);
@@ -258,11 +223,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 
 	devstub->self = devobj;
 	devstub->pdo = pdo;
-
-	/* set initial power states */
-	devstub->power_state.DeviceState = PowerDeviceD0;
-	devstub->power_state.SystemState = PowerSystemWorking;
-	devstub->power_control_disabled = has_wdf;
 
 	/* get device properties from the registry */
 	if (!reg_get_properties(devstub)) {

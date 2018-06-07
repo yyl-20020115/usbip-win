@@ -24,8 +24,6 @@ NTSTATUS stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp);
 NTSTATUS stub_dispatch_power(usbip_stub_dev_t *devstub, IRP *irp);
 NTSTATUS stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp);
 
-void power_set_device_state(usbip_stub_dev_t *devstub, DEVICE_POWER_STATE device_state, BOOLEAN is_block);
-
 NTSTATUS
 stub_dispatch(PDEVICE_OBJECT devobj, IRP *irp)
 {
@@ -44,50 +42,9 @@ stub_dispatch(PDEVICE_OBJECT devobj, IRP *irp)
 			return complete_irp(irp, STATUS_INVALID_DEVICE_STATE, 0);
 		}
 		return stub_dispatch_power(devstub, irp);
+	case IRP_MJ_DEVICE_CONTROL:
+		return stub_dispatch_ioctl(devstub, irp);
 	default:
-		break;
-	}
-
-	/* since this driver may run as an upper filter we have to check whether */
-	/* the IRP is sent to this device object or to the lower one */
-	if (is_my_irp(devstub, irp)) {
-		switch (irpstack->MajorFunction)
-		{
-		case IRP_MJ_DEVICE_CONTROL:
-			if (devstub->is_started) {
-				return stub_dispatch_ioctl(devstub, irp);
-			}
-			else {
-				return complete_irp(irp, STATUS_INVALID_DEVICE_STATE, 0);
-			}
-		case IRP_MJ_CREATE:
-			if (devstub->is_started) {
-				// only one driver can act as power policy owner and 
-				// power_set_device_state() can only be issued by the PPO.
-				// disallow_power_control is set to true for drivers which 
-				// we know cause a BSOD on any attempt to request power irps.
-				if (devstub->power_state.DeviceState != PowerDeviceD0 && !devstub->power_control_disabled) {
-					/* power up the device, block until the call */
-					/* completes */
-					power_set_device_state(devstub, PowerDeviceD0, TRUE);
-				}
-				return complete_irp(irp, STATUS_SUCCESS, 0);
-			}
-			else {
-				return complete_irp(irp, STATUS_INVALID_DEVICE_STATE, 0);
-			}
-		case IRP_MJ_CLOSE:
-			/* release all interfaces bound to this file object */
-			///////TODO release_all_interfaces(dev, stack_location->FileObject);
-			return complete_irp(irp, STATUS_SUCCESS, 0);
-		case IRP_MJ_CLEANUP:
-			return complete_irp(irp, STATUS_SUCCESS, 0);
-		default:
-			return complete_irp(irp, STATUS_NOT_SUPPORTED, 0);
-		}
-	}
-	else {
-		/* the IRP is for the lower device object */
 		return pass_irp_down(devstub, irp, NULL, NULL);
 	}
 }
