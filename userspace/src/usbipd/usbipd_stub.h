@@ -26,18 +26,9 @@
 #include <stdint.h>
 #include "list.h"
 #include "usbip_common.h"
+#include "usbip_setupdi.h"
 
 #include <winsock2.h>
 
-struct usbip_exportable_device {
-	int32_t		status;
-	struct usbip_usb_device	udev;
-	struct list_head		node;
-	struct usbip_usb_interface	uinf[];
-};
-
-/* External API to access the driver */
-
-int usbipd_refresh_edevs(void);
-
-BOOL usbip_export_device(struct usbip_exportable_device *edev, SOCKET sockfd);
+BOOL build_udev(devno_t devno, struct usbip_usb_device *pudev);
+int usbip_export_device(devno_t devno, SOCKET sockfd);

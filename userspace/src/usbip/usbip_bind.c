@@ -32,23 +32,6 @@ void usbip_bind_usage(void)
 	printf("usage: %s", usbip_bind_usage_string);
 }
 
-unsigned char
-get_devno_from_busid(const char *busid)
-{
-	unsigned	busno;
-	unsigned char	devno;
-
-	if (sscanf_s(busid, "%u-%hhu", &busno, &devno) != 2) {
-		err("invalid busid: %s", busid);
-		return 0;
-	}
-	if (busno != 1) {
-		err("invalid busid: %s", busid);
-		return 0;
-	}
-	return devno;
-}
-
 static int
 walker_bind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
 {

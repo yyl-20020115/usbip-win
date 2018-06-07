@@ -26,8 +26,6 @@ static const char usbip_unbind_usage_string[] =
 	"usbip unbind <args>\n"
 	"    -b, --busid=<busid>    Unbind usbip stub from device on <busid>\n";
 
-unsigned char get_devno_from_busid(const char *busid);
-
 void usbip_unbind_usage(void)
 {
 	printf("usage: %s", usbip_unbind_usage_string);

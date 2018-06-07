@@ -24,7 +24,6 @@
 
 extern SOCKET *get_listen_sockfds(int family);
 extern void accept_request(SOCKET *sockfds, fd_set *pfds);
-extern void init_edev(void);
 
 static const char usbip_version_string[] = PACKAGE_STRING;
 
@@ -95,7 +94,6 @@ do_standalone_mode(void)
 	int	n_sockfds;
 
 	init_socket();
-	init_edev();
 
 	set_signal();
 

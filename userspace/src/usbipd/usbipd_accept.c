@@ -17,12 +17,6 @@ recv_pdu(SOCKET connfd)
 		return;
 	}
 
-	ret = usbipd_refresh_edevs();
-	if (ret < 0) {
-		dbg("could not refresh device list: %d", ret);
-		return;
-	}
-
 	info("received request: %#0x", code);
 	switch (code) {
 	case OP_REQ_DEVLIST:

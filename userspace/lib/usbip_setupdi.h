@@ -16,6 +16,8 @@ char *get_upper_filters(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data);
 char *get_id_inst(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data);
 PSP_DEVICE_INTERFACE_DETAIL_DATA get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pguid);
 
+devno_t get_devno_from_busid(const char *busid);
+
 BOOL get_usbdev_info(const char *id_hw, unsigned short *pvendor, unsigned short *pproduct);
 BOOL set_device_state(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD state);
 BOOL restart_device(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data);

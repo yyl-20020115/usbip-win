@@ -303,3 +303,20 @@ get_usbdev_info(const char *cid_hw, unsigned short *pvendor, unsigned short *ppr
 	sscanf_s(id_hw + 17, "%hx", pproduct);
 	return TRUE;
 }
+
+devno_t
+get_devno_from_busid(const char *busid)
+{
+	unsigned	busno;
+	devno_t		devno;
+
+	if (sscanf_s(busid, "%u-%hhu", &busno, &devno) != 2) {
+		err("invalid busid: %s", busid);
+		return 0;
+	}
+	if (busno != 1) {
+		err("invalid busid: %s", busid);
+		return 0;
+	}
+	return devno;
+}

@@ -14,11 +14,6 @@
 #include <winsock2.h>
 #include <stdlib.h>
 
-void enter_refresh_edevs(void);
-void leave_refresh_edevs(void);
-void cleanup_edevs(void);
-void add_edev(devno_t devno, const char *devpath, unsigned short vendor, unsigned short product);
-
 typedef struct {
 	const char	*id_inst;
 	char	*devpath;
@@ -60,50 +55,120 @@ get_device_path(const char *id_inst)
 	return NULL;
 }
 
-static int
-walker_refresh(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
+static BOOL
+get_device_desc(const char *devpath, ioctl_usbip_stub_getdesc_t *getdesc)
 {
-	char	*id_inst, *devpath, *id_hw;
-	unsigned short	vendor, product;
+	HANDLE	hdev;
+	DWORD	len;
 
-	id_inst = get_id_inst(dev_info, pdev_info_data);
-	if (id_inst == NULL) {
-		err("failed to get instance id");
-		return 0;
+	hdev = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+	if (hdev == INVALID_HANDLE_VALUE) {
+		err("cannot open device: %s", devpath);
+		return FALSE;
 	}
-	devpath = get_device_path(id_inst);
-	free(id_inst);
-	if (devpath == NULL) {
-		/* skip non-usbip stub device */
-		return 0;
+	if (!DeviceIoControl(hdev, IOCTL_USBIP_STUB_GET_DESC, NULL, 0, getdesc, sizeof(ioctl_usbip_stub_getdesc_t), &len, NULL)) {
+		err("DeviceIoControl failed: err: 0x%lx", GetLastError());
+		CloseHandle(hdev);
+		return FALSE;
+	}
+	CloseHandle(hdev);
+
+	if (len != sizeof(ioctl_usbip_stub_getdesc_t)) {
+		err("DeviceIoControl failed: invalid size: len: %d", len);
+		return FALSE;
 	}
 
-	id_hw = get_id_hw(dev_info, pdev_info_data);
-	if (!get_usbdev_info(id_hw, &vendor, &product)) {
-		err("failed to get hw id: %s\n", id_hw ? id_hw: "");
-		if (id_hw)
-			free(id_hw);
-		free(devpath);
-		return 0;
+	return TRUE;
+}
+
+typedef struct {
+	devno_t	devno;
+	char	*id_hw, *id_inst;
+} get_id_inst_ctx_t;
+
+static int
+walker_get_id_inst(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
+{
+	get_id_inst_ctx_t	*pctx = (get_id_inst_ctx_t *)ctx;
+
+	if (devno == pctx->devno) {
+		pctx->id_hw = get_id_hw(dev_info, pdev_info_data);
+		pctx->id_inst = get_id_inst(dev_info, pdev_info_data);
+		return -100;
 	}
-	free(id_hw);
-	add_edev(devno, devpath, vendor, product);
-	free(devpath);
 	return 0;
 }
 
-int
-usbipd_refresh_edevs(void)
+static BOOL
+get_id_from_devno(devno_t devno, char **pid_hw, char **pid_inst)
 {
-	enter_refresh_edevs();
-	cleanup_edevs();
-	traverse_usbdevs(walker_refresh, TRUE, NULL);
-	leave_refresh_edevs();
-	return 0;
+	get_id_inst_ctx_t	ctx;
+
+	ctx.devno = devno;
+	if (traverse_usbdevs(walker_get_id_inst, TRUE, &ctx) == -100) {
+		if (ctx.id_hw && ctx.id_inst) {
+			*pid_hw = ctx.id_hw;
+			*pid_inst = ctx.id_inst;
+			return TRUE;
+		}
+		if (ctx.id_hw)
+			free(ctx.id_hw);
+		if (ctx.id_inst)
+			free(ctx.id_inst);
+	}
+	return FALSE;
 }
 
 BOOL
-usbip_export_device(struct usbip_exportable_device *edev, SOCKET sockfd)
+build_udev(devno_t devno, struct usbip_usb_device *pudev)
 {
+	char	*id_hw, *id_inst;
+	char	*devpath;
+	unsigned short	vendor, product;
+	ioctl_usbip_stub_getdesc_t	Getdesc;
+
+	if (!get_id_from_devno(devno, &id_hw, &id_inst)) {
+		err("build_udev: invalid devno: %hhu", devno);
+		return FALSE;
+	}
+	devpath = get_device_path(id_inst);
+	free(id_inst);
+
+	if (devpath == NULL) {
+		err("build_udev: invalid device path: id_inst: %s", id_inst);
+		free(id_hw);
+		return FALSE;
+	}
+
+	memset(pudev, 0, sizeof(struct usbip_usb_device));
+
+	pudev->busnum = 1;
+	pudev->devnum = (int)devno;
+	snprintf(pudev->path, USBIP_DEV_PATH_MAX, devpath);
+	snprintf(pudev->busid, USBIP_BUS_ID_SIZE, "1-%hhu", devno);
+
+	if (get_usbdev_info(id_hw, &vendor, &product)) {
+		pudev->idVendor = vendor;
+		pudev->idProduct = product;
+	}
+	else {
+		err("failed to get vendor, product: hw id: %s\n", id_hw);
+	}
+	free(id_hw);
+
+	if (get_device_desc(devpath, &Getdesc)) {
+		pudev->bDeviceClass = Getdesc.class;
+		pudev->bDeviceSubClass = Getdesc.subclass;
+		pudev->bDeviceProtocol = Getdesc.protocol;
+	}
+	free(devpath);
+
 	return TRUE;
+}
+
+int
+usbip_export_device(devno_t devno, SOCKET sockfd)
+{
+	///TODO
+	return 0;
 }
