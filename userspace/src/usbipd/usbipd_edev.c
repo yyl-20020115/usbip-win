@@ -5,6 +5,8 @@
 #include "usbip_setupdi.h"
 #include "usbip_stub_api.h"
 
+#include <assert.h>
+
 static SRWLOCK	lock;
 
 static LIST_HEAD(edev_list);
@@ -37,6 +39,8 @@ cleanup_edevs(void)
 		edev = list_entry(p, struct usbip_exportable_device, node);
 		list_del(&edev->node);
 		free(edev);
+		assert(n_edevs > 0);
+		n_edevs--;
 	}
 }
 
