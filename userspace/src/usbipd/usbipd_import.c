@@ -3,6 +3,58 @@
 #include "usbip_network.h"
 #include "usbipd_stub.h"
 #include "usbip_setupdi.h"
+#include "usbip_forward.h"
+
+typedef struct {
+	HANDLE	hdev;
+	SOCKET	sockfd;
+} forwarder_ctx_t;
+
+static VOID
+forwarder_stub(PTP_CALLBACK_INSTANCE inst, PVOID ctx, PTP_WORK work)
+{
+	forwarder_ctx_t	*pctx = (forwarder_ctx_t *)ctx;
+
+	dbg("stub forwarding started");
+
+	usbip_forward(pctx->sockfd, pctx->hdev);
+
+	closesocket(pctx->sockfd);
+	CloseHandle(pctx->hdev);
+	free(pctx);
+
+	CloseThreadpoolWork(work);
+
+	dbg("stub forwarding stopped");
+}
+
+static int
+export_device(devno_t devno, SOCKET sockfd)
+{
+	PTP_WORK	work;
+	forwarder_ctx_t	*pctx;
+
+	pctx = (forwarder_ctx_t *)malloc(sizeof(forwarder_ctx_t));
+	if (pctx == NULL) {
+		err("export_device: out of memory");
+		return -1;
+	}
+	pctx->hdev = open_stub_dev(devno);
+	if (pctx->hdev == INVALID_HANDLE_VALUE) {
+		err("export_device: cannot open devno: %hhu", devno);
+		return -1;
+	}
+	pctx->sockfd = sockfd;
+
+	work = CreateThreadpoolWork(forwarder_stub, pctx, NULL);
+	if (work == NULL) {
+		err("export_device: thread pool error: %lx", GetLastError());
+		CloseHandle(pctx->hdev);
+		free(pctx);
+	}
+	SubmitThreadpoolWork(work);
+	return 0;
+}
 
 int
 recv_request_import(SOCKET sockfd)
@@ -31,7 +83,7 @@ recv_request_import(SOCKET sockfd)
 	usbip_net_set_nodelay(sockfd);
 
 	/* export device needs a TCP/IP socket descriptor */
-	rc = usbip_export_device(devno, sockfd);
+	rc = export_device(devno, sockfd);
 	if (rc < 0) {
 		err("failed to export device: %s, err:%d", req.busid, rc);
 		usbip_net_send_op_common(sockfd, OP_REP_IMPORT, ST_NA);

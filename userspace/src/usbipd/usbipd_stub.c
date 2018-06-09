@@ -166,9 +166,24 @@ build_udev(devno_t devno, struct usbip_usb_device *pudev)
 	return TRUE;
 }
 
-int
-usbip_export_device(devno_t devno, SOCKET sockfd)
+HANDLE
+open_stub_dev(devno_t devno)
 {
-	///TODO
-	return 0;
+	HANDLE	hdev;
+	char	*id_inst, *id_hw;
+	char	*devpath;
+
+	if (!get_id_from_devno(devno, &id_hw, &id_inst))
+		return INVALID_HANDLE_VALUE;
+	free(id_hw);
+
+	devpath = get_device_path(id_inst);
+	free(id_inst);
+	if (devpath == NULL)
+		return INVALID_HANDLE_VALUE;
+
+	hdev = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+	free(devpath);
+
+	return hdev;
 }

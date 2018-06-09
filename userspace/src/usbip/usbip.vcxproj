@@ -154,7 +154,6 @@
     <ClCompile Include="usbip_list_remote.c" />
     <ClCompile Include="usbip_unbind.c" />
     <ClCompile Include="usbip_vhci.c" />
-    <ClCompile Include="usbip_vhci_forward.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\config.h" />

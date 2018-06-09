@@ -21,6 +21,7 @@
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip_vhci.h"
+#include "usbip_forward.h"
 
 static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
@@ -137,7 +138,7 @@ attach_device(const char *host, const char *busid)
 		return 1;
 	}
 
-	usbip_vhci_forward(sockfd, hdev);
+	usbip_forward(sockfd, hdev);
 
 	usbip_vhci_detach_device(hdev, rhport);
 

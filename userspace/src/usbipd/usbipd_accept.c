@@ -6,10 +6,12 @@
 #include "usbipd_stub.h"
 
 static void
-recv_pdu(SOCKET connfd)
+recv_pdu(SOCKET connfd, BOOL *pneed_close_sockfd)
 {
 	uint16_t	code = OP_UNSPEC;
 	int	ret;
+
+	*pneed_close_sockfd = TRUE;
 
 	ret = usbip_net_recv_op_common(connfd, &code);
 	if (ret < 0) {
@@ -24,6 +26,8 @@ recv_pdu(SOCKET connfd)
 		break;
 	case OP_REQ_IMPORT:
 		ret = recv_request_import(connfd);
+		if (ret == 0)
+			*pneed_close_sockfd = FALSE;
 		break;
 	case OP_REQ_DEVINFO:
 	case OP_REQ_CRYPKEY:
@@ -68,13 +72,15 @@ static void
 process_request(SOCKET listenfd)
 {
 	SOCKET connfd;
+	BOOL	need_close_sockfd;
 
 	connfd = do_accept(listenfd);
 	if (connfd == INVALID_SOCKET)
 		return;
 
-	recv_pdu(connfd);
-	closesocket(connfd);
+	recv_pdu(connfd, &need_close_sockfd);
+	if (need_close_sockfd)
+		closesocket(connfd);
 }
 
 void

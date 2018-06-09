@@ -11,8 +11,6 @@
 static char	*dev_read_buf;
 static char	*sock_read_buf;
 
-#define DEBUG_PDU1
-
 #ifdef DEBUG_PDU
 
 static void
@@ -389,7 +387,7 @@ setup_overlapped_events(OVERLAPPED ovs[], HANDLE evts[])
 }
 
 void
-usbip_vhci_forward(SOCKET sockfd, HANDLE hdev)
+usbip_forward(SOCKET sockfd, HANDLE hdev)
 {
 	HANDLE		evts[3];
 	OVERLAPPED	ovs[3];

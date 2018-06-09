@@ -31,4 +31,4 @@
 #include <winsock2.h>
 
 BOOL build_udev(devno_t devno, struct usbip_usb_device *pudev);
-int usbip_export_device(devno_t devno, SOCKET sockfd);
+HANDLE open_stub_dev(devno_t devno);
