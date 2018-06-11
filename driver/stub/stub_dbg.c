@@ -61,8 +61,33 @@ dbg_devstub(usbip_stub_dev_t *devstub)
 	return buf;
 }
 
+const char *
+dbg_devstub_confdescs(usbip_stub_dev_t *devstub)
+{
+	static char	buf[1024];
+	int	i, n = 0;
+
+	if (devstub == NULL)
+		return "<null>";
+	if (devstub->n_conf_descs == 0)
+		return "empty";
+	for (i = 0; i < devstub->n_conf_descs; i++) {
+		size_t	len;
+
+		PUSB_CONFIGURATION_DESCRIPTOR	conf_desc = devstub->conf_descs[i];
+		if (conf_desc != NULL)
+			RtlStringCchPrintfA(buf + n, 1024 - n, "[%d:%hhu,%hhu]", i, conf_desc->bConfigurationValue, conf_desc->bNumInterfaces);
+		else
+			RtlStringCchPrintfA(buf + n, 1024 - n, "[%d:null]", i);
+		RtlStringCchLengthA(buf + n, 1024 - n, &len);
+		n += (int)len;
+	}
+	return buf;
+}
+
 static namecode_t	namecodes_stub_ioctl[] = {
-	K_V(IOCTL_USBIP_STUB_GET_DESC)
+	K_V(IOCTL_USBIP_STUB_GET_DEVINFO)
+	K_V(IOCTL_USBIP_STUB_EXPORT)
 	{0,0}
 };
 

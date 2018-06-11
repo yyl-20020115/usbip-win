@@ -14,11 +14,18 @@ DEFINE_GUID(GUID_DEVINTERFACE_STUB_USBIP,
 #define USBIP_STUB_IOCTL(_index_) \
     CTL_CODE(FILE_DEVICE_UNKNOWN, _index_, METHOD_BUFFERED, FILE_READ_DATA)
 
-#define IOCTL_USBIP_STUB_GET_DESC	USBIP_STUB_IOCTL(0x0)
+#define IOCTL_USBIP_STUB_GET_DEVINFO	USBIP_STUB_IOCTL(0x0)
+#define IOCTL_USBIP_STUB_EXPORT		USBIP_STUB_IOCTL(0x1)
 
-typedef struct _ioctl_usbip_stub_getdesc
+#pragma pack(push,1)
+
+typedef struct _ioctl_usbip_stub_devinfo
 {
+	unsigned short	vendor;
+	unsigned short	product;
 	unsigned char	class;
 	unsigned char	subclass;
 	unsigned char	protocol;
-} ioctl_usbip_stub_getdesc_t;
+} ioctl_usbip_stub_devinfo_t;
+
+#pragma pack(pop)

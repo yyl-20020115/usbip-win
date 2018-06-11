@@ -67,3 +67,34 @@ get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc)
 		return TRUE;
 	return FALSE;
 }
+
+PUSB_CONFIGURATION_DESCRIPTOR
+get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx)
+{
+	PUSB_CONFIGURATION_DESCRIPTOR	desc;
+	URB		Urb;
+	USB_CONFIGURATION_DESCRIPTOR	ConfDesc;
+	NTSTATUS	status;
+
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
+				     USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, &ConfDesc, NULL,
+				     sizeof(USB_CONFIGURATION_DESCRIPTOR), NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_ERROR(status))
+		return NULL;
+
+	desc = ExAllocatePoolWithTag(NonPagedPool, ConfDesc.wTotalLength, USBIP_STUB_POOL_TAG);
+	if (desc == NULL)
+		return NULL;
+
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
+				     USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, desc, NULL,
+				     ConfDesc.wTotalLength, NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_ERROR(status)) {
+		ExFreePool(desc);
+		return NULL;
+	}
+
+	return desc;
+}

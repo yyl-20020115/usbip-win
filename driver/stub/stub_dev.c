@@ -71,6 +71,22 @@ remove_devlink(usbip_stub_dev_t *devstub)
 	IoDeleteSymbolicLink(&linkname_uni);
 }
 
+void
+cleanup_conf_descs(usbip_stub_dev_t *devstub)
+{
+	int	i;
+
+	if (devstub->conf_descs == NULL)
+		return;
+	for (i = 0; i < devstub->n_conf_descs; i++) {
+		if (devstub->conf_descs[i] != NULL)
+			ExFreePool(devstub->conf_descs[i]);
+	}
+	ExFreePool(devstub->conf_descs);
+	devstub->conf_descs = NULL;
+	devstub->n_conf_descs = 0;
+}
+
 static PDEVICE_OBJECT
 create_devobj_idx(PDRIVER_OBJECT drvobj, ULONG devtype, int idx)
 {

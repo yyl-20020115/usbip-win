@@ -21,14 +21,9 @@ typedef struct {
 	int	id;
 
 	char	id_hw[256];
-	struct {
-		USBD_CONFIGURATION_HANDLE	handle;
-		int value;
-		int index;
-		///libusb_interface_t	interfaces[LIBUSB_MAX_NUMBER_OF_INTERFACES];
-		PUSB_CONFIGURATION_DESCRIPTOR	descriptor;
-		int	total_size;
-	} config;
+
+	int	n_conf_descs;
+	PUSB_CONFIGURATION_DESCRIPTOR	*conf_descs;
 
 	UNICODE_STRING	interface_name;
 } usbip_stub_dev_t;
@@ -39,3 +34,4 @@ void unlock_dev_removal(usbip_stub_dev_t *devstub);
 void unlock_wait_dev_removal(usbip_stub_dev_t *devstub);
 
 void remove_devlink(usbip_stub_dev_t *devstub);
+void cleanup_conf_descs(usbip_stub_dev_t *devstub);

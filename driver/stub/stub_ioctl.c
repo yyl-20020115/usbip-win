@@ -23,9 +23,10 @@
 #include "usbip_stub_api.h"
 
 BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc);
+PUSB_CONFIGURATION_DESCRIPTOR get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx);
 
 static NTSTATUS
-process_get_desc(usbip_stub_dev_t *devstub, IRP *irp)
+process_get_devinfo(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	PIO_STACK_LOCATION	irpStack;
 	ULONG	outlen;
@@ -35,18 +36,21 @@ process_get_desc(usbip_stub_dev_t *devstub, IRP *irp)
 
 	outlen = irpStack->Parameters.DeviceIoControl.OutputBufferLength;
 	irp->IoStatus.Information = 0;
-	if (outlen < sizeof(ioctl_usbip_stub_getdesc_t))
+	if (outlen < sizeof(ioctl_usbip_stub_devinfo_t))
 		status = STATUS_INVALID_PARAMETER;
 	else {
 		USB_DEVICE_DESCRIPTOR	desc;
 
 		if (get_usb_device_desc(devstub, &desc)) {
-			ioctl_usbip_stub_getdesc_t	*getdesc;
-			getdesc = (ioctl_usbip_stub_getdesc_t *)irp->AssociatedIrp.SystemBuffer;
-			getdesc->class = desc.bDeviceClass;
-			getdesc->subclass = desc.bDeviceSubClass;
-			getdesc->protocol = desc.bDeviceProtocol;
-			irp->IoStatus.Information = sizeof(ioctl_usbip_stub_getdesc_t);
+			ioctl_usbip_stub_devinfo_t	*devinfo;
+
+			devinfo = (ioctl_usbip_stub_devinfo_t *)irp->AssociatedIrp.SystemBuffer;
+			devinfo->vendor = desc.idVendor;
+			devinfo->product = desc.idProduct;
+			devinfo->class = desc.bDeviceClass;
+			devinfo->subclass = desc.bDeviceSubClass;
+			devinfo->protocol = desc.bDeviceProtocol;
+			irp->IoStatus.Information = sizeof(ioctl_usbip_stub_devinfo_t);
 		}
 		else {
 			status = STATUS_UNSUCCESSFUL;
@@ -58,6 +62,47 @@ process_get_desc(usbip_stub_dev_t *devstub, IRP *irp)
 	return status;
 }
 
+static NTSTATUS
+process_export(usbip_stub_dev_t *devstub, IRP *irp)
+{
+	USB_DEVICE_DESCRIPTOR	DevDesc;
+	int	len_pconf_descs;
+	UCHAR	i;
+
+	DBGI(DBG_IOCTL, "exporting: %s\n", dbg_devstub(devstub));
+
+	if (!get_usb_device_desc(devstub, &DevDesc)) {
+		DBGE(DBG_IOCTL, "process_export: cannot get device configuration\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	devstub->n_conf_descs = DevDesc.bNumConfigurations;
+	len_pconf_descs = sizeof(PUSB_CONFIGURATION_DESCRIPTOR) * devstub->n_conf_descs;
+	devstub->conf_descs = ExAllocatePoolWithTag(NonPagedPool, len_pconf_descs, USBIP_STUB_POOL_TAG);
+	if (devstub->conf_descs == NULL) {
+		DBGE(DBG_IOCTL, "process_export: out of memory\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	RtlZeroMemory(devstub->conf_descs, len_pconf_descs);
+
+	for (i = 0; i < devstub->n_conf_descs; i++) {
+		devstub->conf_descs[i] = get_usb_conf_desc(devstub, i);
+		if (devstub->conf_descs[i] == NULL) {
+			DBGE(DBG_IOCTL, "process_export: out of memory\n");
+			cleanup_conf_descs(devstub);
+			return STATUS_UNSUCCESSFUL;
+		}
+	}
+
+	irp->IoStatus.Status = STATUS_SUCCESS;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+
+	DBGI(DBG_IOCTL, "exported: %s\n", dbg_devstub_confdescs(devstub));
+
+	return STATUS_SUCCESS;
+}
+
 NTSTATUS
 stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp)
 {
@@ -66,11 +111,14 @@ stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp)
 
 	irpStack = IoGetCurrentIrpStackLocation(irp);
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
+
 	DBGI(DBG_IOCTL, "dispatch_ioctl: code: %s\n", dbg_stub_ioctl_code(ioctl_code));
 
 	switch (ioctl_code) {
-	case IOCTL_USBIP_STUB_GET_DESC:
-		return process_get_desc(devstub, irp);
+	case IOCTL_USBIP_STUB_GET_DEVINFO:
+		return process_get_devinfo(devstub, irp);
+	case IOCTL_USBIP_STUB_EXPORT:
+		return process_export(devstub, irp);
 	default:
 		return pass_irp_down(devstub, irp, NULL, NULL);
 	}
