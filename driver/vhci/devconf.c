@@ -2,6 +2,7 @@
 
 #include "devconf.h"
 #include "usbip_vhci_api.h"
+#include "usbip_proto.h"
 
 #define MAKE_PIPE(ep, type, interval) ((USBD_PIPE_HANDLE)((ep) | ((interval) << 8) | ((type) << 16)))
 

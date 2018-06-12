@@ -135,6 +135,7 @@ build_udev(devno_t devno, struct usbip_usb_device *pudev)
 	if (get_devinfo(devpath, &Devinfo)) {
 		pudev->idVendor = Devinfo.vendor;
 		pudev->idProduct = Devinfo.product;
+		pudev->speed = Devinfo.speed;
 		pudev->bDeviceClass = Devinfo.class;
 		pudev->bDeviceSubClass = Devinfo.subclass;
 		pudev->bDeviceProtocol = Devinfo.protocol;

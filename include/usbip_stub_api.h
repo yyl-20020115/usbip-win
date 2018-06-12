@@ -23,6 +23,7 @@ typedef struct _ioctl_usbip_stub_devinfo
 {
 	unsigned short	vendor;
 	unsigned short	product;
+	unsigned char	speed;
 	unsigned char	class;
 	unsigned char	subclass;
 	unsigned char	protocol;

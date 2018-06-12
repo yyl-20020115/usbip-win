@@ -6,6 +6,7 @@
 
 #include "usbip_vhci_api.h"
 #include "vhci_pnp.h"
+#include "usbip_proto.h"
 
 #define FDO_FROM_PDO(pdoData)	((PFDO_DEVICE_DATA) (pdoData)->ParentFdo->DeviceExtension)
 

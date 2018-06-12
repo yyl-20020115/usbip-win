@@ -21,9 +21,31 @@
 #include "stub_dbg.h"
 #include "stub_irp.h"
 #include "usbip_stub_api.h"
+#include "usbip_proto.h"
 
 BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc);
 PUSB_CONFIGURATION_DESCRIPTOR get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx);
+
+static UCHAR
+get_speed_from_bcdUSB(USHORT bcdUSB)
+{
+	switch (bcdUSB) {
+	case 0x0100:
+		return USB_SPEED_LOW;
+	case 0x0110:
+		return USB_SPEED_FULL;
+	case 0x0200:
+		return USB_SPEED_HIGH;
+	case 0x0250:
+		return USB_SPEED_WIRELESS;
+	case 0x0300:
+		return USB_SPEED_SUPER;
+	case 0x0310:
+		return USB_SPEED_SUPER_PLUS;
+	default:
+		return USB_SPEED_UNKNOWN;
+	}
+}
 
 static NTSTATUS
 process_get_devinfo(usbip_stub_dev_t *devstub, IRP *irp)
@@ -47,6 +69,7 @@ process_get_devinfo(usbip_stub_dev_t *devstub, IRP *irp)
 			devinfo = (ioctl_usbip_stub_devinfo_t *)irp->AssociatedIrp.SystemBuffer;
 			devinfo->vendor = desc.idVendor;
 			devinfo->product = desc.idProduct;
+			devinfo->speed = get_speed_from_bcdUSB(desc.bcdUSB);
 			devinfo->class = desc.bDeviceClass;
 			devinfo->subclass = desc.bDeviceSubClass;
 			devinfo->protocol = desc.bDeviceProtocol;
