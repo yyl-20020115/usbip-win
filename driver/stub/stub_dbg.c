@@ -1,5 +1,6 @@
 #include "stub_driver.h"
 #include "stub_dev.h"
+#include "dbgcommon.h"
 
 #include <ntstrsafe.h>
 #include "dbgcode.h"
@@ -35,13 +36,9 @@ dbg_devices(PDEVICE_OBJECT devobj, BOOLEAN is_attached)
 	int	i;
 
 	for (i = 0; i < 16; i++) {
-		size_t	len;
-
 		if (devobj == NULL)
 			break;
-		RtlStringCchPrintfA(buf + n, 1024 - n, "[%s]", dbg_device(devobj));
-		RtlStringCchLengthA(buf + n, 1024 - n, &len);
-		n += (int)len;
+		n += dbg_snprintf(buf + n, 1024 - n, "[%s]", dbg_device(devobj));
 		if (is_attached)
 			devobj = devobj->AttachedDevice;
 		else
@@ -72,15 +69,11 @@ dbg_devstub_confdescs(usbip_stub_dev_t *devstub)
 	if (devstub->n_conf_descs == 0)
 		return "empty";
 	for (i = 0; i < devstub->n_conf_descs; i++) {
-		size_t	len;
-
 		PUSB_CONFIGURATION_DESCRIPTOR	conf_desc = devstub->conf_descs[i];
 		if (conf_desc != NULL)
-			RtlStringCchPrintfA(buf + n, 1024 - n, "[%d:%hhu,%hhu]", i, conf_desc->bConfigurationValue, conf_desc->bNumInterfaces);
+			n += dbg_snprintf(buf + n, 1024 - n, "[%d:%hhu,%hhu]", i, conf_desc->bConfigurationValue, conf_desc->bNumInterfaces);
 		else
-			RtlStringCchPrintfA(buf + n, 1024 - n, "[%d:null]", i);
-		RtlStringCchLengthA(buf + n, 1024 - n, &len);
-		n += (int)len;
+			n += dbg_snprintf(buf + n, 1024 - n, "[%d:null]", i);
 	}
 	return buf;
 }

@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dbgcode.c" />
+    <ClCompile Include="dbgcommon.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{27AB4325-4980-4634-9818-AE6BD61DE532}</ProjectGuid>
