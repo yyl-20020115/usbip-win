@@ -3,6 +3,8 @@
 #include <ntddk.h>
 #include <usbdi.h>
 
+#include "usb_cspkt.h"
+
 #include "device.h"
 
 #define PIPE2DIRECT(handle)	(((INT_PTR)(handle) & 0x80) ? USBIP_DIR_IN : USBIP_DIR_OUT)
@@ -19,14 +21,5 @@ struct urb_req {
 	LIST_ENTRY	list;
 };
 
-struct usb_ctrl_setup {
-	unsigned char	bRequestType;
-	unsigned char	bRequest;
-	unsigned short	wValue;
-	unsigned short	wIndex;
-	unsigned short	wLength;
-};
-
 extern void
-build_setup_packet(struct usb_ctrl_setup *setup,
-	unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request);
+build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request);

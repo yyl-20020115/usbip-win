@@ -23,14 +23,13 @@ dbg_urb_req(struct urb_req *urb_r)
 #endif
 
 void
-build_setup_packet(struct usb_ctrl_setup *setup,
-	unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request)
+build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request)
 {
-	setup->bRequestType = type << 5;
+	csp->bmRequestType.Type = type;
 	if (direct_in)
-		setup->bRequestType |= USB_ENDPOINT_DIRECTION_MASK;
-	setup->bRequestType |= recip;
-	setup->bRequest = request;
+		csp->bmRequestType.Dir = BMREQUEST_DEVICE_TO_HOST;
+	csp->bmRequestType.Recipient = recip;
+	csp->bRequest = request;
 }
 
 struct urb_req *

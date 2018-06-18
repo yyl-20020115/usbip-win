@@ -167,6 +167,7 @@
   <ItemGroup>
     <ClInclude Include="dbgcode.h" />
     <ClInclude Include="dbgcommon.h" />
+    <ClInclude Include="usb_cspkt.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
