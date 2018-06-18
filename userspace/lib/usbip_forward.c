@@ -16,18 +16,16 @@ static char	*sock_read_buf;
 static void
 dbg_to_file(char *fmt, ...)
 {
-	static FILE	*fp = NULL;
+	FILE	*fp;
 	va_list ap;
 
-	if (fp == NULL) {
-		if (fopen_s(&fp, "debug_pdu.log", "w") == 0)
-			return;
-	}
+	if (fopen_s(&fp, "debug_pdu.log", "a+") != 0)
+		return;
 
 	va_start(ap, fmt);
 	vfprintf(fp, fmt, ap);
 	va_end(ap);
-	fflush(fp);
+	fclose(fp);
 }
 
 static void
@@ -65,12 +63,12 @@ dump_usbip_header(struct usbip_header *hdr)
 	}
 }
 
-#define DBGMORE(fmt, ...)		dbg_to_file(fmt, ## __VA_ARGS__)
+#define DBGF(fmt, ...)		dbg_to_file(fmt, ## __VA_ARGS__)
 #define DBG_USBIP_HEADER(hdr)	dump_usbip_header(hdr)
 
 #else
 
-#define DBGMORE(fmt, ...)
+#define DBGF(fmt, ...)
 #define DBG_USBIP_HEADER(hdr)
 
 #endif
@@ -187,11 +185,28 @@ is_outq_seqnum(unsigned long seqnum)
 	return FALSE;
 }
 
+static int
+get_xfer_len(BOOL is_req, struct usbip_header *hdr)
+{
+	if (is_req) {
+		if (hdr->base.direction)
+			return 0;
+		if (!record_outq_seqnum(ntohl(hdr->base.seqnum))) {
+			err("failed to record. out queue full");
+		}
+	}
+	else {
+		if (is_outq_seqnum(ntohl(hdr->base.seqnum)))
+			return 0;
+	}
+	return ntohl(hdr->u.ret_submit.actual_length);
+}
+
 static BOOL
-write_to_dev(char *buf, int buf_len, int len, SOCKET sockfd, HANDLE hdev, OVERLAPPED *pov)
+write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE hdev, OVERLAPPED *pov)
 {
 	struct usbip_header	*hdr;
-	unsigned long	in_len, iso_len, len_data;
+	unsigned long	xfer_len, iso_len, len_data;
 	unsigned long	out;
 
 	hdr = (struct usbip_header *)buf;
@@ -202,22 +217,18 @@ write_to_dev(char *buf, int buf_len, int len, SOCKET sockfd, HANDLE hdev, OVERLA
 		return FALSE;
 	}
 
+	xfer_len = get_xfer_len(is_req, hdr);
 	usbip_header_correct_endian(hdr, 0);
 
-	DBGMORE("recv seq %d\n", hdr->base.seqnum);
+	DBGF("recv seq %d\n", hdr->base.seqnum);
 
 	DBG_USBIP_HEADER(hdr);
 
-	if (is_outq_seqnum(htonl(hdr->base.seqnum)))
-		in_len = 0;
-	else
-		in_len = hdr->u.ret_submit.actual_length;
-
 	iso_len = hdr->u.ret_submit.number_of_packets * sizeof(struct usbip_iso_packet_descriptor);
 
-	len_data = in_len + iso_len;
+	len_data = xfer_len + iso_len;
 	if (buf_len < len_data + sizeof(struct usbip_header)) {
-		err("too small buffer: buflen: %d, in_len:%ld, iso_len:%ld", buf_len, in_len, iso_len);
+		err("too small buffer: buflen: %d, xfer_len:%ld, iso_len:%ld", buf_len, xfer_len, iso_len);
 		return FALSE;
 	}
 
@@ -232,7 +243,7 @@ write_to_dev(char *buf, int buf_len, int len, SOCKET sockfd, HANDLE hdev, OVERLA
 	}
 
 	if (iso_len > 0)
-		fix_iso_desc_endian(sock_read_buf + sizeof(struct usbip_header) + in_len,
+		fix_iso_desc_endian(sock_read_buf + sizeof(struct usbip_header) + xfer_len,
 				    hdr->u.ret_submit.number_of_packets);
 	if (!WriteFile(hdev, buf, sizeof(struct usbip_header) + len_data, &out, pov)) {
 		err("failed to WriteFile: %ld", GetLastError());
@@ -246,7 +257,7 @@ write_to_dev(char *buf, int buf_len, int len, SOCKET sockfd, HANDLE hdev, OVERLA
 }
 
 static BOOL
-sock_read_async(SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
+sock_read_async(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
 {
 	while (TRUE) {
 		unsigned long	len;
@@ -261,19 +272,24 @@ sock_read_async(SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_
 			return FALSE;
 		}
 
+		if (len == 0) {
+			info("connection closed\n");
+			return FALSE;
+		}
 		if (len != sizeof(struct usbip_header)) {
-			err("incomplete header err: %d\n", GetLastError());
+			err("sock_read_async: incomplete header: len: %d\n", len);
+			/* TODO: need buffering */
 		}
 
-		DBGMORE("Bytes read from socket synchronously: %d\n", len);
+		DBGF("Bytes read from socket synchronously: %d\n", len);
 
-		if (!write_to_dev(sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
+		if (!write_to_dev(!is_req, sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
 			return FALSE;
 	}
 }
 
 static BOOL
-sock_read_completed(SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
+sock_read_completed(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
 {
 	unsigned long	len;
 
@@ -282,18 +298,18 @@ sock_read_completed(SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED 
 		return FALSE;
 	}
 
-	DBGMORE("Bytes read from socket asynchronously: %d\n",len);
+	DBGF("Bytes read from socket asynchronously: %d\n",len);
 
-	if (!write_to_dev(sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
+	if (!write_to_dev(!is_req, sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
 		return FALSE;
-	return sock_read_async(sockfd, hdev, ov_sock, ov_dev);
+	return sock_read_async(is_req, sockfd, hdev, ov_sock, ov_dev);
 }
 
 static BOOL
-write_to_sock(char *buf, int len, SOCKET sockfd)
+write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 {
 	struct usbip_header	*hdr;
-	unsigned long out_len, iso_len;
+	unsigned long	xfer_len, iso_len;
 	int	ret;
 
 	hdr = (struct usbip_header *)buf;
@@ -302,23 +318,21 @@ write_to_sock(char *buf, int len, SOCKET sockfd)
 		err("too small buffer: %d\n", len);
 		return FALSE;
 	}
-	if (!hdr->base.direction)
-		out_len = ntohl(hdr->u.cmd_submit.transfer_buffer_length);
-	else
-		out_len = 0;
+	xfer_len = get_xfer_len(is_req, hdr);
+
 	if (hdr->u.cmd_submit.number_of_packets)
 		iso_len = sizeof(struct usbip_iso_packet_descriptor) * ntohl(hdr->u.cmd_submit.number_of_packets);
 	else
 		iso_len = 0;
-	if (len != sizeof(struct usbip_header) + out_len + iso_len) {
-		err("invalid buffer length:%d, out_len:%ld, iso_len:%ld\n", len, out_len, iso_len);
+	if (len != sizeof(struct usbip_header) + xfer_len + iso_len) {
+		err("invalid buffer length:%d, out_len:%ld, iso_len:%ld\n", len, xfer_len, iso_len);
 		return FALSE;
 	}
 	if (!hdr->base.direction && !record_outq_seqnum(hdr->base.seqnum)) {
 		err("failed to record. out queue full");
 		return FALSE;
 	}
-	DBGMORE("send seq:%d\r", ntohl(hdr->base.seqnum));
+	DBGF("send seq:%d\n", ntohl(hdr->base.seqnum));
 
 	ret = usbip_net_send(sockfd, buf, len);
 	if (ret != len) {
@@ -330,10 +344,11 @@ write_to_sock(char *buf, int len, SOCKET sockfd)
 }
 
 static BOOL
-dev_read_async(HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
+dev_read_async(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
 {
 	while (TRUE) {
 		unsigned long	len;
+
 		if (!ReadFile(hdev, dev_read_buf, FORWARD_BUFSIZE, &len, pov)) {
 			DWORD	err = GetLastError();
 			if (err == ERROR_IO_PENDING)
@@ -342,13 +357,13 @@ dev_read_async(HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
 			err("ReadFile failed: err: %ld\n", err);
 			return FALSE;
 		}
-		if (!write_to_sock(dev_read_buf, len, sockfd))
+		if (!write_to_sock(!is_req, dev_read_buf, len, sockfd))
 			return FALSE;
 	}
 }
 
 static BOOL
-dev_read_completed(HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
+dev_read_completed(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
 {
 	unsigned long len;
 
@@ -356,9 +371,9 @@ dev_read_completed(HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
 		err("get overlapping failed: %ld", GetLastError());
 		return FALSE;
 	}
-	if (!write_to_sock(dev_read_buf, len, sockfd))
+	if (!write_to_sock(!is_req, dev_read_buf, len, sockfd))
 		return FALSE;
-	return dev_read_async(hdev, sockfd, ov);
+	return dev_read_async(is_req, hdev, sockfd, ov);
 }
 
 static volatile BOOL	interrupted;
@@ -387,10 +402,11 @@ setup_overlapped_events(OVERLAPPED ovs[], HANDLE evts[])
 }
 
 void
-usbip_forward(SOCKET sockfd, HANDLE hdev)
+usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 {
 	HANDLE		evts[3];
 	OVERLAPPED	ovs[3];
+	BOOL		is_req_sock, is_req_dev;
 
 	dev_read_buf = (char *)malloc(FORWARD_BUFSIZE);
 	sock_read_buf = (char *)malloc(FORWARD_BUFSIZE);
@@ -405,13 +421,16 @@ usbip_forward(SOCKET sockfd, HANDLE hdev)
 
 	signal(SIGINT, signalhandler);
 
-	dev_read_async(hdev, sockfd, &ovs[0]);
-	sock_read_async(sockfd, hdev, &ovs[1], &ovs[2]);
+	is_req_sock = is_inbound ? FALSE: TRUE;
+	is_req_dev = is_inbound ? TRUE : FALSE;
+
+	dev_read_async(is_req_dev, hdev, sockfd, &ovs[0]);
+	sock_read_async(is_req_sock, sockfd, hdev, &ovs[1], &ovs[2]);
 
 	while (!interrupted) {
 		DWORD	ret;
 
-		DBGMORE("wait\n");
+		DBGF("wait\n");
 		ret =  WaitForMultipleObjects(2, evts, FALSE, 500);
 
 		switch (ret) {
@@ -419,11 +438,11 @@ usbip_forward(SOCKET sockfd, HANDLE hdev)
 			// do nothing just give CTRL-C a chance to be detected
 			break;
 		case WAIT_OBJECT_0:
-			if (!dev_read_completed(hdev, sockfd, &ovs[0]))
+			if (!dev_read_completed(is_req_dev, hdev, sockfd, &ovs[0]))
 				goto out;
 			break;
 		case WAIT_OBJECT_0 + 1:
-			if (!sock_read_completed(sockfd, hdev, &ovs[1], &ovs[2]))
+			if (!sock_read_completed(is_req_sock, sockfd, hdev, &ovs[1], &ovs[2]))
 				goto out;
 			break;
 		default:
