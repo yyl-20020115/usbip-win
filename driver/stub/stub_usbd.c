@@ -56,16 +56,38 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 }
 
 BOOLEAN
-get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc)
+get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang, PVOID buff, ULONG bufflen)
 {
 	URB		Urb;
 	NTSTATUS	status;
 
-	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST), USB_DEVICE_DESCRIPTOR_TYPE, 0, 0, pdesc, NULL, sizeof(USB_DEVICE_DESCRIPTOR), NULL);
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST), descType, idx, idLang, buff, NULL, bufflen, NULL);
 	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
 	if (NT_SUCCESS(status))
 		return TRUE;
 	return FALSE;
+}
+
+BOOLEAN
+select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
+{
+	URB		Urb;
+	NTSTATUS	status;
+
+	///TODO
+	UNREFERENCED_PARAMETER(idx);////TODO
+
+	UsbBuildSelectConfigurationRequest(&Urb, sizeof(struct _URB_SELECT_CONFIGURATION), NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status))
+		return TRUE;
+	return FALSE;
+}
+
+BOOLEAN
+get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc)
+{
+	return get_usb_desc(devstub, USB_DEVICE_DESCRIPTOR_TYPE, 0, 0, pdesc, sizeof(USB_DEVICE_DESCRIPTOR));
 }
 
 PUSB_CONFIGURATION_DESCRIPTOR

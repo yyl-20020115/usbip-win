@@ -19,24 +19,34 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="stub_cspkt.c" />
     <ClCompile Include="stub_dbg.c" />
     <ClCompile Include="stub_dev.c" />
+    <ClCompile Include="stub_devconf.c" />
     <ClCompile Include="stub_dispatch.c" />
     <ClCompile Include="stub_driver.c" />
     <ClCompile Include="stub_ioctl.c" />
     <ClCompile Include="stub_irp.c" />
     <ClCompile Include="stub_pnp.c" />
     <ClCompile Include="stub_power.c" />
+    <ClCompile Include="stub_proto.c" />
+    <ClCompile Include="stub_read.c" />
     <ClCompile Include="stub_reg.c" />
+    <ClCompile Include="stub_req.c" />
     <ClCompile Include="stub_usbd.c" />
+    <ClCompile Include="stub_write.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\usbip_stub_api.h" />
+    <ClInclude Include="stub_cspkt.h" />
     <ClInclude Include="stub_dbg.h" />
     <ClInclude Include="stub_dev.h" />
+    <ClInclude Include="stub_devconf.h" />
     <ClInclude Include="stub_driver.h" />
     <ClInclude Include="stub_irp.h" />
     <ClInclude Include="stub_reg.h" />
+    <ClInclude Include="stub_req.h" />
+    <ClInclude Include="stub_usbd.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{08230AFF-8015-437B-9DF1-AF8D0112DF59}</ProjectGuid>

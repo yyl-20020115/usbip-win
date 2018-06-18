@@ -19,6 +19,8 @@ static namecode_t namecodes_ntstatus[] = {
 };
 
 static namecode_t	namecodes_dispatch_major[] = {
+	K_V(IRP_MJ_READ)
+	K_V(IRP_MJ_WRITE)
 	K_V(IRP_MJ_PNP)
 	K_V(IRP_MJ_POWER)
 	K_V(IRP_MJ_DEVICE_CONTROL)

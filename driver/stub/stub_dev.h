@@ -26,6 +26,12 @@ typedef struct {
 	PUSB_CONFIGURATION_DESCRIPTOR	*conf_descs;
 
 	UNICODE_STRING	interface_name;
+
+	/* for pending read irp management */
+	KSPIN_LOCK	lock_irp_read;
+	PIRP	irp_read;
+	int	wait_reader;
+	KEVENT	event_read;
 } usbip_stub_dev_t;
 
 void init_dev_removal_lock(usbip_stub_dev_t *devstub);

@@ -23,6 +23,8 @@
 NTSTATUS stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp);
 NTSTATUS stub_dispatch_power(usbip_stub_dev_t *devstub, IRP *irp);
 NTSTATUS stub_dispatch_ioctl(usbip_stub_dev_t *devstub, IRP *irp);
+NTSTATUS stub_dispatch_read(usbip_stub_dev_t *devstub, IRP *irp);
+NTSTATUS stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp);
 
 NTSTATUS
 stub_dispatch(PDEVICE_OBJECT devobj, IRP *irp)
@@ -44,6 +46,10 @@ stub_dispatch(PDEVICE_OBJECT devobj, IRP *irp)
 		return stub_dispatch_power(devstub, irp);
 	case IRP_MJ_DEVICE_CONTROL:
 		return stub_dispatch_ioctl(devstub, irp);
+	case IRP_MJ_READ:
+		return stub_dispatch_read(devstub, irp);
+	case IRP_MJ_WRITE:
+		return stub_dispatch_write(devstub, irp);
 	default:
 		return pass_irp_down(devstub, irp, NULL, NULL);
 	}

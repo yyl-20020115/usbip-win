@@ -248,9 +248,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 		return STATUS_SUCCESS;
 	}
 
-#if 0 ////TODO
-	clear_pipe_info(devstub);
-#endif
 	init_dev_removal_lock(devstub);
 
 	status = IoRegisterDeviceInterface(pdo, (LPGUID)&GUID_DEVINTERFACE_STUB_USBIP, NULL, &devstub->interface_name);
@@ -277,8 +274,10 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
-	/* use the same flags as the underlying object */
-	devobj->Flags |= devstub->next_stack_dev->Flags & (DO_BUFFERED_IO | DO_DIRECT_IO | DO_POWER_PAGABLE);
+	KeInitializeSpinLock(&devstub->lock_irp_read);
+	KeInitializeEvent(&devstub->event_read, SynchronizationEvent, FALSE);
+
+	devobj->Flags |= DO_POWER_PAGABLE | DO_BUFFERED_IO;
 
 	// use the same DeviceType as the underlying object
 	devobj->DeviceType = devstub->next_stack_dev->DeviceType;

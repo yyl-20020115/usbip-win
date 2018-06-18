@@ -23,13 +23,6 @@
 NTSTATUS stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo);
 NTSTATUS stub_dispatch(PDEVICE_OBJECT devobj, IRP *irp);
 
-static void
-clear_pipe_info(usbip_stub_dev_t *devstub)
-{
-	UNREFERENCED_PARAMETER(devstub);
-	/////TODO RtlZeroMemory(devstub->config.interfaces, sizeof(devstub->config.interfaces));
-}
-
 static VOID
 stub_unload(DRIVER_OBJECT *drvobj)
 {

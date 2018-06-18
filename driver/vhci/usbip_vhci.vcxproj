@@ -29,7 +29,7 @@
     <ClCompile Include="vhci_plugin.c" />
     <ClCompile Include="vhci_pnp.c" />
     <ClCompile Include="vhci_power.c" />
-    <ClCompile Include="usbip_proto.c" />
+    <ClCompile Include="vhci_proto.c" />
     <ClCompile Include="usbreq.c" />
     <ClCompile Include="wmi.c" />
   </ItemGroup>
