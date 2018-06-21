@@ -258,6 +258,15 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
+	status = USBD_CreateHandle(pdo, devstub->next_stack_dev, USBD_CLIENT_CONTRACT_VERSION_602, USBIP_STUB_POOL_TAG, &devstub->hUSBD);
+	if (NT_ERROR(status)) {
+		DBGE(DBG_DISPATCH, "add_device: failed to create USBD handle: %s: %s\n", dbg_devstub(devstub), dbg_ntstatus(status));
+		IoDetachDevice(devstub->next_stack_dev);
+		unlock_dev_removal(devstub);
+		remove_devlink(devstub);
+		IoDeleteDevice(devobj);
+		return STATUS_UNSUCCESSFUL;
+	}
 	KeInitializeSpinLock(&devstub->lock_irp_read);
 	KeInitializeEvent(&devstub->event_read, SynchronizationEvent, FALSE);
 

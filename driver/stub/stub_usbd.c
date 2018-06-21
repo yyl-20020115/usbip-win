@@ -56,6 +56,19 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 }
 
 BOOLEAN
+get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buf)
+{
+	URB		Urb;
+	NTSTATUS	status;
+
+	UsbBuildGetStatusRequest(&Urb, op, idx, buf, NULL, NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status))
+		return TRUE;
+	return FALSE;
+}
+
+BOOLEAN
 get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang, PVOID buff, ULONG bufflen)
 {
 	URB		Urb;
@@ -68,19 +81,62 @@ get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang
 	return FALSE;
 }
 
+static PUSBD_INTERFACE_LIST_ENTRY
+build_intf_list(devconf_t devconf)
+{
+	PUSBD_INTERFACE_LIST_ENTRY	pintf_list;
+	int	size;
+	unsigned int	offset = 0;
+	int	i;
+
+	size = sizeof(USBD_INTERFACE_LIST_ENTRY) * (devconf->bNumInterfaces + 1);
+	pintf_list = ExAllocatePoolWithTag(NonPagedPool, size, USBIP_STUB_POOL_TAG);
+	RtlZeroMemory(pintf_list, size);
+
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		PUSB_INTERFACE_DESCRIPTOR	pdesc;
+		pdesc = (PUSB_INTERFACE_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
+		if (pdesc == NULL)
+			break;
+		pintf_list[i].InterfaceDescriptor = pdesc;
+	}
+	return pintf_list;
+}
+
 BOOLEAN
 select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 {
-	URB		Urb;
+	devconf_t	devconf;
+	PURB		purb;
+	PUSBD_INTERFACE_LIST_ENTRY	pintf_list;
 	NTSTATUS	status;
 
-	///TODO
-	UNREFERENCED_PARAMETER(idx);////TODO
+	devconf = get_devconf(devstub->devconfs, idx);
+	if (devconf == NULL) {
+		DBGE(DBG_GENERAL, "select_usb_conf: non-existent devconf: index: %hu\n", idx);
+		return FALSE;
+	}
 
-	UsbBuildSelectConfigurationRequest(&Urb, sizeof(struct _URB_SELECT_CONFIGURATION), NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_SUCCESS(status))
+	pintf_list = build_intf_list(devconf);
+
+	status = USBD_SelectConfigUrbAllocateAndBuild(devstub->hUSBD, devconf, pintf_list, &purb);
+	if (NT_ERROR(status)) {
+		DBGE(DBG_GENERAL, "select_usb_conf: failed to selectConfigUrb: %s\n", dbg_ntstatus(status));
+		ExFreePool(pintf_list);
+		return FALSE;
+	}
+
+	status = call_usbd(devstub, purb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status)) {
+		struct _URB_SELECT_CONFIGURATION	*purb_selc = &purb->UrbSelectConfiguration;
+		set_conf_info(devstub->devconfs, idx, purb_selc->ConfigurationHandle, &purb_selc->Interface);
+		ExFreePool(purb);
 		return TRUE;
+	}
+	else {
+		DBGI(DBG_GENERAL, "select_usb_conf: failed to select configuration: %s\n", dbg_devstub(devstub));
+	}
+	ExFreePool(purb);
 	return FALSE;
 }
 

@@ -3,6 +3,7 @@
 #include <ntddk.h>
 #include <ntstrsafe.h>
 #include <usbdi.h>
+#include <usbdlib.h>
 
 #include "stub_devconf.h"
 
@@ -27,6 +28,8 @@ typedef struct {
 	devconfs_t	*devconfs;
 
 	UNICODE_STRING	interface_name;
+
+	USBD_HANDLE	hUSBD;
 
 	/* for pending read irp management */
 	KSPIN_LOCK	lock_irp_read;

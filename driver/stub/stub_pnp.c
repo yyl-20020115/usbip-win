@@ -95,10 +95,11 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 #if 0 ////TODO
 		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
 #endif
+		USBD_CloseHandle(devstub->hUSBD);
+
 		/* delete the device object */
 		IoDetachDevice(devstub->next_stack_dev);
 		IoDeleteDevice(devstub->self);
-
 		return status;
 	case IRP_MN_SURPRISE_REMOVAL:
 		devstub->is_started = FALSE;

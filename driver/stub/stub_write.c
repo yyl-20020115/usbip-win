@@ -25,6 +25,34 @@
 #include "stub_req.h"
 
 static void
+process_get_status(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
+{
+	USHORT	op, idx = 0;
+	USHORT	data;
+
+	DBGI(DBG_READWRITE, "get_status\n");
+
+	switch (CSPKT_RECIPIENT(csp)) {
+	case BMREQUEST_TO_DEVICE:
+		op = URB_FUNCTION_GET_STATUS_FROM_DEVICE;
+		break;
+	case BMREQUEST_TO_INTERFACE:
+		op = URB_FUNCTION_GET_STATUS_FROM_INTERFACE;
+		break;
+	case BMREQUEST_TO_ENDPOINT:
+		op = URB_FUNCTION_GET_STATUS_FROM_ENDPOINT;
+		break;
+	default:
+		op = URB_FUNCTION_GET_STATUS_FROM_OTHER;
+		break;
+	}
+	if (get_usb_status(devstub, op, idx, &data))
+		reply_stub_req_data(devstub, seqnum, &data, 2);
+	else
+		reply_stub_req_err(devstub, seqnum, -1);
+}
+
+static void
 process_get_desc(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
 {
 	UCHAR	descType = CSPKT_DESCRIPTOR_TYPE(csp);
@@ -48,21 +76,25 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *c
 		return;
 	}
 	reply_stub_req_data(devstub, seqnum, pdesc, csp->wLength);
+	ExFreePool(pdesc);
 }
 
 static void
 process_select_conf(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
 {
-	UNREFERENCED_PARAMETER(seqnum);
-
-	///TODO
-	select_usb_conf(devstub, csp->wValue.W);
+	if (select_usb_conf(devstub, csp->wValue.W))
+		reply_stub_req(devstub, seqnum);
+	else
+		reply_stub_req_err(devstub, seqnum, -1);
 }
 
 static NTSTATUS
 process_standard_request(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
 {
 	switch (csp->bRequest) {
+	case USB_REQUEST_GET_STATUS:
+		process_get_status(devstub, seqnum, csp);
+		return STATUS_SUCCESS;
 	case USB_REQUEST_GET_DESCRIPTOR:
 		process_get_desc(devstub, seqnum, csp);
 		return STATUS_SUCCESS;
