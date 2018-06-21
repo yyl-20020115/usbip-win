@@ -1,6 +1,6 @@
 #include "vhci.h"
 
-#include "devconf.h"
+#include "vhci_devconf.h"
 #include "usbip_vhci_api.h"
 #include "usbip_proto.h"
 
@@ -74,52 +74,6 @@ alloc_devconf_from_urb(struct _URB_CONTROL_DESCRIPTOR_REQUEST *urb_desc)
 	return devconf;
 }
 
-PUSB_COMMON_DESCRIPTOR
-find_usbconf_desc(devconf_t devconf, unsigned int *poffset, unsigned char type)
-{
-	unsigned int	offset = *poffset;
-
-	do {
-		PUSB_COMMON_DESCRIPTOR	desc;
-
-		if (devconf->wTotalLength <= offset + sizeof(USB_COMMON_DESCRIPTOR))
-			return NULL;
-
-		desc = (PUSB_COMMON_DESCRIPTOR)((PUINT8)devconf + offset);
-		if (devconf->wTotalLength < offset + desc->bLength)
-			return NULL;
-
-		offset += desc->bLength;
-		if (desc->bDescriptorType == type) {
-			*poffset = offset;
-			return desc;
-		}
-	} while (TRUE);
-}
-
-PUSB_INTERFACE_DESCRIPTOR
-find_intf_desc(devconf_t devconf, unsigned int *poffset, unsigned int num, unsigned int alternatesetting)
-{
-	do {
-		PUSB_INTERFACE_DESCRIPTOR	intf_desc;
-
-		intf_desc = (PUSB_INTERFACE_DESCRIPTOR)find_usbconf_desc(devconf, poffset, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (intf_desc == NULL)
-			break;
-		if (intf_desc->bInterfaceNumber < num)
-			continue;
-		if (intf_desc->bInterfaceNumber > num)
-			break;
-		if (intf_desc->bAlternateSetting < alternatesetting)
-			continue;
-		if (intf_desc->bAlternateSetting > alternatesetting)
-			break;
-		return intf_desc;
-	} while (1);
-
-	return NULL;
-}
-
 static PUSB_INTERFACE_DESCRIPTOR
 find_intf_desc_by_handle(devconf_t devconf, USBD_INTERFACE_HANDLE handle)
 {
@@ -129,11 +83,11 @@ find_intf_desc_by_handle(devconf_t devconf, USBD_INTERFACE_HANDLE handle)
 	for (i = 0; i < (UINT_PTR)handle; i++) {
 		PUSB_INTERFACE_DESCRIPTOR	intf_desc;
 
-		intf_desc = (PUSB_INTERFACE_DESCRIPTOR)find_usbconf_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
+		intf_desc = (PUSB_INTERFACE_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
 		if (intf_desc == NULL)
 			return NULL;
 	}
-	return (PUSB_INTERFACE_DESCRIPTOR)find_usbconf_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
+	return (PUSB_INTERFACE_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
 }
 
 static NTSTATUS
@@ -146,7 +100,7 @@ setup_endpoints(USBD_INTERFACE_INFORMATION *intf, devconf_t devconf, unsigned in
 
 		show_pipe(i, &intf->Pipes[i]);
 
-		ep_desc = (PUSB_ENDPOINT_DESCRIPTOR)find_usbconf_desc(devconf, poffset, USB_ENDPOINT_DESCRIPTOR_TYPE);
+		ep_desc = (PUSB_ENDPOINT_DESCRIPTOR)devconf_find_desc(devconf, poffset, USB_ENDPOINT_DESCRIPTOR_TYPE);
 
 		if (ep_desc == NULL) {
 			DBGW(DBG_IOCTL, "no ep desc\n");
@@ -170,7 +124,7 @@ setup_intf(USBD_INTERFACE_INFORMATION *intf, ULONG len, devconf_t devconf, unsig
 		return STATUS_SUCCESS;
 	}
 
-	intf_desc = find_intf_desc(devconf, poffset, intf->InterfaceNumber, intf->AlternateSetting);
+	intf_desc = devconf_find_intf_desc(devconf, poffset, intf->InterfaceNumber, intf->AlternateSetting);
 	if (intf_desc == NULL) {
 		DBGW(DBG_IOCTL, "no interface desc\n");
 		return STATUS_INVALID_DEVICE_REQUEST;

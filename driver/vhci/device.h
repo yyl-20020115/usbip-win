@@ -3,7 +3,7 @@
 #include <ntddk.h>
 #include <wmilib.h>	// required for WMILIB_CONTEXT
 
-#include "devconf.h"
+#include "vhci_devconf.h"
 
 //
 // These are the states a PDO or FDO transition upon

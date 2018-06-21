@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="dbgcode.c" />
     <ClCompile Include="dbgcommon.c" />
+    <ClCompile Include="devconf.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{27AB4325-4980-4634-9818-AE6BD61DE532}</ProjectGuid>
@@ -167,6 +168,7 @@
   <ItemGroup>
     <ClInclude Include="dbgcode.h" />
     <ClInclude Include="dbgcommon.h" />
+    <ClInclude Include="devconf.h" />
     <ClInclude Include="usb_cspkt.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

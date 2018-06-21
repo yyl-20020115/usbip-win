@@ -21,11 +21,11 @@
   <ItemGroup>
     <ClCompile Include="vhci.c" />
     <ClCompile Include="vhci_dbg.c" />
+    <ClCompile Include="vhci_devconf.c" />
     <ClCompile Include="vhci_ioctl.c" />
     <ClCompile Include="vhci_pdo.c" />
     <ClCompile Include="vhci_read.c" />
     <ClCompile Include="vhci_write.c" />
-    <ClCompile Include="devconf.c" />
     <ClCompile Include="vhci_plugin.c" />
     <ClCompile Include="vhci_pnp.c" />
     <ClCompile Include="vhci_power.c" />
@@ -39,9 +39,9 @@
     <ClInclude Include="basetype.h" />
     <ClInclude Include="vhci.h" />
     <ClInclude Include="vhci_dbg.h" />
-    <ClInclude Include="devconf.h" />
     <ClInclude Include="device.h" />
     <ClInclude Include="globals.h" />
+    <ClInclude Include="vhci_devconf.h" />
     <ClInclude Include="vhci_pnp.h" />
     <ClInclude Include="trace.h" />
     <ClInclude Include="usbreq.h" />

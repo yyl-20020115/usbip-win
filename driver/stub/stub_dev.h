@@ -4,6 +4,8 @@
 #include <ntstrsafe.h>
 #include <usbdi.h>
 
+#include "stub_devconf.h"
+
 #define N_DEVICES_USBIP_STUB	32
 
 typedef struct {
@@ -22,8 +24,7 @@ typedef struct {
 
 	char	id_hw[256];
 
-	int	n_conf_descs;
-	PUSB_CONFIGURATION_DESCRIPTOR	*conf_descs;
+	devconfs_t	*devconfs;
 
 	UNICODE_STRING	interface_name;
 
@@ -40,4 +41,3 @@ void unlock_dev_removal(usbip_stub_dev_t *devstub);
 void unlock_wait_dev_removal(usbip_stub_dev_t *devstub);
 
 void remove_devlink(usbip_stub_dev_t *devstub);
-void cleanup_conf_descs(usbip_stub_dev_t *devstub);

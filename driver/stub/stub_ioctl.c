@@ -23,8 +23,13 @@
 #include "usbip_stub_api.h"
 #include "usbip_proto.h"
 
-BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc);
-PUSB_CONFIGURATION_DESCRIPTOR get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx);
+#include "stub_usbd.h"
+#include "stub_devconf.h"
+
+devconfs_t *create_devconfs(usbip_stub_dev_t *devstub);
+#ifdef DBG
+const char *dbg_devconfs(devconfs_t *devconfs);
+#endif
 
 static UCHAR
 get_speed_from_bcdUSB(USHORT bcdUSB)
@@ -88,40 +93,18 @@ process_get_devinfo(usbip_stub_dev_t *devstub, IRP *irp)
 static NTSTATUS
 process_export(usbip_stub_dev_t *devstub, IRP *irp)
 {
-	USB_DEVICE_DESCRIPTOR	DevDesc;
-	int	len_pconf_descs;
-	UCHAR	i;
-
 	DBGI(DBG_IOCTL, "exporting: %s\n", dbg_devstub(devstub));
 
-	if (!get_usb_device_desc(devstub, &DevDesc)) {
-		DBGE(DBG_IOCTL, "process_export: cannot get device configuration\n");
+	devstub->devconfs = create_devconfs(devstub);
+	if (devstub->devconfs == NULL) {
+		DBGI(DBG_IOCTL, "export: %s: failed to create devconfs\n", dbg_devstub(devstub));
 		return STATUS_UNSUCCESSFUL;
-	}
-
-	devstub->n_conf_descs = DevDesc.bNumConfigurations;
-	len_pconf_descs = sizeof(PUSB_CONFIGURATION_DESCRIPTOR) * devstub->n_conf_descs;
-	devstub->conf_descs = ExAllocatePoolWithTag(NonPagedPool, len_pconf_descs, USBIP_STUB_POOL_TAG);
-	if (devstub->conf_descs == NULL) {
-		DBGE(DBG_IOCTL, "process_export: out of memory\n");
-		return STATUS_UNSUCCESSFUL;
-	}
-
-	RtlZeroMemory(devstub->conf_descs, len_pconf_descs);
-
-	for (i = 0; i < devstub->n_conf_descs; i++) {
-		devstub->conf_descs[i] = get_usb_conf_desc(devstub, i);
-		if (devstub->conf_descs[i] == NULL) {
-			DBGE(DBG_IOCTL, "process_export: out of memory\n");
-			cleanup_conf_descs(devstub);
-			return STATUS_UNSUCCESSFUL;
-		}
 	}
 
 	irp->IoStatus.Status = STATUS_SUCCESS;
 	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
-	DBGI(DBG_IOCTL, "exported: %s\n", dbg_devstub_confdescs(devstub));
+	DBGI(DBG_IOCTL, "exported: %s\n", dbg_devconfs(devstub->devconfs));
 
 	return STATUS_SUCCESS;
 }

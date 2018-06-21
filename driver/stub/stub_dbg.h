@@ -7,6 +7,7 @@
 #ifdef DBG
 
 #include "stub_dev.h"
+#include "stub_devconf.h"
 
 #define DBG_GENERAL	0x00000001
 #define DBG_DISPATCH	0x00000010
@@ -15,11 +16,13 @@
 #define DBG_READWRITE	0x00010000
 #define DBG_PNP		0x00100000
 #define DBG_POWER	0x01000000
+#define DBG_DEVCONF	0x10000000
 
 const char *dbg_device(PDEVICE_OBJECT devobj);
 const char *dbg_devices(PDEVICE_OBJECT devobj, BOOLEAN is_attached);
 const char *dbg_devstub(usbip_stub_dev_t *devstub);
-const char *dbg_devstub_confdescs(usbip_stub_dev_t *devstub);
+
+const char *dbg_devconfs(devconfs_t *devconfs);
 
 const char *dbg_stub_ioctl_code(ULONG ioctl_code);
 

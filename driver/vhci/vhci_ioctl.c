@@ -1,7 +1,7 @@
 #include "vhci.h"
 
 #include "usbreq.h"
-#include "devconf.h"
+#include "vhci_devconf.h"
 #include "vhci_pnp.h"
 #include "usbip_vhci_api.h"
 

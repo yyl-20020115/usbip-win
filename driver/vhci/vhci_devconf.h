@@ -1,8 +1,8 @@
 #pragma once
 
-#include <usbdi.h>
+#include "devconf.h"
 
-typedef PUSB_CONFIGURATION_DESCRIPTOR	devconf_t;
+#include <usbdi.h>
 
 extern void
 show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe);
@@ -18,9 +18,3 @@ select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, devconf_t devconf, UCH
 
 extern NTSTATUS
 select_interface(struct _URB_SELECT_INTERFACE *urb_seli, devconf_t devconf, UCHAR speed);
-
-PUSB_COMMON_DESCRIPTOR
-find_usbconf_desc(devconf_t devconf, unsigned int *poffset, unsigned char type);
-
-PUSB_INTERFACE_DESCRIPTOR
-find_intf_desc(devconf_t devconf, unsigned int *poffset, unsigned int num, unsigned int alternatesetting);
