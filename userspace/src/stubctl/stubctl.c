@@ -62,7 +62,10 @@ parse_args(int argc, char *argv[])
 			exit(1);
 		}
 	}
-	scanf_s(argv[optind], "%hhu", &devno);
+	if (sscanf_s(argv[optind], "%hhu", &devno) != 1) {
+		err("stubctl: invalid devno\n");
+		exit(1);
+	}
 }
 
 int
