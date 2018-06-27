@@ -166,6 +166,7 @@
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\include\usbip_proto.h" />
     <ClInclude Include="dbgcode.h" />
     <ClInclude Include="dbgcommon.h" />
     <ClInclude Include="devconf.h" />

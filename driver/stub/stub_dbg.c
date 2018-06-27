@@ -65,7 +65,7 @@ static namecode_t	namecodes_stub_ioctl[] = {
 };
 
 const char *
-dbg_stub_ioctl_code(unsigned int ioctl_code)
+dbg_stub_ioctl_code(ULONG ioctl_code)
 {
 	return dbg_namecode(namecodes_stub_ioctl, "ioctl", ioctl_code);
 }

@@ -143,7 +143,7 @@ stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	DBGI(DBG_READWRITE, "dispatch_write: csp: %s\n", dbg_ctlsetup_packet(csp));
+	DBGI(DBG_READWRITE, "dispatch_write: hdr: %s, csp: %s\n", dbg_usbip_hdr(hdr), dbg_ctlsetup_packet(csp));
 
 	reqType = CSPKT_REQUEST_TYPE(csp);
 	switch (reqType) {
