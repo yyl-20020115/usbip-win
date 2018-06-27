@@ -2,9 +2,6 @@
 
 #include "usbip_stub.h"
 
-BOOL install_driver_service(void);
-BOOL uninstall_driver_service(void);
-
 static BOOL
 is_admin(void)
 {
@@ -32,16 +29,11 @@ install_stub_driver(devno_t devno)
 		return 1;
 	}
 
-	if (devno == 0) {
-		install_driver_service();
+	if (attach_stub_driver(devno)) {
+		info("stub driver attached successfully: %hhu", devno);
 	}
 	else {
-		if (attach_stub_driver(devno)) {
-			info("filter inserted successfully: %hhu", devno);
-		}
-		else {
-			info("failed to insert filter: %hhu", devno);
-		}
+		info("failed to attach stub driver: %hhu", devno);
 	}
 
 	return 0;
@@ -50,10 +42,7 @@ install_stub_driver(devno_t devno)
 int
 uninstall_stub_driver(devno_t devno)
 {
-	if (devno == 0)
-		uninstall_driver_service();
-	else
-		detach_stub_driver(devno);
+	detach_stub_driver(devno);
 
 	return 0;
 }

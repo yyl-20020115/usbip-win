@@ -1,68 +1,16 @@
 #include "usbip_setupdi.h"
 #include "usbip_stub.h"
+#include "usbip_util.h"
+#include "usbip_common.h"
 
 #include <stdlib.h>
+#include <stdio.h>
+#include <newdev.h>
 
 char *get_dev_property(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD prop);
 
-static BOOL
-has_str_in_multistr(const char *mz_str, const char *str, BOOL no_case)
-{
-	while (*mz_str) {
-		int	ret;
-
-		ret = no_case ? _stricmp(mz_str, str) : strcmp(mz_str, str);
-		if (ret == 0)
-			return TRUE;
-		mz_str += strlen(mz_str) + 1;
-	}
-
-	return FALSE;
-}
-
-static int
-get_multistr_size(const char *mz_str)
-{
-	const char *p = mz_str;
-
-	while (*p) {
-		p += (strlen(p) + 1);
-	}
-
-	return (int)(p - mz_str) + 1;
-}
-
-static void
-append_str_into_multistr(const char **pmz_str, const char *str)
-{
-	char	*mz_str;
-	int	len_mz = get_multistr_size(*pmz_str);
-	size_t	len = strlen(str);
-
-	mz_str = realloc((void *)*pmz_str, len_mz + len + 1);
-	if (mz_str == NULL)
-		return;
-	memcpy(mz_str + (len_mz - 1), str, len + 1);
-	mz_str[len_mz - 1 + len + 1] = '\0';
-	*pmz_str = mz_str;
-}
-
-static void
-drop_str_from_multistr(char *mz_str, const char *str)
-{
-	char	*p = mz_str;
-	int	len_mz = get_multistr_size(mz_str);
-
-	while (*p) {
-		if (strcmp(p, str) == 0) {
-			memcpy(p, p + strlen(p) + 1, len_mz - strlen(p) - 1 - (p - mz_str));
-			return;
-		}
-		else {
-			p += (strlen(p) + 1);
-		}
-	}
-}
+BOOL build_cat(const char *path, const char *catname, const char *hwid);
+BOOL sign_file(LPCSTR subject, LPCSTR fpath);
 
 BOOL
 is_service_usbip_stub(HDEVINFO dev_info, SP_DEVINFO_DATA *dev_info_data)
@@ -78,54 +26,201 @@ is_service_usbip_stub(HDEVINFO dev_info, SP_DEVINFO_DATA *dev_info_data)
 	return res;
 }
 
-static BOOL
-set_upper_filters(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, const char *filters)
+static char *
+get_module_dir(void)
 {
-	int	len;
+	DWORD	size = 1024;
 
-	len = get_multistr_size(filters);
-	if (len == 1) {
-		filters = NULL;
-		len = 0;
+	while (TRUE) {
+		char	*path_mod;
+
+		path_mod = (char *)malloc(size);
+		if (path_mod == NULL)
+			return NULL;
+		if (GetModuleFileName(NULL, path_mod, size) == size) {
+			free(path_mod);
+			if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+				return NULL;
+			size += 1024;
+		}
+		else {
+			char	*last_sep;
+			last_sep = strrchr(path_mod, '\\');
+			if (last_sep != NULL)
+				*last_sep = '\0';
+			return path_mod;
+		}
 	}
-	if (!SetupDiSetDeviceRegistryProperty(dev_info, pdev_info_data, SPDRP_UPPERFILTERS, (PBYTE)filters, len))
+}
+
+static void
+copy_file(const char *fname, const char *path_drvpkg)
+{
+	char	*path_src, *path_dst;
+	char	*path_mod;
+
+	path_mod = get_module_dir();
+	if (path_mod == NULL) {
+		return;
+	}
+	asprintf(&path_src, "%s\\%s", path_mod, fname);
+	free(path_mod);
+	asprintf(&path_dst, "%s\\%s", path_drvpkg, fname);
+
+	CopyFile(path_src, path_dst, TRUE);
+	free(path_src);
+	free(path_dst);
+}
+
+static void
+translate_inf(const char *id_hw, FILE *in, FILE *out)
+{
+	char	buf[4096];
+	char	*line;
+
+	while ((line = fgets(buf, 4096, in))) {
+		char	*mark;
+
+		mark = strstr(line, "%hwid%");
+		if (mark) {
+			strcpy_s(mark, 4096 - (mark - buf), id_hw);
+		}
+		fwrite(line, strlen(line), 1, out);
+	}
+}
+
+static void
+copy_stub_inf(const char *id_hw, const char *path_drvpkg)
+{
+	char	*path_inx, *path_dst;
+	char	*path_mod;
+	FILE	*in, *out;
+	errno_t	err;
+
+	path_mod = get_module_dir();
+	if (path_mod == NULL)
+		return;
+	asprintf(&path_inx, "%s\\usbip_stub.inx", path_mod);
+	free(path_mod);
+
+	err = fopen_s(&in, path_inx, "r");
+	free(path_inx);
+	if (err != 0) {
+		return;
+	}
+	asprintf(&path_dst, "%s\\usbip_stub.inf", path_drvpkg);
+	err = fopen_s(&out, path_dst, "w");
+	free(path_dst);
+	if (err != 0) {
+		fclose(in);
+		return;
+	}
+
+	translate_inf(id_hw, in, out);
+	fclose(in);
+	fclose(out);
+}
+
+static void
+remove_dir_all(const char *path_dir)
+{
+	char	*fpat;
+	WIN32_FIND_DATA	wfd;
+	HANDLE	hfs;
+
+	asprintf(&fpat, "%s\\*", path_dir);
+	hfs = FindFirstFile(fpat, &wfd);
+	free(fpat);
+	if (hfs != INVALID_HANDLE_VALUE) {
+		do {
+			if (*wfd.cFileName != '.') {
+				char	*fpath;
+				asprintf(&fpath, "%s\\%s", path_dir, wfd.cFileName);
+				DeleteFile(fpath);
+				free(fpath);
+			}
+		} while (FindNextFile(hfs, &wfd));
+
+		FindClose(hfs);
+	}
+	RemoveDirectory(path_dir);
+}
+
+static BOOL
+get_temp_drvpkg_path(char path_drvpkg[])
+{
+	char	tempdir[MAX_PATH + 1];
+
+	if (GetTempPath(MAX_PATH + 1, tempdir) == 0)
 		return FALSE;
+	if (GetTempFileName(tempdir, "stub", 0, path_drvpkg) > 0) {
+		DeleteFile(path_drvpkg);
+		if (CreateDirectory(path_drvpkg, NULL))
+			return TRUE;
+	}
+	else
+		DeleteFile(path_drvpkg);
+	return FALSE;
+}
+
+static BOOL
+apply_stub_fdo(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
+{
+	char	path_drvpkg[MAX_PATH + 1];
+	char	*id_hw, *path_cat;
+	char	*path_inf;
+	BOOL	reboot_required;
+
+	id_hw = get_id_hw(dev_info, pdev_info_data);
+	if (id_hw == NULL)
+		return FALSE;
+	if (!get_temp_drvpkg_path(path_drvpkg)) {
+		free(id_hw);
+		return FALSE;
+	}
+	copy_file("usbip_stub.sys", path_drvpkg);
+	copy_stub_inf(id_hw, path_drvpkg);
+
+	if (!build_cat(path_drvpkg, "usbip_stub.cat", id_hw)) {
+		remove_dir_all(path_drvpkg);
+		free(id_hw);
+		return FALSE;
+	}
+
+
+	asprintf(&path_cat, "%s\\usbip_stub.cat", path_drvpkg);
+	if (!sign_file("USBIP Test", path_cat)) {
+		remove_dir_all(path_drvpkg);
+		free(path_cat);
+		free(id_hw);
+		return FALSE;
+	}
+
+	free(path_cat);
+
+	/* update driver */
+	asprintf(&path_inf, "%s\\usbip_stub.inf", path_drvpkg);
+	if (!UpdateDriverForPlugAndPlayDevicesA(NULL, id_hw, path_inf, INSTALLFLAG_NONINTERACTIVE, &reboot_required)) {
+		err("failed to update driver: %lx", GetLastError());
+		free(path_inf);
+		free(id_hw);
+		remove_dir_all(path_drvpkg);
+		return FALSE;
+	}
+	free(path_inf);
+	free(id_hw);
+
+	remove_dir_all(path_drvpkg);
+
 	return TRUE;
 }
 
 static BOOL
-insert_stub_filter(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
+rollback_driver(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 {
-	char	*filters;
+	BOOL	needReboot;
 
-	filters = get_upper_filters(dev_info, pdev_info_data);
-	if (filters == NULL)
-		return FALSE;
-
-	if (!has_str_in_multistr(filters, STUB_DRIVER_SVCNAME, TRUE)) {
-		append_str_into_multistr(&filters, STUB_DRIVER_SVCNAME);
-	}
-
-	set_upper_filters(dev_info, pdev_info_data, filters);
-	free(filters);
-
-	return TRUE;
-}
-
-static BOOL
-remove_stub_filter(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
-{
-	char	*filters;
-
-	filters = get_upper_filters(dev_info, pdev_info_data);
-	if (filters == NULL)
-		return FALSE;
-
-	drop_str_from_multistr(filters, STUB_DRIVER_SVCNAME);
-	set_upper_filters(dev_info, pdev_info_data, filters);
-	free(filters);
-
-	return TRUE;
+	return DiRollbackDriver(dev_info, pdev_info_data, NULL, ROLLBACK_FLAG_NO_UI, &needReboot);
 }
 
 static int
@@ -134,7 +229,7 @@ walker_attach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 	devno_t	*pdevno = (devno_t *)ctx;
 
 	if (devno == *pdevno) {
-		if (!insert_stub_filter(dev_info, pdev_info_data))
+		if (!apply_stub_fdo(dev_info, pdev_info_data))
 			return -2;
 		return -100;
 	}
@@ -158,7 +253,7 @@ walker_detach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 	devno_t	*pdevno = (devno_t *)ctx;
 
 	if (devno == *pdevno) {
-		if (!remove_stub_filter(dev_info, pdev_info_data))
+		if (!rollback_driver(dev_info, pdev_info_data))
 			return -2;
 		return -100;
 	}

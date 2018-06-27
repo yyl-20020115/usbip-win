@@ -150,20 +150,25 @@
     <ClCompile Include="getopt.c" />
     <ClCompile Include="getopt_long.c" />
     <ClCompile Include="usbip_forward.c" />
+    <ClCompile Include="usbip_pki_cat.c" />
+    <ClCompile Include="usbip_pki_sign.c" />
     <ClCompile Include="usbip_setupdi.c" />
     <ClCompile Include="usbip_stub.c" />
+    <ClCompile Include="usbip_util.c" />
     <ClCompile Include="usbip_windows.c" />
     <ClCompile Include="usbip_network.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\config.h" />
     <ClInclude Include="list.h" />
+    <ClInclude Include="mssign32.h" />
     <ClInclude Include="names.h" />
     <ClInclude Include="usbip_common.h" />
     <ClInclude Include="getopt.h" />
     <ClInclude Include="usbip_forward.h" />
     <ClInclude Include="usbip_setupdi.h" />
     <ClInclude Include="usbip_stub.h" />
+    <ClInclude Include="usbip_util.h" />
     <ClInclude Include="usbip_windows.h" />
     <ClInclude Include="usbip_network.h" />
   </ItemGroup>
