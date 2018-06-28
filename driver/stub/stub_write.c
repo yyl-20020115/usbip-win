@@ -23,6 +23,9 @@
 #include "stub_cspkt.h"
 #include "stub_usbd.h"
 #include "stub_req.h"
+#include "pdu.h"
+
+#define HDR_IS_CONTROL_TRANSFER(hdr)	((hdr)->base.ep == 0)
 
 static NTSTATUS
 not_supported(PIRP irp)
@@ -167,6 +170,76 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 		reply_stub_req_err(devstub, seqnum, -1);
 }
 
+static NTSTATUS
+process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+{
+	usb_cspkt_t	*csp;
+	UCHAR		reqType;
+
+	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
+
+	DBGI(DBG_READWRITE, "dispatch_write: hdr: %s, csp: %s\n", dbg_usbip_hdr(hdr), dbg_ctlsetup_packet(csp));
+
+	reqType = CSPKT_REQUEST_TYPE(csp);
+	switch (reqType) {
+	case BMREQUEST_STANDARD:
+		process_standard_request(devstub, hdr->base.seqnum, csp);
+		return STATUS_SUCCESS;
+	case BMREQUEST_CLASS:
+		process_class_request(devstub, csp, hdr);
+		return STATUS_SUCCESS;
+	case BMREQUEST_VENDOR:
+		return STATUS_NOT_SUPPORTED;
+	default:
+		DBGE(DBG_READWRITE, "invalid request type:", dbg_cspkt_reqtype(reqType));
+		return STATUS_UNSUCCESSFUL;
+	}
+}
+
+static NTSTATUS
+process_bulk_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+{
+	USBD_PIPE_HANDLE	hPipe = NULL;
+	PVOID	data;
+	USHORT	datalen;
+	BOOLEAN	is_in;
+
+	datalen = (USHORT)hdr->u.cmd_submit.transfer_buffer_length;
+	is_in = hdr->base.direction ? TRUE : FALSE;
+	if (is_in) {
+		data = ExAllocatePoolWithTag(NonPagedPool, datalen, USBIP_STUB_POOL_TAG);
+		if (data == NULL) {
+			DBGE(DBG_GENERAL, "process_bulk_transfer: out of memory\n");
+			reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+			return STATUS_UNSUCCESSFUL;
+		}
+	}
+	else {
+		data = (PVOID)(hdr + 1);
+	}
+	if (submit_bulk_transfer(devstub, hPipe, data, datalen, is_in)) {
+		if (is_in)
+			reply_stub_req_data(devstub, hdr->base.seqnum, data, datalen, FALSE);
+		else
+			reply_stub_req(devstub, hdr->base.seqnum);
+		return STATUS_SUCCESS;
+	}
+	reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+	return STATUS_UNSUCCESSFUL;
+}
+
+static NTSTATUS
+process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+{
+	if (is_iso_transfer(devstub->devconfs, hdr->base.ep, hdr->base.direction ? TRUE: FALSE)) {
+		
+	}
+	else {
+		return process_bulk_transfer(devstub, hdr);
+	}
+	return STATUS_NOT_SUPPORTED;
+}
+
 static struct usbip_header *
 get_usbip_hdr_from_write_irp(PIRP irp, ULONG *plen)
 {
@@ -186,8 +259,6 @@ NTSTATUS
 stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	struct usbip_header	*hdr;
-	usb_cspkt_t	*csp;
-	UCHAR		reqType;
 	ULONG		len;
 	NTSTATUS	status;
 
@@ -199,27 +270,11 @@ stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
-
-	DBGI(DBG_READWRITE, "dispatch_write: hdr: %s, csp: %s\n", dbg_usbip_hdr(hdr), dbg_ctlsetup_packet(csp));
-
-	reqType = CSPKT_REQUEST_TYPE(csp);
-	switch (reqType) {
-	case BMREQUEST_STANDARD:
-		process_standard_request(devstub, hdr->base.seqnum, csp);
-		status = STATUS_SUCCESS;
-		break;
-	case BMREQUEST_CLASS:
-		process_class_request(devstub, csp, hdr);
-		status = STATUS_SUCCESS;
-		break;
-	case BMREQUEST_VENDOR:
-		status = STATUS_NOT_SUPPORTED;
-		break;
-	default:
-		DBGE(DBG_READWRITE, "invalid request type:", dbg_cspkt_reqtype(reqType));
-		status = STATUS_UNSUCCESSFUL;
-		break;
+	if (HDR_IS_CONTROL_TRANSFER(hdr)) {
+		status = process_control_transfer(devstub, hdr);
+	}
+	else {
+		status = process_data_transfer(devstub, hdr);
 	}
 
 	if (NT_SUCCESS(status))

@@ -7,10 +7,11 @@
 
 typedef struct {
 	int	n_devconfs;
+	int	selected;
 	devconf_t	devconfs[1];
 } devconfs_t;
 
-BOOLEAN is_iso_transfer(devconfs_t *devconfs, int ep);
+BOOLEAN is_iso_transfer(devconfs_t *devconfs, int ep, BOOLEAN is_in);
 
 void free_devconfs(devconfs_t *devconfs);
 

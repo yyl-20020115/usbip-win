@@ -33,13 +33,30 @@ dbg_devconfs(devconfs_t *devconfs)
 
 #endif
 
-#if 0 ////TODO
-BOOLEAN
-is_iso_transfer(usbip_stub_dev_t *devstub, int ep)
+static devconf_t
+get_selected_devconf(devconfs_t *devconfs)
 {
-	PUSB_CONFIGURATION_DESCRIPTOR	pconf;
+	return get_devconf(devconfs, (USHORT)devconfs->selected);
 }
-#endif
+
+BOOLEAN
+is_iso_transfer(devconfs_t *devconfs, int ep, BOOLEAN is_in)
+{
+	devconf_t	devconf;
+	int		epaddr;
+	PUSB_ENDPOINT_DESCRIPTOR	ep_desc;
+
+	devconf = get_selected_devconf(devconfs);
+	if (devconf == NULL)
+		return FALSE;
+	epaddr = (is_in ? USB_ENDPOINT_DIRECTION_MASK: 0) | ep;
+	ep_desc = devconf_find_ep_desc(devconf, 0, epaddr);
+	if (ep_desc == NULL)
+		return FALSE;
+	if ((ep_desc->bmAttributes & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_TYPE_ISOCHRONOUS)
+		return TRUE;
+	return FALSE;
+}
 
 devconfs_t *
 create_devconfs(usbip_stub_dev_t *devstub)
@@ -104,9 +121,8 @@ get_devconf(devconfs_t *devconfs, USHORT idx)
 void
 set_conf_info(devconfs_t *devconfs, USHORT idx, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION intf)
 {
+	devconfs->selected = idx;
 	///TODO
-	UNREFERENCED_PARAMETER(devconfs);
-	UNREFERENCED_PARAMETER(idx);
 	UNREFERENCED_PARAMETER(hconf);
 	UNREFERENCED_PARAMETER(intf);
 }

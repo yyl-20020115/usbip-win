@@ -197,3 +197,19 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 		return TRUE;
 	return FALSE;
 }
+
+BOOLEAN
+submit_bulk_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, PVOID data, USHORT datalen, BOOLEAN is_in)
+{
+	URB		Urb;
+	ULONG		flags = 0;
+	NTSTATUS	status;
+
+	if (is_in)
+		flags |= USBD_TRANSFER_DIRECTION_IN;
+	UsbBuildInterruptOrBulkTransferRequest(&Urb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, datalen, flags, NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status))
+		return TRUE;
+	return FALSE;
+}

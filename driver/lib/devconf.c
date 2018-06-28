@@ -45,3 +45,25 @@ devconf_find_intf_desc(devconf_t devconf, unsigned int *poffset, unsigned int nu
 
 	return NULL;
 }
+
+PUSB_ENDPOINT_DESCRIPTOR
+devconf_find_ep_desc(devconf_t devconf, unsigned int intf_num, int epaddr)
+{
+	PUSB_INTERFACE_DESCRIPTOR	intf_desc;
+	unsigned int	offset = 0;
+	int	i;
+
+	intf_desc = devconf_find_intf_desc(devconf, &offset, intf_num, 0);
+	if (intf_desc == NULL)
+		return NULL;
+	for (i = 0; i < intf_desc->bNumEndpoints; i++) {
+		PUSB_ENDPOINT_DESCRIPTOR	ep_desc;
+
+		ep_desc = (PUSB_ENDPOINT_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_ENDPOINT_DESCRIPTOR_TYPE);
+		if (ep_desc == NULL)
+			return NULL;
+		if (ep_desc->bEndpointAddress == epaddr)
+			return ep_desc;
+	}
+	return NULL;
+}
