@@ -96,7 +96,7 @@ typedef struct _PDO_DEVICE_DATA
 	PFILE_OBJECT	fo;
 	unsigned int	devid;
 	unsigned long	seq_num;
-	devconf_t	devconf;
+	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
 	KTIMER	timer;
 	KDPC	dpc;
 	UNICODE_STRING	usb_dev_interface;

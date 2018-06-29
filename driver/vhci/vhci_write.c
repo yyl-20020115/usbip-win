@@ -29,26 +29,6 @@ to_usbd_status(int linux_status)
 	}
 }
 
-static void
-try_save_devconf(PPDO_DEVICE_DATA pdodata, PURB urb)
-{
-	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_desc;
-	devconf_t	devconf;
-
-	if (pdodata->devconf != NULL)
-		return;
-
-	urb_desc = (struct _URB_CONTROL_DESCRIPTOR_REQUEST *)urb;
-	if (urb_desc->DescriptorType != USB_CONFIGURATION_DESCRIPTOR_TYPE)
-		return;
-
-	devconf = alloc_devconf_from_urb(urb_desc);
-	if (devconf != NULL) {
-		DBGI(DBG_GENERAL, "devconf has been saved\n");
-		pdodata->devconf = devconf;
-	}
-}
-
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
 {
@@ -109,14 +89,23 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 static NTSTATUS
 post_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
+	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
+	USHORT	len;
 	struct _URB_SELECT_CONFIGURATION	*urb_selc = &urb->UrbSelectConfiguration;
 
-	if (pdodata->devconf == NULL) {
-		DBGW(DBG_WRITE, "post_select_config: empty devconf\n");
-		return STATUS_INVALID_DEVICE_REQUEST;
+	len = urb_selc->ConfigurationDescriptor->wTotalLength;
+	dsc_conf = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
+	if (dsc_conf == NULL) {
+		DBGE(DBG_WRITE, "post_select_config: out of memory\n");
+		return STATUS_UNSUCCESSFUL;
 	}
 
-	return select_config(urb_selc, pdodata->devconf, pdodata->speed);
+	RtlCopyMemory(dsc_conf, urb_selc->ConfigurationDescriptor, len);
+	if (pdodata->dsc_conf)
+		ExFreePoolWithTag(pdodata->dsc_conf, USBIP_VHCI_POOL_TAG);
+	pdodata->dsc_conf = dsc_conf;
+
+	return select_config(urb_selc, pdodata->speed);
 }
 
 static NTSTATUS
@@ -124,12 +113,12 @@ post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
 {
 	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
-	if (pdodata->devconf == NULL) {
-		DBGW(DBG_WRITE, "post_select_interface: empty devconf\n");
+	if (pdodata->dsc_conf == NULL) {
+		DBGW(DBG_WRITE, "post_select_interface: empty configuration descriptor\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	return select_interface(urb_seli, pdodata->devconf, pdodata->speed);
+	return select_interface(urb_seli, pdodata->dsc_conf, pdodata->speed);
 }
 
 static NTSTATUS
@@ -272,9 +261,6 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 	status = store_urb_data(urb, hdr);
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {
-		case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
-			try_save_devconf(pdodata, urb);
-			break;
 		case URB_FUNCTION_SELECT_CONFIGURATION:
 			status = post_select_config(pdodata, urb);
 			break;
