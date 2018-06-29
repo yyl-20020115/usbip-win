@@ -31,11 +31,13 @@ typedef struct {
 
 	USBD_HANDLE	hUSBD;
 
-	/* for pending read irp management */
-	KSPIN_LOCK	lock_irp_read;
-	PIRP	irp_read;
-	int	wait_reader;
-	KEVENT	event_read;
+	KSPIN_LOCK	lock_stub_res;
+	PIRP		irp_stub_read;
+	BOOLEAN		is_pending_stub_res;
+	unsigned long	stub_res_seqnum;
+	int		stub_res_err;
+	PVOID		stub_res_data;
+	int		stub_res_data_len;
 } usbip_stub_dev_t;
 
 void init_dev_removal_lock(usbip_stub_dev_t *devstub);

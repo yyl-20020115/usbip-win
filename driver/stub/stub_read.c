@@ -21,7 +21,9 @@
 #include "stub_dbg.h"
 #include "usbip_proto.h"
 
-extern void set_pending_read_irp(usbip_stub_dev_t *devstub, PIRP irp);
+#include "stub_req.h"
+
+extern BOOLEAN collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read);
 
 static struct usbip_header *
 get_usbip_hdr_from_read_irp(PIRP irp)
@@ -41,13 +43,9 @@ get_usbip_hdr_from_read_irp(PIRP irp)
 NTSTATUS
 stub_dispatch_read(usbip_stub_dev_t *devstub, IRP *irp)
 {
-	UNREFERENCED_PARAMETER(devstub);
-
 	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_read: enter\n");
 
-	IoMarkIrpPending(irp);
-
-	set_pending_read_irp(devstub, irp);
-
-	return STATUS_PENDING;
+	if (!collect_pending_stub_res(devstub, irp))
+		return STATUS_PENDING;
+	return STATUS_SUCCESS;
 }

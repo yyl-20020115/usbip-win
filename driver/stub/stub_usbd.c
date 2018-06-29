@@ -35,7 +35,7 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 
 	KeInitializeEvent(&event, NotificationEvent, FALSE);
 
-	irp = IoBuildDeviceIoControlRequest(control_code, devstub->pdo, NULL, 0, NULL, 0, TRUE, &event, &io_status);
+	irp = IoBuildDeviceIoControlRequest(control_code, devstub->next_stack_dev, NULL, 0, NULL, 0, TRUE, &event, &io_status);
 	if (irp == NULL) {
 		DBGE(DBG_GENERAL, "IoBuildDeviceIoControlRequest failed\n");
 		return STATUS_NO_MEMORY;
@@ -51,33 +51,37 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 		status = io_status.Status;
 	}
 
-	DBGI(DBG_GENERAL, "call_usbd: status = %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL, "call_usbd: status = %s, usbd_status:%x\n", dbg_ntstatus(status), ((PURB)urb)->UrbHeader.Status);
 	return status;
 }
 
 BOOLEAN
-get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buf)
+get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buf, PUCHAR plen)
 {
 	URB		Urb;
 	NTSTATUS	status;
 
 	UsbBuildGetStatusRequest(&Urb, op, idx, buf, NULL, NULL);
 	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_SUCCESS(status))
+	if (NT_SUCCESS(status)) {
+		*plen = (UCHAR)Urb.UrbControlGetStatusRequest.TransferBufferLength;
 		return TRUE;
+	}
 	return FALSE;
 }
 
 BOOLEAN
-get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang, PVOID buff, ULONG bufflen)
+get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang, PVOID buff, ULONG *pbufflen)
 {
 	URB		Urb;
 	NTSTATUS	status;
 
-	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST), descType, idx, idLang, buff, NULL, bufflen, NULL);
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST), descType, idx, idLang, buff, NULL, *pbufflen, NULL);
 	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_SUCCESS(status))
+	if (NT_SUCCESS(status)) {
+		*pbufflen = Urb.UrbControlDescriptorRequest.TransferBufferLength;
 		return TRUE;
+	}
 	return FALSE;
 }
 
@@ -143,7 +147,8 @@ select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 BOOLEAN
 get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc)
 {
-	return get_usb_desc(devstub, USB_DEVICE_DESCRIPTOR_TYPE, 0, 0, pdesc, sizeof(USB_DEVICE_DESCRIPTOR));
+	ULONG	len = sizeof(USB_DEVICE_DESCRIPTOR);
+	return get_usb_desc(devstub, USB_DEVICE_DESCRIPTOR_TYPE, 0, 0, pdesc, &len);
 }
 
 PUSB_CONFIGURATION_DESCRIPTOR
@@ -175,4 +180,20 @@ get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx)
 	}
 
 	return desc;
+}
+
+BOOLEAN
+submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UCHAR reservedBits, UCHAR request, USHORT value, USHORT index, PVOID data, ULONG len)
+{
+	URB		Urb;
+	ULONG		flags = 0;
+	NTSTATUS	status;
+
+	if (is_in)
+		flags |= USBD_TRANSFER_DIRECTION_IN;
+	UsbBuildVendorRequest(&Urb, cmd, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST), flags, reservedBits, request, value, index, data, NULL, len, NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status))
+		return TRUE;
+	return FALSE;
 }

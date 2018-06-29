@@ -220,7 +220,7 @@ write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE
 	xfer_len = get_xfer_len(is_req, hdr);
 	usbip_header_correct_endian(hdr, 0);
 
-	DBGF("recv seq %d\n", hdr->base.seqnum);
+	DBGF("dev: write: seq %d\n", hdr->base.seqnum);
 
 	DBG_USBIP_HEADER(hdr);
 
@@ -328,11 +328,8 @@ write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 		err("invalid buffer length:%d, out_len:%ld, iso_len:%ld\n", len, xfer_len, iso_len);
 		return FALSE;
 	}
-	if (!hdr->base.direction && !record_outq_seqnum(hdr->base.seqnum)) {
-		err("failed to record. out queue full");
-		return FALSE;
-	}
-	DBGF("send seq:%d\n", ntohl(hdr->base.seqnum));
+
+	DBGF("sock: write: seq:%d\n", ntohl(hdr->base.seqnum));
 
 	ret = usbip_net_send(sockfd, buf, len);
 	if (ret != len) {
@@ -357,6 +354,9 @@ dev_read_async(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
 			err("ReadFile failed: err: %ld\n", err);
 			return FALSE;
 		}
+
+		DBGF("Bytes read from dev synchronously: %d\n", len);
+
 		if (!write_to_sock(!is_req, dev_read_buf, len, sockfd))
 			return FALSE;
 	}
@@ -371,6 +371,9 @@ dev_read_completed(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
 		err("get overlapping failed: %ld", GetLastError());
 		return FALSE;
 	}
+
+	DBGF("Bytes read from dev asynchronously: %d\n", len);
+
 	if (!write_to_sock(!is_req, dev_read_buf, len, sockfd))
 		return FALSE;
 	return dev_read_async(is_req, hdev, sockfd, ov);
@@ -422,7 +425,7 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 	signal(SIGINT, signalhandler);
 
 	is_req_sock = is_inbound ? FALSE: TRUE;
-	is_req_dev = is_inbound ? TRUE : FALSE;
+	is_req_dev = !is_req_sock;
 
 	dev_read_async(is_req_dev, hdev, sockfd, &ovs[0]);
 	sock_read_async(is_req_sock, sockfd, hdev, &ovs[1], &ovs[2]);
@@ -430,8 +433,9 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 	while (!interrupted) {
 		DWORD	ret;
 
-		DBGF("wait\n");
+		DBGF("waiting\n");
 		ret =  WaitForMultipleObjects(2, evts, FALSE, 500);
+		DBGF("wait result: %x\n", ret);
 
 		switch (ret) {
 		case WAIT_TIMEOUT:

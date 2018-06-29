@@ -24,11 +24,20 @@
 #include "stub_usbd.h"
 #include "stub_req.h"
 
+static NTSTATUS
+not_supported(PIRP irp)
+{
+	irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+	return STATUS_NOT_SUPPORTED;
+}
+
 static void
-process_get_status(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
+process_get_status(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	USHORT	op, idx = 0;
 	USHORT	data;
+	UCHAR	datalen;
 
 	DBGI(DBG_READWRITE, "get_status\n");
 
@@ -38,26 +47,29 @@ process_get_status(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t 
 		break;
 	case BMREQUEST_TO_INTERFACE:
 		op = URB_FUNCTION_GET_STATUS_FROM_INTERFACE;
+		idx = csp->wIndex.W;
 		break;
 	case BMREQUEST_TO_ENDPOINT:
 		op = URB_FUNCTION_GET_STATUS_FROM_ENDPOINT;
+		idx = csp->wIndex.W;
 		break;
 	default:
 		op = URB_FUNCTION_GET_STATUS_FROM_OTHER;
 		break;
 	}
-	if (get_usb_status(devstub, op, idx, &data))
-		reply_stub_req_data(devstub, seqnum, &data, 2);
+	if (get_usb_status(devstub, op, idx, &data, &datalen))
+		reply_stub_req_data(devstub, seqnum, &data, (int)datalen, FALSE);
 	else
 		reply_stub_req_err(devstub, seqnum, -1);
 }
 
 static void
-process_get_desc(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
+process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	UCHAR	descType = CSPKT_DESCRIPTOR_TYPE(csp);
 	USHORT	idLang = 0;
 	PVOID	pdesc = NULL;
+	ULONG	len;
 
 	DBGI(DBG_READWRITE, "get_desc: %s\n", dbg_cspkt_desctype(CSPKT_DESCRIPTOR_TYPE(csp)));
 
@@ -69,18 +81,18 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *c
 	}
 	if (descType == USB_STRING_DESCRIPTOR_TYPE)
 		idLang = csp->wIndex.W;
-	if (!get_usb_desc(devstub, descType, CSPKT_DESCRIPTOR_INDEX(csp), idLang, pdesc, csp->wLength)) {
+	len = csp->wLength;
+	if (!get_usb_desc(devstub, descType, CSPKT_DESCRIPTOR_INDEX(csp), idLang, pdesc, &len)) {
 		DBGW(DBG_READWRITE, "process_get_desc: failed to get descriptor\n");
 		ExFreePool(pdesc);
 		reply_stub_req_err(devstub, seqnum, -1);
 		return;
 	}
-	reply_stub_req_data(devstub, seqnum, pdesc, csp->wLength);
-	ExFreePool(pdesc);
+	reply_stub_req_data(devstub, seqnum, pdesc, len, FALSE);
 }
 
 static void
-process_select_conf(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
+process_select_conf(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	if (select_usb_conf(devstub, csp->wValue.W))
 		reply_stub_req(devstub, seqnum);
@@ -88,25 +100,71 @@ process_select_conf(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t
 		reply_stub_req_err(devstub, seqnum, -1);
 }
 
-static NTSTATUS
-process_standard_request(usbip_stub_dev_t *devstub, unsigned long seqnum, usb_cspkt_t *csp)
+static void
+process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	switch (csp->bRequest) {
 	case USB_REQUEST_GET_STATUS:
 		process_get_status(devstub, seqnum, csp);
-		return STATUS_SUCCESS;
+		break;
 	case USB_REQUEST_GET_DESCRIPTOR:
 		process_get_desc(devstub, seqnum, csp);
-		return STATUS_SUCCESS;
+		break;
 	case USB_REQUEST_SET_CONFIGURATION:
 		process_select_conf(devstub, seqnum, csp);
-		return STATUS_SUCCESS;
+		break;
 	case USB_REQUEST_SET_INTERFACE:
 		break;
 	default:
 		break;
 	}
-	return STATUS_INVALID_PARAMETER;
+}
+
+static void
+process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_header *hdr)
+{
+	PVOID	data;
+	ULONG	datalen;
+	USHORT	cmd;
+	UCHAR	reservedBits;
+	unsigned long	seqnum;
+	BOOLEAN	is_in, res;
+
+	datalen = hdr->u.cmd_submit.transfer_buffer_length;
+	if (datalen == 0)
+		data = NULL;
+	else {
+		data = (PVOID)(hdr + 1);
+	}
+
+	is_in = csp->bmRequestType.Dir ? TRUE : FALSE;
+
+	switch (csp->bmRequestType.Recipient) {
+	case BMREQUEST_TO_DEVICE:
+		cmd = URB_FUNCTION_CLASS_DEVICE;
+		break;
+	case BMREQUEST_TO_INTERFACE:
+		cmd = URB_FUNCTION_CLASS_INTERFACE;
+		break;
+	case BMREQUEST_TO_ENDPOINT:
+		cmd = URB_FUNCTION_CLASS_ENDPOINT;
+		break;
+	default:
+		cmd = URB_FUNCTION_CLASS_OTHER;
+		break;
+	}
+
+	reservedBits = csp->bmRequestType.Reserved;
+	seqnum = hdr->base.seqnum;
+	res = submit_class_vendor_req(devstub, is_in, cmd, reservedBits, csp->bRequest, csp->wValue.W, csp->wIndex.W, data, datalen);
+	if (res) {
+		if (is_in)
+			reply_stub_req_data(devstub, seqnum, data, datalen, TRUE);
+		else
+			reply_stub_req(devstub, seqnum);
+	}
+	else
+		reply_stub_req_err(devstub, seqnum, -1);
 }
 
 static struct usbip_header *
@@ -131,7 +189,7 @@ stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 	usb_cspkt_t	*csp;
 	UCHAR		reqType;
 	ULONG		len;
-	NTSTATUS	status = STATUS_UNSUCCESSFUL;///TODO
+	NTSTATUS	status;
 
 	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_write: enter\n");
 
@@ -148,14 +206,19 @@ stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 	reqType = CSPKT_REQUEST_TYPE(csp);
 	switch (reqType) {
 	case BMREQUEST_STANDARD:
-		status = process_standard_request(devstub, hdr->base.seqnum, csp);
+		process_standard_request(devstub, hdr->base.seqnum, csp);
+		status = STATUS_SUCCESS;
 		break;
 	case BMREQUEST_CLASS:
+		process_class_request(devstub, csp, hdr);
+		status = STATUS_SUCCESS;
 		break;
 	case BMREQUEST_VENDOR:
+		status = STATUS_NOT_SUPPORTED;
 		break;
 	default:
 		DBGE(DBG_READWRITE, "invalid request type:", dbg_cspkt_reqtype(reqType));
+		status = STATUS_UNSUCCESSFUL;
 		break;
 	}
 

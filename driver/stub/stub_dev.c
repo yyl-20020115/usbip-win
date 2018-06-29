@@ -267,8 +267,8 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 		IoDeleteDevice(devobj);
 		return STATUS_UNSUCCESSFUL;
 	}
-	KeInitializeSpinLock(&devstub->lock_irp_read);
-	KeInitializeEvent(&devstub->event_read, SynchronizationEvent, FALSE);
+
+	KeInitializeSpinLock(&devstub->lock_stub_res);
 
 	devobj->Flags |= DO_POWER_PAGABLE | DO_BUFFERED_IO;
 
