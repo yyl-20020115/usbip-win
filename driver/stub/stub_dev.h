@@ -25,7 +25,7 @@ typedef struct {
 
 	char	id_hw[256];
 
-	devconfs_t	*devconfs;
+	devconf_t	*devconf;
 
 	UNICODE_STRING	interface_name;
 

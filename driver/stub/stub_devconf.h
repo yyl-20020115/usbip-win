@@ -5,19 +5,23 @@
 
 #include "devconf.h"
 
+#define INFO_INTF_SIZE(info_intf)	(sizeof(USBD_INTERFACE_INFORMATION) + ((info_intf)->NumberOfPipes - 1) * sizeof(USBD_PIPE_INFORMATION))
+
 typedef struct {
-	int	n_devconfs;
-	int	selected;
-	devconf_t	devconfs[1];
-} devconfs_t;
+	UCHAR	bConfigurationValue;
+	UCHAR	bNumInterfaces;
+	USBD_CONFIGURATION_HANDLE	hConf;
+	PUSBD_INTERFACE_INFORMATION	infos_intf[1];
+} devconf_t;
 
-BOOLEAN is_iso_transfer(devconfs_t *devconfs, int ep, BOOLEAN is_in);
+devconf_t *create_devconf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION infos_intf);
+void free_devconf(devconf_t *devconf);
+void update_devconf(devconf_t *devconf, PUSBD_INTERFACE_INFORMATION info_intf);
 
-void free_devconfs(devconfs_t *devconfs);
+PUSBD_INTERFACE_INFORMATION get_info_intf(devconf_t *devconf, UCHAR intf_num);
+PUSBD_PIPE_INFORMATION get_info_pipe(devconf_t *devconf, UCHAR epaddr);
 
-devconf_t get_devconf(devconfs_t *devconfs, USHORT idx);
-
-void set_conf_info(devconfs_t *devconfs, USHORT idx, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION intf);
-
-int get_n_intfs(devconfs_t *devconfs, USHORT idx);
-int get_n_endpoints(devconfs_t *devconfs, USHORT idx);
+#ifdef DBG
+const char *dbg_info_intf(PUSBD_INTERFACE_INFORMATION info_intf);
+const char *dbg_info_pipe(PUSBD_PIPE_INFORMATION info_pipe);
+#endif

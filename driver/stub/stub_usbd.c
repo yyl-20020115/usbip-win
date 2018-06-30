@@ -47,7 +47,13 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 
 	status = IoCallDriver(devstub->pdo, irp);
 	if (status == STATUS_PENDING) {
-		KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
+		LARGE_INTEGER	timeout;
+		timeout.QuadPart = -(5000 * 10000);
+		if (KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, &timeout) == STATUS_TIMEOUT) {
+			DBGW(DBG_GENERAL, "call_usbd: timeout\n");
+			IoCancelIrp(irp);
+			KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
+		}
 		status = io_status.Status;
 	}
 
@@ -85,24 +91,62 @@ get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang
 	return FALSE;
 }
 
+PUSB_CONFIGURATION_DESCRIPTOR
+get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx)
+{
+	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
+	URB		Urb;
+	USB_CONFIGURATION_DESCRIPTOR	ConfDesc;
+	NTSTATUS	status;
+
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
+		USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, &ConfDesc, NULL,
+		sizeof(USB_CONFIGURATION_DESCRIPTOR), NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_ERROR(status))
+		return NULL;
+
+	dsc_conf = ExAllocatePoolWithTag(NonPagedPool, ConfDesc.wTotalLength, USBIP_STUB_POOL_TAG);
+	if (dsc_conf == NULL)
+		return NULL;
+
+	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
+		USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, dsc_conf, NULL,
+		ConfDesc.wTotalLength, NULL);
+	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_ERROR(status)) {
+		ExFreePool(dsc_conf);
+		return NULL;
+	}
+
+	return dsc_conf;
+}
+
 static PUSBD_INTERFACE_LIST_ENTRY
-build_intf_list(devconf_t devconf)
+build_intf_list(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 {
 	PUSBD_INTERFACE_LIST_ENTRY	pintf_list;
+	PVOID	start;
 	int	size;
-	unsigned int	offset = 0;
-	int	i;
+	int	n_dsc_intf;
 
-	size = sizeof(USBD_INTERFACE_LIST_ENTRY) * (devconf->bNumInterfaces + 1);
+	size = sizeof(USBD_INTERFACE_LIST_ENTRY) * (dsc_conf->bNumInterfaces + 1);
 	pintf_list = ExAllocatePoolWithTag(NonPagedPool, size, USBIP_STUB_POOL_TAG);
 	RtlZeroMemory(pintf_list, size);
 
-	for (i = 0; i < devconf->bNumInterfaces; i++) {
-		PUSB_INTERFACE_DESCRIPTOR	pdesc;
-		pdesc = (PUSB_INTERFACE_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (pdesc == NULL)
+	n_dsc_intf = 0;
+	start = dsc_conf;
+	while (n_dsc_intf < dsc_conf->bNumInterfaces) {
+		PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
+		dsc_intf = dsc_find_intf(dsc_conf, start);
+		if (dsc_intf == NULL)
 			break;
-		pintf_list[i].InterfaceDescriptor = pdesc;
+		if (dsc_intf->bAlternateSetting == 0) {
+			/* add only a interface with 0 alternate value */
+			pintf_list[n_dsc_intf].InterfaceDescriptor = dsc_intf;
+			n_dsc_intf++;
+		}
+		start = NEXT_DESC(dsc_intf);
 	}
 	return pintf_list;
 }
@@ -110,37 +154,78 @@ build_intf_list(devconf_t devconf)
 BOOLEAN
 select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 {
-	devconf_t	devconf;
+	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
 	PURB		purb;
 	PUSBD_INTERFACE_LIST_ENTRY	pintf_list;
 	NTSTATUS	status;
 
-	devconf = get_devconf(devstub->devconfs, idx);
-	if (devconf == NULL) {
-		DBGE(DBG_GENERAL, "select_usb_conf: non-existent devconf: index: %hu\n", idx);
+	dsc_conf = get_usb_dsc_conf(devstub, (UCHAR)idx);
+	if (dsc_conf == NULL) {
+		DBGE(DBG_GENERAL, "select_usb_conf: non-existent configuration descriptor: index: %hu\n", idx);
 		return FALSE;
 	}
 
-	pintf_list = build_intf_list(devconf);
+	pintf_list = build_intf_list(dsc_conf);
 
-	status = USBD_SelectConfigUrbAllocateAndBuild(devstub->hUSBD, devconf, pintf_list, &purb);
+	status = USBD_SelectConfigUrbAllocateAndBuild(devstub->hUSBD, dsc_conf, pintf_list, &purb);
 	if (NT_ERROR(status)) {
 		DBGE(DBG_GENERAL, "select_usb_conf: failed to selectConfigUrb: %s\n", dbg_ntstatus(status));
-		ExFreePool(pintf_list);
+		ExFreePoolWithTag(pintf_list, USBIP_STUB_POOL_TAG);
 		return FALSE;
 	}
 
 	status = call_usbd(devstub, purb, IOCTL_INTERNAL_USB_SUBMIT_URB);
 	if (NT_SUCCESS(status)) {
 		struct _URB_SELECT_CONFIGURATION	*purb_selc = &purb->UrbSelectConfiguration;
-		set_conf_info(devstub->devconfs, idx, purb_selc->ConfigurationHandle, &purb_selc->Interface);
-		ExFreePool(purb);
+
+		if (devstub->devconf)
+			free_devconf(devstub->devconf);
+		devstub->devconf = create_devconf(purb_selc->ConfigurationDescriptor, purb_selc->ConfigurationHandle, &purb_selc->Interface);
+		USBD_UrbFree(devstub->hUSBD, purb);
+		ExFreePoolWithTag(pintf_list, USBIP_STUB_POOL_TAG);
+		ExFreePoolWithTag(dsc_conf, USBIP_STUB_POOL_TAG);
 		return TRUE;
 	}
 	else {
 		DBGI(DBG_GENERAL, "select_usb_conf: failed to select configuration: %s\n", dbg_devstub(devstub));
 	}
-	ExFreePool(purb);
+	USBD_UrbFree(devstub->hUSBD, purb);
+	ExFreePoolWithTag(pintf_list, USBIP_STUB_POOL_TAG);
+	ExFreePoolWithTag(dsc_conf, USBIP_STUB_POOL_TAG);
+	return FALSE;
+}
+
+BOOLEAN
+select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, USHORT alt_setting)
+{
+	PUSBD_INTERFACE_INFORMATION	info_intf;
+	PURB	purb;
+	struct _URB_SELECT_INTERFACE	*purb_seli;
+	ULONG	len_urb;
+	NTSTATUS	status;
+
+	info_intf = get_info_intf(devconf, intf_num);
+	if (info_intf == NULL) {
+		DBGW(DBG_GENERAL, "select_usb_intf: non-existent interface: num: %hhu, alt:%hu\n", intf_num, alt_setting);
+		return FALSE;
+	}
+
+	len_urb = sizeof(struct _URB_SELECT_INTERFACE) - sizeof(USBD_INTERFACE_INFORMATION) + INFO_INTF_SIZE(info_intf);
+	purb = (PURB)ExAllocatePoolWithTag(NonPagedPool, len_urb, USBIP_STUB_POOL_TAG);
+	if (purb == NULL) {
+		DBGE(DBG_GENERAL, "select_usb_intf: out of memory\n");
+		return FALSE;
+	}
+	UsbBuildSelectInterfaceRequest(purb, (USHORT)len_urb, devconf->hConf, intf_num, (UCHAR)alt_setting);
+	purb_seli = &purb->UrbSelectInterface;
+	RtlCopyMemory(&purb_seli->Interface, info_intf, INFO_INTF_SIZE(info_intf));
+
+	status = call_usbd(devstub, purb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
+	if (NT_SUCCESS(status)) {
+		update_devconf(devconf, info_intf);
+		return TRUE;
+	}
 	return FALSE;
 }
 
@@ -151,35 +236,20 @@ get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc)
 	return get_usb_desc(devstub, USB_DEVICE_DESCRIPTOR_TYPE, 0, 0, pdesc, &len);
 }
 
-PUSB_CONFIGURATION_DESCRIPTOR
-get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx)
+BOOLEAN
+reset_pipe(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe)
 {
-	PUSB_CONFIGURATION_DESCRIPTOR	desc;
-	URB		Urb;
-	USB_CONFIGURATION_DESCRIPTOR	ConfDesc;
+	URB	urb;
 	NTSTATUS	status;
 
-	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
-				     USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, &ConfDesc, NULL,
-				     sizeof(USB_CONFIGURATION_DESCRIPTOR), NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_ERROR(status))
-		return NULL;
+	urb.UrbHeader.Function = URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL;
+	urb.UrbHeader.Length = sizeof(struct _URB_PIPE_REQUEST);
+	urb.UrbPipeRequest.PipeHandle = hPipe;
 
-	desc = ExAllocatePoolWithTag(NonPagedPool, ConfDesc.wTotalLength, USBIP_STUB_POOL_TAG);
-	if (desc == NULL)
-		return NULL;
-
-	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
-				     USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, desc, NULL,
-				     ConfDesc.wTotalLength, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_ERROR(status)) {
-		ExFreePool(desc);
-		return NULL;
-	}
-
-	return desc;
+	status = call_usbd(devstub, &urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	if (NT_SUCCESS(status))
+		return TRUE;
+	return FALSE;
 }
 
 BOOLEAN
@@ -202,7 +272,7 @@ BOOLEAN
 submit_bulk_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, PVOID data, USHORT datalen, BOOLEAN is_in)
 {
 	URB		Urb;
-	ULONG		flags = 0;
+	ULONG		flags = USBD_SHORT_TRANSFER_OK;
 	NTSTATUS	status;
 
 	if (is_in)

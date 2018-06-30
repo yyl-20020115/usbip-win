@@ -90,8 +90,8 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		DBGI(DBG_PNP, "deleting device: %s\n", dbg_devstub(devstub));
 
 		remove_devlink(devstub);
-		free_devconfs(devstub->devconfs);
-		devstub->devconfs = NULL;
+		free_devconf(devstub->devconf);
+		devstub->devconf = NULL;
 #if 0 ////TODO
 		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
 #endif

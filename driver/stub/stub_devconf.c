@@ -6,148 +6,190 @@
 #include "stub_usbd.h"
 #include "devconf.h"
 
-PUSB_CONFIGURATION_DESCRIPTOR get_usb_conf_desc(usbip_stub_dev_t *devstub, UCHAR idx);
+PUSB_CONFIGURATION_DESCRIPTOR get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx);
 
 #ifdef DBG
 
 const char *
-dbg_devconfs(devconfs_t *devconfs)
+dbg_info_intf(PUSBD_INTERFACE_INFORMATION info_intf)
 {
-	static char	buf[1024];
-	int	i, n = 0;
+	static char	buf[128];
 
-	if (devconfs == NULL)
+	if (info_intf == NULL)
 		return "<null>";
-	if (devconfs->n_devconfs == 0)
-		return "empty";
-	for (i = 0; i < devconfs->n_devconfs; i++) {
-		devconf_t	devconf = devconfs->devconfs[i];
 
-		if (devconf != NULL)
-			n += dbg_snprintf(buf + n, 1024 - n, "[%d:%hhu,%hhu]", i, devconf->bConfigurationValue, devconf->bNumInterfaces);
-		else
-			n += dbg_snprintf(buf + n, 1024 - n, "[%d:null]", i);
-	}
+	dbg_snprintf(buf, 128, "num:%hhu,alt:%hhu", info_intf->InterfaceNumber, info_intf->AlternateSetting);
+
+	return buf;
+}
+
+const char *
+dbg_info_pipe(PUSBD_PIPE_INFORMATION info_pipe)
+{
+	static char	buf[128];
+
+	if (info_pipe == NULL)
+		return "<null>";
+
+	dbg_snprintf(buf, 128, "epaddr:%hhx", info_pipe->EndpointAddress);
+
 	return buf;
 }
 
 #endif
 
-static devconf_t
-get_selected_devconf(devconfs_t *devconfs)
+static PUSBD_INTERFACE_INFORMATION
+dup_info_intf(PUSBD_INTERFACE_INFORMATION info_intf)
 {
-	return get_devconf(devconfs, (USHORT)devconfs->selected);
+	PUSBD_INTERFACE_INFORMATION	info_intf_copied;
+	int	size_info = INFO_INTF_SIZE(info_intf);
+
+	info_intf_copied = ExAllocatePoolWithTag(NonPagedPool, size_info, USBIP_STUB_POOL_TAG);
+	if (info_intf_copied == NULL) {
+		DBGE(DBG_GENERAL, "dup_info_intf: out of memory\n");
+		return NULL;
+	}
+	RtlCopyMemory(info_intf_copied, info_intf, size_info);
+	return info_intf_copied;
 }
 
-BOOLEAN
-is_iso_transfer(devconfs_t *devconfs, int ep, BOOLEAN is_in)
+static BOOLEAN
+build_infos_intf(devconf_t *devconf, PUSBD_INTERFACE_INFORMATION infos_intf)
 {
-	devconf_t	devconf;
-	int		epaddr;
-	PUSB_ENDPOINT_DESCRIPTOR	ep_desc;
+	PUSBD_INTERFACE_INFORMATION	info_intf;
+	unsigned	i;
 
-	devconf = get_selected_devconf(devconfs);
-	if (devconf == NULL)
-		return FALSE;
-	epaddr = (is_in ? USB_ENDPOINT_DIRECTION_MASK: 0) | ep;
-	ep_desc = devconf_find_ep_desc(devconf, 0, epaddr);
-	if (ep_desc == NULL)
-		return FALSE;
-	if ((ep_desc->bmAttributes & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_TYPE_ISOCHRONOUS)
-		return TRUE;
-	return FALSE;
-}
-
-devconfs_t *
-create_devconfs(usbip_stub_dev_t *devstub)
-{
-	devconfs_t	*devconfs;
-	USB_DEVICE_DESCRIPTOR	DevDesc;
-	int	size;
-	UCHAR	i;
-
-	if (!get_usb_device_desc(devstub, &DevDesc)) {
-		DBGE(DBG_DEVCONF, "create_devconfs: cannot get device configuration\n");
-		return NULL;
-	}
-	if (DevDesc.bNumConfigurations == 0) {
-		DBGE(DBG_DEVCONF, "create_devconfs: empty configurations\n");
-		return NULL;
-	}
-	size = sizeof(devconfs_t) + sizeof(PUSB_CONFIGURATION_DESCRIPTOR) * (DevDesc.bNumConfigurations - 1);
-	devconfs = (devconfs_t *)ExAllocatePoolWithTag(NonPagedPool, size, USBIP_STUB_POOL_TAG);
-	if (devconfs == NULL) {
-		DBGE(DBG_DEVCONF, "create_devconfs: out of memory\n");
-		return NULL;
-	}
-
-	RtlZeroMemory(devconfs, size);
-	devconfs->n_devconfs = DevDesc.bNumConfigurations;
-	for (i = 0; i < devconfs->n_devconfs; i++) {
-		devconfs->devconfs[i] = get_usb_conf_desc(devstub, i);
-		if (devconfs->devconfs[i] == NULL) {
-			DBGE(DBG_DEVCONF, "process_export: out of memory(?)\n");
-			free_devconfs(devconfs);
-			return NULL;
+	info_intf = infos_intf;
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		devconf->infos_intf[i] = dup_info_intf(info_intf);
+		if (devconf->infos_intf[i] == NULL) {
+			DBGE(DBG_GENERAL, "build_infos_intf: out of memory\n");
+			return FALSE;
 		}
+		info_intf = (PUSBD_INTERFACE_INFORMATION)((PUCHAR)info_intf + INFO_INTF_SIZE(info_intf));
 	}
-	return devconfs;
+	return TRUE;
+}
+
+devconf_t *
+create_devconf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION infos_intf)
+{
+	devconf_t	*devconf;
+	int	size_devconf;
+
+	size_devconf = sizeof(devconf_t) - sizeof(PUSBD_INTERFACE_INFORMATION) +
+		dsc_conf->bNumInterfaces * sizeof(PUSBD_INTERFACE_INFORMATION);
+	devconf = (devconf_t *)ExAllocatePoolWithTag(NonPagedPool, size_devconf, USBIP_STUB_POOL_TAG);
+	if (devconf == NULL) {
+		DBGE(DBG_GENERAL, "create_devconf: out of memory\n");
+		return NULL;
+	}
+
+	devconf->bConfigurationValue = dsc_conf->bConfigurationValue;
+	devconf->bNumInterfaces = dsc_conf->bNumInterfaces;
+	devconf->hConf = hconf;
+	RtlZeroMemory(devconf->infos_intf, sizeof(PUSBD_INTERFACE_INFORMATION) * devconf->bNumInterfaces);
+
+	if (!build_infos_intf(devconf, infos_intf)) {
+		free_devconf(devconf);
+		return NULL;
+	}
+
+	return devconf;
 }
 
 void
-free_devconfs(devconfs_t *devconfs)
+free_devconf(devconf_t *devconf)
+{
+	unsigned	i;
+
+	if (devconf == NULL)
+		return;
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		if (devconf->infos_intf[i] == NULL)
+			break;
+		ExFreePoolWithTag(devconf->infos_intf[i], USBIP_STUB_POOL_TAG);
+	}
+	ExFreePoolWithTag(devconf, USBIP_STUB_POOL_TAG);
+}
+
+void
+update_devconf(devconf_t *devconf, PUSBD_INTERFACE_INFORMATION info_intf)
+{
+	unsigned	i;
+
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		PUSBD_INTERFACE_INFORMATION	info_intf_exist;
+
+		info_intf_exist = devconf->infos_intf[i];
+		if (info_intf->InterfaceNumber == info_intf->InterfaceNumber) {
+			PUSBD_INTERFACE_INFORMATION	info_intf_new;
+
+			info_intf_new = dup_info_intf(info_intf);
+			if (info_intf_new == NULL) {
+				DBGE(DBG_DEVCONF, "update_devconf: out of memory\n");
+				return;
+			}
+			ExFreePoolWithTag(info_intf_exist, USBIP_STUB_POOL_TAG);
+			devconf->infos_intf[i] = info_intf_new;
+			return;
+		}
+	}
+
+	DBGE(DBG_DEVCONF, "update_devconf: non-existent interface info: %s\n", dbg_info_intf(info_intf));
+}
+
+PUSBD_INTERFACE_INFORMATION
+get_info_intf(devconf_t *devconf, UCHAR intf_num)
 {
 	int	i;
 
-	if (devconfs == NULL)
-		return;
-	for (i = 0; i < devconfs->n_devconfs; i++) {
-		if (devconfs->devconfs[i] != NULL)
-			ExFreePool(devconfs->devconfs[i]);
-	}
-	ExFreePool(devconfs);
-}
-
-devconf_t
-get_devconf(devconfs_t *devconfs, USHORT idx)
-{
-	if (devconfs == NULL || idx == 0)
+	if (devconf == NULL)
 		return NULL;
-	if (devconfs->n_devconfs < idx)
-		return NULL;
-	return devconfs->devconfs[idx - 1];
-}
 
-void
-set_conf_info(devconfs_t *devconfs, USHORT idx, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION intf)
-{
-	devconfs->selected = idx;
-	///TODO
-	UNREFERENCED_PARAMETER(hconf);
-	UNREFERENCED_PARAMETER(intf);
-}
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		PUSBD_INTERFACE_INFORMATION	info_intf;
 
-int
-get_n_intfs(devconfs_t *devconfs, USHORT idx)
-{
-	devconf_t	devconf = devconfs->devconfs[idx - 1];
-
-	return devconf->bNumInterfaces;
-}
-
-int
-get_n_endpoints(devconfs_t *devconfs, USHORT idx)
-{
-	devconf_t	devconf = devconfs->devconfs[idx - 1];
-	int	n_eps = 0;
-	unsigned int	offset = 0;
-
-	while (TRUE) {
-		PUSB_INTERFACE_DESCRIPTOR	intf_desc;
-		intf_desc = (PUSB_INTERFACE_DESCRIPTOR)devconf_find_desc(devconf, &offset, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (intf_desc == NULL)
-			break;
-		n_eps += intf_desc->bNumEndpoints;
+		info_intf = devconf->infos_intf[i];
+		if (info_intf->InterfaceNumber == intf_num)
+			return info_intf;
 	}
-	return n_eps;
+	return NULL;
+}
+
+PUSBD_PIPE_INFORMATION
+get_intf_info_pipe(PUSBD_INTERFACE_INFORMATION info_intf, UCHAR epaddr)
+{
+	unsigned	i;
+
+	for (i = 0; i < info_intf->NumberOfPipes; i++) {
+		PUSBD_PIPE_INFORMATION	info_pipe;
+
+		info_pipe = info_intf->Pipes + i;
+		if (info_pipe->EndpointAddress == epaddr)
+			return info_pipe;
+	}
+
+	return NULL;
+}
+
+PUSBD_PIPE_INFORMATION
+get_info_pipe(devconf_t *devconf, UCHAR epaddr)
+{
+	unsigned	i;
+
+	if (devconf == NULL)
+		return NULL;
+
+	for (i = 0; i < devconf->bNumInterfaces; i++) {
+		PUSBD_INTERFACE_INFORMATION	info_intf;
+		PUSBD_PIPE_INFORMATION		info_pipe;
+
+		info_intf = devconf->infos_intf[i];
+		info_pipe = get_intf_info_pipe(info_intf, epaddr);
+		if (info_pipe != NULL)
+			return info_pipe;
+	}
+
+	return NULL;
 }

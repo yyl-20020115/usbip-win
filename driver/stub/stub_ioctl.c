@@ -26,11 +26,6 @@
 #include "stub_usbd.h"
 #include "stub_devconf.h"
 
-devconfs_t *create_devconfs(usbip_stub_dev_t *devstub);
-#ifdef DBG
-const char *dbg_devconfs(devconfs_t *devconfs);
-#endif
-
 static UCHAR
 get_speed_from_bcdUSB(USHORT bcdUSB)
 {
@@ -95,16 +90,10 @@ process_export(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	DBGI(DBG_IOCTL, "exporting: %s\n", dbg_devstub(devstub));
 
-	devstub->devconfs = create_devconfs(devstub);
-	if (devstub->devconfs == NULL) {
-		DBGI(DBG_IOCTL, "export: %s: failed to create devconfs\n", dbg_devstub(devstub));
-		return STATUS_UNSUCCESSFUL;
-	}
-
 	irp->IoStatus.Status = STATUS_SUCCESS;
 	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
-	DBGI(DBG_IOCTL, "exported: %s\n", dbg_devconfs(devstub->devconfs));
+	DBGI(DBG_IOCTL, "exported: %s\n", dbg_devstub(devstub));
 
 	return STATUS_SUCCESS;
 }

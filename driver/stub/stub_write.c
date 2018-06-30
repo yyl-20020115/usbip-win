@@ -170,7 +170,7 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 		reply_stub_req_err(devstub, seqnum, -1);
 }
 
-static NTSTATUS
+static void
 process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 {
 	usb_cspkt_t	*csp;
@@ -184,25 +184,27 @@ process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 	switch (reqType) {
 	case BMREQUEST_STANDARD:
 		process_standard_request(devstub, hdr->base.seqnum, csp);
-		return STATUS_SUCCESS;
+		break;
 	case BMREQUEST_CLASS:
 		process_class_request(devstub, csp, hdr);
-		return STATUS_SUCCESS;
+		break;
 	case BMREQUEST_VENDOR:
-		return STATUS_NOT_SUPPORTED;
+		DBGE(DBG_READWRITE, "not supported:", dbg_cspkt_reqtype(reqType));
+		break;
 	default:
 		DBGE(DBG_READWRITE, "invalid request type:", dbg_cspkt_reqtype(reqType));
-		return STATUS_UNSUCCESSFUL;
+		break;
 	}
 }
 
-static NTSTATUS
-process_bulk_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+static void
+process_bulk_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pipe, struct usbip_header *hdr)
 {
-	USBD_PIPE_HANDLE	hPipe = NULL;
 	PVOID	data;
 	USHORT	datalen;
 	BOOLEAN	is_in;
+
+	DBGI(DBG_READWRITE, "bulk_transfer: hdr:%s, ep:%s\n", dbg_usbip_hdr(hdr), dbg_info_pipe(info_pipe));
 
 	datalen = (USHORT)hdr->u.cmd_submit.transfer_buffer_length;
 	is_in = hdr->base.direction ? TRUE : FALSE;
@@ -211,37 +213,95 @@ process_bulk_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 		if (data == NULL) {
 			DBGE(DBG_GENERAL, "process_bulk_transfer: out of memory\n");
 			reply_stub_req_err(devstub, hdr->base.seqnum, -1);
-			return STATUS_UNSUCCESSFUL;
+			return;
 		}
 	}
 	else {
 		data = (PVOID)(hdr + 1);
 	}
-	if (submit_bulk_transfer(devstub, hPipe, data, datalen, is_in)) {
+	if (submit_bulk_transfer(devstub, info_pipe->PipeHandle, data, datalen, is_in)) {
 		if (is_in)
 			reply_stub_req_data(devstub, hdr->base.seqnum, data, datalen, FALSE);
 		else
 			reply_stub_req(devstub, hdr->base.seqnum);
-		return STATUS_SUCCESS;
 	}
-	reply_stub_req_err(devstub, hdr->base.seqnum, -1);
-	return STATUS_UNSUCCESSFUL;
+	else {
+		reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+		if (is_in)
+			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+	}
+}
+
+static UCHAR
+get_epaddr_from_hdr(struct usbip_header *hdr)
+{
+	return (UCHAR)((hdr->base.direction ? USB_ENDPOINT_DIRECTION_MASK : 0) | hdr->base.ep);
+}
+
+static void
+process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+{
+	PUSBD_PIPE_INFORMATION	info_pipe;
+	UCHAR	epaddr;
+
+	epaddr = get_epaddr_from_hdr(hdr);
+	info_pipe = get_info_pipe(devstub->devconf, epaddr);
+	if (info_pipe == NULL) {
+		DBGW(DBG_READWRITE, "data_transfer: non-existent pipe: %hhx\n", epaddr);
+		reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+		return;
+	}
+	if (info_pipe->PipeType == UsbdPipeTypeIsochronous) {
+		////TODO
+		DBGE(DBG_READWRITE, "data_transfer: iso not supported\n");
+	}
+	else {
+		process_bulk_transfer(devstub, info_pipe, hdr);
+	}
 }
 
 static NTSTATUS
-process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+process_cmd_submit(usbip_stub_dev_t *devstub, PIRP irp, struct usbip_header *hdr)
 {
-	if (is_iso_transfer(devstub->devconfs, hdr->base.ep, hdr->base.direction ? TRUE: FALSE)) {
-		
+	PIO_STACK_LOCATION	irpstack;
+
+	if (HDR_IS_CONTROL_TRANSFER(hdr)) {
+		process_control_transfer(devstub, hdr);
 	}
 	else {
-		return process_bulk_transfer(devstub, hdr);
+		process_data_transfer(devstub, hdr);
 	}
-	return STATUS_NOT_SUPPORTED;
+
+	irpstack = IoGetCurrentIrpStackLocation(irp);
+
+	irp->IoStatus.Information = irpstack->Parameters.Write.Length;
+	irp->IoStatus.Status = STATUS_SUCCESS;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+process_cmd_unlink(usbip_stub_dev_t *devstub, PIRP irp)
+{
+	PIO_STACK_LOCATION	irpstack;
+
+	UNREFERENCED_PARAMETER(devstub);
+
+	////TODO
+	DBGW(DBG_READWRITE, "process_cmd_unlink: enter\n");
+
+	irpstack = IoGetCurrentIrpStackLocation(irp);
+
+	irp->IoStatus.Information = irpstack->Parameters.Write.Length;
+	irp->IoStatus.Status = STATUS_SUCCESS;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
 }
 
 static struct usbip_header *
-get_usbip_hdr_from_write_irp(PIRP irp, ULONG *plen)
+get_usbip_hdr_from_write_irp(PIRP irp)
 {
 	PIO_STACK_LOCATION	irpstack;
 	ULONG	len;
@@ -251,7 +311,6 @@ get_usbip_hdr_from_write_irp(PIRP irp, ULONG *plen)
 	if (len < sizeof(struct usbip_header)) {
 		return NULL;
 	}
-	*plen = len;
 	return (struct usbip_header *)irp->AssociatedIrp.SystemBuffer;
 }
 
@@ -259,28 +318,22 @@ NTSTATUS
 stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	struct usbip_header	*hdr;
-	ULONG		len;
-	NTSTATUS	status;
 
 	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_write: enter\n");
 
-	hdr = get_usbip_hdr_from_write_irp(irp, &len);
+	hdr = get_usbip_hdr_from_write_irp(irp);
 	if (hdr == NULL) {
 		DBGE(DBG_READWRITE, "small write irp\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	if (HDR_IS_CONTROL_TRANSFER(hdr)) {
-		status = process_control_transfer(devstub, hdr);
+	switch (hdr->base.command) {
+	case USBIP_CMD_SUBMIT:
+		return process_cmd_submit(devstub, irp, hdr);
+	case USBIP_CMD_UNLINK:
+		return process_cmd_unlink(devstub, irp);
+	default:
+		DBGE(DBG_READWRITE, "invalid command: %s\n", dbg_command(hdr->base.command));
+		return STATUS_INVALID_PARAMETER;
 	}
-	else {
-		status = process_data_transfer(devstub, hdr);
-	}
-
-	if (NT_SUCCESS(status))
-		irp->IoStatus.Information = len;
-	irp->IoStatus.Status = status;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
-
-	return status;
 }
