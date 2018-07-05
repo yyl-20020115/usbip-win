@@ -32,7 +32,7 @@
     <ClCompile Include="stub_proto.c" />
     <ClCompile Include="stub_read.c" />
     <ClCompile Include="stub_reg.c" />
-    <ClCompile Include="stub_req.c" />
+    <ClCompile Include="stub_res.c" />
     <ClCompile Include="stub_usbd.c" />
     <ClCompile Include="stub_write.c" />
   </ItemGroup>
@@ -45,7 +45,7 @@
     <ClInclude Include="stub_driver.h" />
     <ClInclude Include="stub_irp.h" />
     <ClInclude Include="stub_reg.h" />
-    <ClInclude Include="stub_req.h" />
+    <ClInclude Include="stub_res.h" />
     <ClInclude Include="stub_usbd.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

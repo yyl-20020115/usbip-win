@@ -1,7 +1,7 @@
 #include "stub_driver.h"
 
 #include "usbip_proto.h"
-#include "stub_req.h"
+#include "stub_res.h"
 #include "stub_dbg.h"
 
 extern void
@@ -66,7 +66,7 @@ get_usbip_hdr_from_read_irp(PIRP irp, ULONG len)
 }
 
 static void
-reply_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int data_len)
+send_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int data_len)
 {
 	struct usbip_header	*hdr;
 	ULONG	len_read = sizeof(struct usbip_header);
@@ -95,9 +95,9 @@ reply_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int dat
 }
 
 static void
-reply_stub_res_async(PIRP irp_read, stub_res_t *sres)
+send_stub_res_async(PIRP irp_read, stub_res_t *sres)
 {
-	reply_stub_res(irp_read, sres->seqnum, sres->err, sres->data, sres->data_len);
+	send_stub_res(irp_read, sres->seqnum, sres->err, sres->data, sres->data_len);
 	free_stub_res(sres);
 }
 
@@ -122,7 +122,7 @@ collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
-		reply_stub_res_async(irp_read, sres);
+		send_stub_res_async(irp_read, sres);
 		return TRUE;
 	}
 }
@@ -146,7 +146,7 @@ reply_result(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID dat
 		devstub->irp_stub_read = NULL;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
-		reply_stub_res(irp_read, seqnum, err, data, data_len);
+		send_stub_res(irp_read, seqnum, err, data, data_len);
 		if (data && !need_copy)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
 	}
@@ -167,7 +167,7 @@ reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres)
 		devstub->irp_stub_read = NULL;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
-		reply_stub_res_async(irp_read, sres);
+		send_stub_res_async(irp_read, sres);
 	}
 }
 

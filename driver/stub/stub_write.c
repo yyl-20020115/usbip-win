@@ -22,7 +22,7 @@
 #include "usbip_proto.h"
 #include "stub_cspkt.h"
 #include "stub_usbd.h"
-#include "stub_req.h"
+#include "stub_res.h"
 #include "pdu.h"
 
 #define HDR_IS_CONTROL_TRANSFER(hdr)	((hdr)->base.ep == 0)

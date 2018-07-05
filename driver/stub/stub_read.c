@@ -21,7 +21,7 @@
 #include "stub_dbg.h"
 #include "usbip_proto.h"
 
-#include "stub_req.h"
+#include "stub_res.h"
 
 extern BOOLEAN collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read);
 

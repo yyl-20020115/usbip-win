@@ -19,7 +19,7 @@
 #include "stub_driver.h"
 #include "stub_dbg.h"
 #include "stub_dev.h"
-#include "stub_req.h"
+#include "stub_res.h"
 
 #include <usbdlib.h>
 
