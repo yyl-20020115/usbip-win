@@ -35,7 +35,7 @@ dbg_usbip_hdr(struct usbip_header *hdr)
 	n = dbg_snprintf(buf, 512, "seq:%u,%s,ep:%u", hdr->base.seqnum, hdr->base.direction ? "in": "out", hdr->base.ep);
 	switch (hdr->base.command) {
 	case USBIP_CMD_SUBMIT:
-		dbg_snprintf(buf + n, 512 - n, ",tlen:%d,intv:%d\n",
+		dbg_snprintf(buf + n, 512 - n, ",tlen:%d,intv:%d",
 			hdr->u.cmd_submit.transfer_buffer_length, hdr->u.cmd_submit.interval);
 		break;
 	case USBIP_RET_SUBMIT:

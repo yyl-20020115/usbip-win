@@ -61,7 +61,7 @@ process_get_status(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *
 		break;
 	}
 	if (get_usb_status(devstub, op, idx, &data, &datalen))
-		reply_stub_req_data(devstub, seqnum, &data, (int)datalen, FALSE);
+		reply_stub_req_data(devstub, seqnum, &data, (int)datalen, TRUE);
 	else
 		reply_stub_req_err(devstub, seqnum, -1);
 }
@@ -198,13 +198,14 @@ process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 }
 
 static void
-process_bulk_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pipe, struct usbip_header *hdr)
+process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pipe, struct usbip_header *hdr)
 {
 	PVOID	data;
 	USHORT	datalen;
 	BOOLEAN	is_in;
+	NTSTATUS	status;
 
-	DBGI(DBG_READWRITE, "bulk_transfer: hdr:%s, ep:%s\n", dbg_usbip_hdr(hdr), dbg_info_pipe(info_pipe));
+	DBGI(DBG_READWRITE, "bulk_intr_transfer: hdr:%s, ep:%s\n", dbg_usbip_hdr(hdr), dbg_info_pipe(info_pipe));
 
 	datalen = (USHORT)hdr->u.cmd_submit.transfer_buffer_length;
 	is_in = hdr->base.direction ? TRUE : FALSE;
@@ -219,7 +220,11 @@ process_bulk_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pip
 	else {
 		data = (PVOID)(hdr + 1);
 	}
-	if (submit_bulk_transfer(devstub, info_pipe->PipeHandle, data, datalen, is_in)) {
+
+	status = submit_bulk_intr_transfer(devstub, info_pipe->PipeHandle, hdr->base.seqnum, data, datalen, is_in);
+	if (status == STATUS_PENDING)
+		return;
+	if (NT_SUCCESS(status)) {
 		if (is_in)
 			reply_stub_req_data(devstub, hdr->base.seqnum, data, datalen, FALSE);
 		else
@@ -251,12 +256,17 @@ process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 		reply_stub_req_err(devstub, hdr->base.seqnum, -1);
 		return;
 	}
-	if (info_pipe->PipeType == UsbdPipeTypeIsochronous) {
-		////TODO
+	switch (info_pipe->PipeType) {
+	case UsbdPipeTypeBulk:
+	case UsbdPipeTypeInterrupt:
+		process_bulk_intr_transfer(devstub, info_pipe, hdr);
+		break;
+	case UsbdPipeTypeIsochronous:
 		DBGE(DBG_READWRITE, "data_transfer: iso not supported\n");
-	}
-	else {
-		process_bulk_transfer(devstub, info_pipe, hdr);
+		break;
+	default:
+		DBGE(DBG_READWRITE, "not supported transfer type\n");
+		break;
 	}
 }
 

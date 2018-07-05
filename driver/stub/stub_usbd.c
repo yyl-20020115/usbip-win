@@ -19,11 +19,84 @@
 #include "stub_driver.h"
 #include "stub_dbg.h"
 #include "stub_dev.h"
+#include "stub_req.h"
 
 #include <usbdlib.h>
 
+typedef struct {
+	PDEVICE_OBJECT	devobj;
+	PURB	purb;
+	IO_STATUS_BLOCK	io_status;
+	PIO_COMPLETION_ROUTINE	completion;
+	PVOID	ctx;
+} safe_completion_t;
+
 static NTSTATUS
-call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
+do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
+{
+	NTSTATUS	status;
+	safe_completion_t	*safe_completion = (safe_completion_t *)ctx;
+
+	UNREFERENCED_PARAMETER(devobj);
+
+	status = safe_completion->completion(safe_completion->devobj, irp, safe_completion->ctx);
+
+	ExFreePoolWithTag(safe_completion->purb, USBIP_STUB_POOL_TAG);
+	ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
+	IoFreeIrp(irp);
+
+	return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static NTSTATUS
+call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE completion, PVOID ctx)
+{
+	IRP *irp;
+	IO_STACK_LOCATION	*irpstack;
+	safe_completion_t	*safe_completion = NULL;
+	NTSTATUS status;
+
+	DBGI(DBG_GENERAL, "call_usbd_nb: enter\n");
+
+	safe_completion = (safe_completion_t *)ExAllocatePoolWithTag(NonPagedPool, sizeof(safe_completion_t), USBIP_STUB_POOL_TAG);
+	if (safe_completion == NULL) {
+		DBGE(DBG_GENERAL, "call_usbd_nb: out of memory: cannot allocate safe_completion\n");
+		return STATUS_NO_MEMORY;
+	}
+	safe_completion->devobj = devstub->self;
+	safe_completion->purb = purb;
+	safe_completion->completion = completion;
+	safe_completion->ctx = ctx;
+
+	irp = IoAllocateIrp(devstub->self->StackSize + 1, FALSE);
+	if (irp == NULL) {
+		DBGE(DBG_GENERAL, "call_usbd_nb: IoAllocateIrp: out of memory\n");
+		ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
+		return STATUS_NO_MEMORY;
+	}
+
+	irpstack = IoGetNextIrpStackLocation(irp);
+	irpstack->MajorFunction = IRP_MJ_INTERNAL_DEVICE_CONTROL;
+	irpstack->Parameters.DeviceIoControl.IoControlCode = IOCTL_INTERNAL_USB_SUBMIT_URB;
+	irpstack->Parameters.Others.Argument1 = purb;
+	irpstack->Parameters.Others.Argument2 = NULL;
+	irpstack->DeviceObject = devstub->self;
+
+	IoSetCompletionRoutine(irp, do_safe_completion, safe_completion, TRUE, TRUE, TRUE);
+
+	status = IoCallDriver(devstub->next_stack_dev, irp);
+	if (status != STATUS_PENDING) {
+		DBGI(DBG_GENERAL, "call_usbd_nb: status = %s, usbd_status:%x\n", dbg_ntstatus(status), purb->UrbHeader.Status);
+		ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
+	}
+	else {
+		DBGI(DBG_GENERAL, "call_usbd_nb: request pending\n");
+	}
+	return status;
+}
+
+static NTSTATUS
+call_usbd(usbip_stub_dev_t *devstub, PURB purb)
 {
 	KEVENT	event;
 	IRP *irp;
@@ -34,30 +107,23 @@ call_usbd(usbip_stub_dev_t *devstub, void *urb, ULONG control_code)
 	DBGI(DBG_GENERAL, "call_usbd: enter\n");
 
 	KeInitializeEvent(&event, NotificationEvent, FALSE);
-
-	irp = IoBuildDeviceIoControlRequest(control_code, devstub->next_stack_dev, NULL, 0, NULL, 0, TRUE, &event, &io_status);
+	irp = IoBuildDeviceIoControlRequest(IOCTL_INTERNAL_USB_SUBMIT_URB, devstub->next_stack_dev, NULL, 0, NULL, 0, TRUE, &event, &io_status);
 	if (irp == NULL) {
 		DBGE(DBG_GENERAL, "IoBuildDeviceIoControlRequest failed\n");
 		return STATUS_NO_MEMORY;
 	}
 
 	irpstack = IoGetNextIrpStackLocation(irp);
-	irpstack->Parameters.Others.Argument1 = urb;
+	irpstack->Parameters.Others.Argument1 = purb;
 	irpstack->Parameters.Others.Argument2 = NULL;
 
-	status = IoCallDriver(devstub->pdo, irp);
+	status = IoCallDriver(devstub->next_stack_dev, irp);
 	if (status == STATUS_PENDING) {
-		LARGE_INTEGER	timeout;
-		timeout.QuadPart = -(5000 * 10000);
-		if (KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, &timeout) == STATUS_TIMEOUT) {
-			DBGW(DBG_GENERAL, "call_usbd: timeout\n");
-			IoCancelIrp(irp);
-			KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
-		}
+		KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
 		status = io_status.Status;
 	}
 
-	DBGI(DBG_GENERAL, "call_usbd: status = %s, usbd_status:%x\n", dbg_ntstatus(status), ((PURB)urb)->UrbHeader.Status);
+	DBGI(DBG_GENERAL, "call_usbd: status = %s, usbd_status:%x\n", dbg_ntstatus(status), purb->UrbHeader.Status);
 	return status;
 }
 
@@ -68,7 +134,7 @@ get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buf, PUCH
 	NTSTATUS	status;
 
 	UsbBuildGetStatusRequest(&Urb, op, idx, buf, NULL, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &Urb);
 	if (NT_SUCCESS(status)) {
 		*plen = (UCHAR)Urb.UrbControlGetStatusRequest.TransferBufferLength;
 		return TRUE;
@@ -83,7 +149,7 @@ get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang
 	NTSTATUS	status;
 
 	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST), descType, idx, idLang, buff, NULL, *pbufflen, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &Urb);
 	if (NT_SUCCESS(status)) {
 		*pbufflen = Urb.UrbControlDescriptorRequest.TransferBufferLength;
 		return TRUE;
@@ -102,7 +168,7 @@ get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx)
 	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
 		USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, &ConfDesc, NULL,
 		sizeof(USB_CONFIGURATION_DESCRIPTOR), NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &Urb);
 	if (NT_ERROR(status))
 		return NULL;
 
@@ -113,9 +179,9 @@ get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx)
 	UsbBuildGetDescriptorRequest(&Urb, sizeof(struct _URB_CONTROL_DESCRIPTOR_REQUEST),
 		USB_CONFIGURATION_DESCRIPTOR_TYPE, idx, 0, dsc_conf, NULL,
 		ConfDesc.wTotalLength, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &Urb);
 	if (NT_ERROR(status)) {
-		ExFreePool(dsc_conf);
+		ExFreePoolWithTag(dsc_conf, USBIP_STUB_POOL_TAG);
 		return NULL;
 	}
 
@@ -174,7 +240,7 @@ select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 		return FALSE;
 	}
 
-	status = call_usbd(devstub, purb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, purb);
 	if (NT_SUCCESS(status)) {
 		struct _URB_SELECT_CONFIGURATION	*purb_selc = &purb->UrbSelectConfiguration;
 
@@ -220,7 +286,7 @@ select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, U
 	purb_seli = &purb->UrbSelectInterface;
 	RtlCopyMemory(&purb_seli->Interface, info_intf, INFO_INTF_SIZE(info_intf));
 
-	status = call_usbd(devstub, purb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, purb);
 	ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 	if (NT_SUCCESS(status)) {
 		update_devconf(devconf, info_intf);
@@ -246,7 +312,7 @@ reset_pipe(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe)
 	urb.UrbHeader.Length = sizeof(struct _URB_PIPE_REQUEST);
 	urb.UrbPipeRequest.PipeHandle = hPipe;
 
-	status = call_usbd(devstub, &urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &urb);
 	if (NT_SUCCESS(status))
 		return TRUE;
 	return FALSE;
@@ -262,24 +328,60 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 	if (is_in)
 		flags |= USBD_TRANSFER_DIRECTION_IN;
 	UsbBuildVendorRequest(&Urb, cmd, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST), flags, reservedBits, request, value, index, data, NULL, len, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
+	status = call_usbd(devstub, &Urb);
 	if (NT_SUCCESS(status))
 		return TRUE;
 	return FALSE;
 }
 
-BOOLEAN
-submit_bulk_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, PVOID data, USHORT datalen, BOOLEAN is_in)
+void reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres);
+
+static NTSTATUS
+done_bulk_intr_transfer(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 {
-	URB		Urb;
-	ULONG		flags = USBD_SHORT_TRANSFER_OK;
+	usbip_stub_dev_t	*devstub = (usbip_stub_dev_t *)devobj->DeviceExtension;
+	stub_res_t	*sres = (stub_res_t *)ctx;
 	NTSTATUS	status;
 
+	status = irp->IoStatus.Status;
+
+	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: status = %s\n", dbg_ntstatus(status));
+
+	if (!NT_SUCCESS(status))
+		sres->err = -1;
+
+	reply_stub_req_async(devstub, sres);
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS
+submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, USHORT datalen, BOOLEAN is_in)
+{
+	PURB		purb;
+	ULONG		flags = USBD_SHORT_TRANSFER_OK;
+	stub_res_t	*sres;
+	NTSTATUS	status;
+
+	purb = ExAllocatePoolWithTag(NonPagedPool, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), USBIP_STUB_POOL_TAG);
+	if (purb == NULL) {
+		DBGE(DBG_GENERAL, "submit_bulk_intr_transfer: out of memory: urb\n");
+		return STATUS_NO_MEMORY;
+	}
 	if (is_in)
 		flags |= USBD_TRANSFER_DIRECTION_IN;
-	UsbBuildInterruptOrBulkTransferRequest(&Urb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, datalen, flags, NULL);
-	status = call_usbd(devstub, &Urb, IOCTL_INTERNAL_USB_SUBMIT_URB);
-	if (NT_SUCCESS(status))
-		return TRUE;
-	return FALSE;
+	UsbBuildInterruptOrBulkTransferRequest(purb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, datalen, flags, NULL);
+	sres = create_stub_res(seqnum, 0, data, datalen, !is_in);
+	if (sres == NULL) {
+		if (is_in)
+			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+		return STATUS_UNSUCCESSFUL;
+	}
+	status = call_usbd_nb(devstub, purb, done_bulk_intr_transfer, sres);
+	if (status != STATUS_PENDING) {
+		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
+		if (NT_SUCCESS(status))
+			sres->data = NULL;
+		free_stub_res(sres);
+	}
+	return status;
 }

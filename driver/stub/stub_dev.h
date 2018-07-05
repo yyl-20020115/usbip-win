@@ -33,11 +33,7 @@ typedef struct {
 
 	KSPIN_LOCK	lock_stub_res;
 	PIRP		irp_stub_read;
-	BOOLEAN		is_pending_stub_res;
-	unsigned long	stub_res_seqnum;
-	int		stub_res_err;
-	PVOID		stub_res_data;
-	int		stub_res_data_len;
+	LIST_ENTRY	stub_res_head;
 } usbip_stub_dev_t;
 
 void init_dev_removal_lock(usbip_stub_dev_t *devstub);

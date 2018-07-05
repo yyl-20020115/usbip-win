@@ -7,45 +7,49 @@
 extern void
 set_ret_submit_usbip_header(struct usbip_header *hdr, unsigned long seqnum, int status, int actual_length);
 
-/* TODO: take care of a device removal */
-static PIRP
-get_pending_read_irp(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
+void
+free_stub_res(stub_res_t *sres)
 {
-	KIRQL	oldirql;
+	if (sres == NULL)
+		return;
+	if (sres->data)
+		ExFreePoolWithTag(sres->data, USBIP_STUB_POOL_TAG);
+	ExFreePoolWithTag(sres, USBIP_STUB_POOL_TAG);
+}
 
-	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
-	if (devstub->irp_stub_read == NULL) {
-		devstub->is_pending_stub_res = TRUE;
-		devstub->stub_res_seqnum = seqnum;
-		devstub->stub_res_err = err;
-		devstub->stub_res_data_len = data_len;
-		if (data != NULL && need_copy) {
-			PVOID	data_copied;
+stub_res_t *
+create_stub_res(unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
+{
+	stub_res_t	*sres;
 
-			data_copied = ExAllocatePoolWithTag(NonPagedPool, data_len, USBIP_STUB_POOL_TAG);
-			if (data_copied == NULL) {
-				DBGE(DBG_GENERAL, "get_pending_read_irp: out of memory\n");
-				devstub->stub_res_data_len = 0;
-			}
-			else {
-				RtlCopyMemory(data_copied, data, data_len);
-			}
-			devstub->stub_res_data = data_copied;
-		}
-		else {
-			devstub->stub_res_data = data;
-		}
-
-		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+	sres = ExAllocatePoolWithTag(NonPagedPool, sizeof(stub_res_t), USBIP_STUB_POOL_TAG);
+	if (sres == NULL) {
+		DBGE(DBG_GENERAL, "create_stub_res: out of memory\n");
+		if (data != NULL && !need_copy)
+			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
 		return NULL;
 	}
-	else {
-		PIRP	irp_read = devstub->irp_stub_read;
-		devstub->irp_stub_read = NULL;
-		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+	if (data != NULL && need_copy) {
+		PVOID	data_copied;
 
-		return irp_read;
+		data_copied = ExAllocatePoolWithTag(NonPagedPool, data_len, USBIP_STUB_POOL_TAG);
+		if (data_copied == NULL) {
+			DBGE(DBG_GENERAL, "create_stub_res: out of memory. drop data.\n");
+			data_len = 0;
+		}
+		else {
+			RtlCopyMemory(data_copied, data, data_len);
+		}
+		data = data_copied;
 	}
+
+	sres->seqnum = seqnum;
+	sres->err = err;
+	sres->data = data;
+	sres->data_len = data_len;
+	InitializeListHead(&sres->list);
+
+	return sres;
 }
 
 static struct usbip_header *
@@ -65,9 +69,12 @@ static void
 reply_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int data_len)
 {
 	struct usbip_header	*hdr;
-	ULONG	len_read = sizeof(struct usbip_header) + data_len;
+	ULONG	len_read = sizeof(struct usbip_header);
 
 	DBGI(DBG_GENERAL, "reply_stub_res: seq:%u,err:%d,len:%d\n", seqnum, err, data_len);
+
+	if (err == 0)
+		len_read += data_len;
 
 	hdr = get_usbip_hdr_from_read_irp(irp_read, len_read);
 	if (hdr == NULL) {
@@ -75,11 +82,23 @@ reply_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int dat
 		IoCompleteRequest(irp_read, IO_NO_INCREMENT);
 		return;
 	}
-	set_ret_submit_usbip_header(hdr, seqnum, err, data_len);
-	if (data_len > 0)
-		RtlCopyMemory((PCHAR)hdr + sizeof(struct usbip_header), data, data_len);
+	if (err == 0) {
+		set_ret_submit_usbip_header(hdr, seqnum, err, data_len);
+		if (data_len > 0)
+			RtlCopyMemory((PCHAR)hdr + sizeof(struct usbip_header), data, data_len);
+	}
+	else {
+		set_ret_submit_usbip_header(hdr, seqnum, err, 0);
+	}
 	irp_read->IoStatus.Information = len_read;
 	IoCompleteRequest(irp_read, IO_NO_INCREMENT);
+}
+
+static void
+reply_stub_res_async(PIRP irp_read, stub_res_t *sres)
+{
+	reply_stub_res(irp_read, sres->seqnum, sres->err, sres->data, sres->data_len);
+	free_stub_res(sres);
 }
 
 BOOLEAN
@@ -88,22 +107,22 @@ collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 	KIRQL	oldirql;
 
 	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
-	if (!devstub->is_pending_stub_res) {
+	if (IsListEmpty(&devstub->stub_res_head)) {
 		IoMarkIrpPending(irp_read);
 		devstub->irp_stub_read = irp_read;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 		return FALSE;
 	}
 	else {
-		unsigned long	seqnum = devstub->stub_res_seqnum;
-		int	err = devstub->stub_res_err;
-		PVOID	data = devstub->stub_res_data;
-		int	data_len = devstub->stub_res_data_len;
+		stub_res_t	*sres;
+		PLIST_ENTRY	le;
 
-		devstub->is_pending_stub_res = FALSE;
+		le = RemoveHeadList(&devstub->stub_res_head);
+		sres = CONTAINING_RECORD(le, stub_res_t, list);
 
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
-		reply_stub_res(irp_read, seqnum, err, data, data_len);
+
+		reply_stub_res_async(irp_read, sres);
 		return TRUE;
 	}
 }
@@ -111,11 +130,44 @@ collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 static void
 reply_result(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
 {
-	PIRP	irp_read;
+	KIRQL	oldirql;
 
-	irp_read = get_pending_read_irp(devstub, seqnum, err, data, data_len, need_copy);
-	if (irp_read != NULL) {
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	if (devstub->irp_stub_read == NULL) {
+		stub_res_t	*sres;
+
+		sres = create_stub_res(seqnum, err, data, data_len, need_copy);
+		if (sres != NULL)
+			InsertTailList(&devstub->stub_res_head, &sres->list);
+		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+	}
+	else {
+		PIRP	irp_read = devstub->irp_stub_read;
+		devstub->irp_stub_read = NULL;
+		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+
 		reply_stub_res(irp_read, seqnum, err, data, data_len);
+		if (data && !need_copy)
+			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+	}
+}
+
+void
+reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres)
+{
+	KIRQL	oldirql;
+
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	if (devstub->irp_stub_read == NULL) {
+		InsertTailList(&devstub->stub_res_head, &sres->list);
+		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+	}
+	else {
+		PIRP	irp_read = devstub->irp_stub_read;
+		devstub->irp_stub_read = NULL;
+		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+
+		reply_stub_res_async(irp_read, sres);
 	}
 }
 
