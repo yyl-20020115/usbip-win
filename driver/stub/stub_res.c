@@ -3,9 +3,20 @@
 #include "usbip_proto.h"
 #include "stub_res.h"
 #include "stub_dbg.h"
+#include "pdu.h"
 
-extern void
-set_ret_submit_usbip_header(struct usbip_header *hdr, unsigned long seqnum, int status, int actual_length);
+#ifdef DBG
+
+const char *
+dbg_stub_res(stub_res_t *sres)
+{
+	static char	buf[1024];
+
+	dbg_snprintf(buf, 1024, "seq:%u", sres->seqnum);
+	return buf;
+}
+
+#endif
 
 void
 free_stub_res(stub_res_t *sres)
@@ -18,7 +29,7 @@ free_stub_res(stub_res_t *sres)
 }
 
 stub_res_t *
-create_stub_res(unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
+create_stub_res(unsigned int cmd, unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
 {
 	stub_res_t	*sres;
 
@@ -43,6 +54,8 @@ create_stub_res(unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN
 		data = data_copied;
 	}
 
+	sres->irp = NULL;
+	sres->cmd = cmd;
 	sres->seqnum = seqnum;
 	sres->err = err;
 	sres->data = data;
@@ -66,30 +79,45 @@ get_usbip_hdr_from_read_irp(PIRP irp, ULONG len)
 }
 
 static void
-send_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int data_len)
+send_stub_res(PIRP irp_read, unsigned int cmd, unsigned long seqnum, int err, PVOID data, int data_len)
 {
 	struct usbip_header	*hdr;
-	ULONG	len_read = sizeof(struct usbip_header);
-
-	DBGI(DBG_GENERAL, "reply_stub_res: seq:%u,err:%d,len:%d\n", seqnum, err, data_len);
-
-	if (err == 0)
-		len_read += data_len;
+	ULONG	len_read = sizeof(struct usbip_header) + data_len;
 
 	hdr = get_usbip_hdr_from_read_irp(irp_read, len_read);
 	if (hdr == NULL) {
+		DBGE(DBG_GENERAL, "send_stub_res: too small buffer: seqnum:%u\n", seqnum);
 		irp_read->IoStatus.Status = STATUS_UNSUCCESSFUL;
 		IoCompleteRequest(irp_read, IO_NO_INCREMENT);
 		return;
 	}
-	if (err == 0) {
-		set_ret_submit_usbip_header(hdr, seqnum, err, data_len);
+
+	hdr->base.command = cmd;
+	hdr->base.seqnum = seqnum;
+	hdr->base.devid = 0;
+	hdr->base.direction = 0;
+	hdr->base.ep = 0;
+
+	switch (cmd) {
+	case USBIP_RET_SUBMIT:
+		hdr->u.ret_submit.status = err;
+		hdr->u.ret_submit.actual_length = data_len;
 		if (data_len > 0)
 			RtlCopyMemory((PCHAR)hdr + sizeof(struct usbip_header), data, data_len);
+		hdr->u.ret_submit.number_of_packets = 0;
+		hdr->u.ret_submit.start_frame = 0;
+		hdr->u.ret_submit.error_count = 0;
+		break;
+	case USBIP_RET_UNLINK:
+		hdr->u.ret_unlink.status = err;
+		break;
+	default:
+		break;
 	}
-	else {
-		set_ret_submit_usbip_header(hdr, seqnum, err, 0);
-	}
+
+	DBGI(DBG_GENERAL, "send_stub_res: %s\n", dbg_usbip_hdr(hdr));
+
+	swap_usbip_header(hdr);
 	irp_read->IoStatus.Information = len_read;
 	IoCompleteRequest(irp_read, IO_NO_INCREMENT);
 }
@@ -97,17 +125,65 @@ send_stub_res(PIRP irp_read, unsigned long seqnum, int err, PVOID data, int data
 static void
 send_stub_res_async(PIRP irp_read, stub_res_t *sres)
 {
-	send_stub_res(irp_read, sres->seqnum, sres->err, sres->data, sres->data_len);
+	if (sres->err == 0)
+		send_stub_res(irp_read, sres->cmd, sres->seqnum, sres->err, sres->data, sres->data_len);
+	else
+		send_stub_res(irp_read, sres->cmd, sres->seqnum, sres->err, NULL, 0);
 	free_stub_res(sres);
 }
 
-BOOLEAN
-collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
+void
+add_pending_stub_res(usbip_stub_dev_t *devstub, stub_res_t *sres, PIRP irp)
 {
 	KIRQL	oldirql;
 
 	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
-	if (IsListEmpty(&devstub->stub_res_head)) {
+	sres->irp = irp;
+	InsertTailList(&devstub->stub_res_head_pending, &sres->list);
+	KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+}
+
+void
+del_pending_stub_res(usbip_stub_dev_t *devstub, stub_res_t *sres)
+{
+	KIRQL	oldirql;
+
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	RemoveEntryList(&sres->list);
+	InitializeListHead(&sres->list);
+	sres->irp = NULL;
+	KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+}
+
+BOOLEAN
+cancel_pending_stub_res(usbip_stub_dev_t *devstub, unsigned int seqnum)
+{
+	KIRQL	oldirql;
+	PLIST_ENTRY	le;
+
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	for (le = devstub->stub_res_head_pending.Flink; le != &devstub->stub_res_head_pending; le = le->Flink) {
+		stub_res_t	*sres;
+
+		sres = CONTAINING_RECORD(le, stub_res_t, list);
+		if (sres->seqnum == seqnum) {
+			PIRP	irp = sres->irp;
+			KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+			return IoCancelIrp(irp);
+		}
+	}
+	KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+
+	return FALSE;
+}
+
+BOOLEAN
+collect_done_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
+{
+	KIRQL	oldirql;
+
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	if (IsListEmpty(&devstub->stub_res_head_done)) {
 		IoMarkIrpPending(irp_read);
 		devstub->irp_stub_read = irp_read;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
@@ -117,7 +193,7 @@ collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 		stub_res_t	*sres;
 		PLIST_ENTRY	le;
 
-		le = RemoveHeadList(&devstub->stub_res_head);
+		le = RemoveHeadList(&devstub->stub_res_head_done);
 		sres = CONTAINING_RECORD(le, stub_res_t, list);
 
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
@@ -128,7 +204,7 @@ collect_pending_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 }
 
 static void
-reply_result(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
+reply_result(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum, int err, PVOID data, int data_len, BOOLEAN need_copy)
 {
 	KIRQL	oldirql;
 
@@ -136,9 +212,9 @@ reply_result(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID dat
 	if (devstub->irp_stub_read == NULL) {
 		stub_res_t	*sres;
 
-		sres = create_stub_res(seqnum, err, data, data_len, need_copy);
+		sres = create_stub_res(cmd, seqnum, err, data, data_len, need_copy);
 		if (sres != NULL)
-			InsertTailList(&devstub->stub_res_head, &sres->list);
+			InsertTailList(&devstub->stub_res_head_done, &sres->list);
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 	}
 	else {
@@ -146,7 +222,7 @@ reply_result(usbip_stub_dev_t *devstub, unsigned long seqnum, int err, PVOID dat
 		devstub->irp_stub_read = NULL;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
-		send_stub_res(irp_read, seqnum, err, data, data_len);
+		send_stub_res(irp_read, cmd, seqnum, err, data, data_len);
 		if (data && !need_copy)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
 	}
@@ -159,7 +235,7 @@ reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres)
 
 	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
 	if (devstub->irp_stub_read == NULL) {
-		InsertTailList(&devstub->stub_res_head, &sres->list);
+		InsertTailList(&devstub->stub_res_head_done, &sres->list);
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 	}
 	else {
@@ -172,19 +248,19 @@ reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres)
 }
 
 void
-reply_stub_req(usbip_stub_dev_t *devstub, unsigned long seqnum)
+reply_stub_req(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum)
 {
-	reply_result(devstub, seqnum, 0, NULL, 0, FALSE);
+	reply_result(devstub, cmd, seqnum, 0, NULL, 0, FALSE);
 }
 
 void
-reply_stub_req_err(usbip_stub_dev_t *devstub, unsigned long seqnum, int err)
+reply_stub_req_err(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum, int err)
 {
-	reply_result(devstub, seqnum, err, NULL, 0, FALSE);
+	reply_result(devstub, cmd, seqnum, err, NULL, 0, FALSE);
 }
 
 void
 reply_stub_req_data(usbip_stub_dev_t *devstub, unsigned long seqnum, PVOID data, int data_len, BOOLEAN need_copy)
 {
-	reply_result(devstub, seqnum, 0, data, data_len, need_copy);
+	reply_result(devstub, USBIP_RET_SUBMIT, seqnum, 0, data, data_len, need_copy);
 }

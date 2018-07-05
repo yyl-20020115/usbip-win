@@ -63,7 +63,7 @@ process_get_status(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *
 	if (get_usb_status(devstub, op, idx, &data, &datalen))
 		reply_stub_req_data(devstub, seqnum, &data, (int)datalen, TRUE);
 	else
-		reply_stub_req_err(devstub, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 }
 
 static void
@@ -79,7 +79,7 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *cs
 	pdesc = ExAllocatePoolWithTag(NonPagedPool, csp->wLength, USBIP_STUB_POOL_TAG);
 	if (pdesc == NULL) {
 		DBGE(DBG_READWRITE, "process_get_desc: out of memory\n");
-		reply_stub_req_err(devstub, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 		return;
 	}
 	if (descType == USB_STRING_DESCRIPTOR_TYPE)
@@ -88,7 +88,7 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *cs
 	if (!get_usb_desc(devstub, descType, CSPKT_DESCRIPTOR_INDEX(csp), idLang, pdesc, &len)) {
 		DBGW(DBG_READWRITE, "process_get_desc: failed to get descriptor\n");
 		ExFreePool(pdesc);
-		reply_stub_req_err(devstub, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 		return;
 	}
 	reply_stub_req_data(devstub, seqnum, pdesc, len, FALSE);
@@ -98,9 +98,9 @@ static void
 process_select_conf(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	if (select_usb_conf(devstub, csp->wValue.W))
-		reply_stub_req(devstub, seqnum);
+		reply_stub_req(devstub, USBIP_RET_SUBMIT, seqnum);
 	else
-		reply_stub_req_err(devstub, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 }
 
 static void
@@ -164,10 +164,10 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 		if (is_in)
 			reply_stub_req_data(devstub, seqnum, data, datalen, TRUE);
 		else
-			reply_stub_req(devstub, seqnum);
+			reply_stub_req(devstub, USBIP_RET_SUBMIT, seqnum);
 	}
 	else
-		reply_stub_req_err(devstub, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 }
 
 static void
@@ -213,7 +213,7 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 		data = ExAllocatePoolWithTag(NonPagedPool, datalen, USBIP_STUB_POOL_TAG);
 		if (data == NULL) {
 			DBGE(DBG_GENERAL, "process_bulk_transfer: out of memory\n");
-			reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+			reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
 			return;
 		}
 	}
@@ -228,10 +228,10 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 		if (is_in)
 			reply_stub_req_data(devstub, hdr->base.seqnum, data, datalen, FALSE);
 		else
-			reply_stub_req(devstub, hdr->base.seqnum);
+			reply_stub_req(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum);
 	}
 	else {
-		reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
 		if (is_in)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
 	}
@@ -253,7 +253,7 @@ process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 	info_pipe = get_info_pipe(devstub->devconf, epaddr);
 	if (info_pipe == NULL) {
 		DBGW(DBG_READWRITE, "data_transfer: non-existent pipe: %hhx\n", epaddr);
-		reply_stub_req_err(devstub, hdr->base.seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
 		return;
 	}
 	switch (info_pipe->PipeType) {
@@ -292,14 +292,20 @@ process_cmd_submit(usbip_stub_dev_t *devstub, PIRP irp, struct usbip_header *hdr
 }
 
 static NTSTATUS
-process_cmd_unlink(usbip_stub_dev_t *devstub, PIRP irp)
+process_cmd_unlink(usbip_stub_dev_t *devstub, PIRP irp, struct usbip_header *hdr)
 {
 	PIO_STACK_LOCATION	irpstack;
 
 	UNREFERENCED_PARAMETER(devstub);
 
-	////TODO
-	DBGW(DBG_READWRITE, "process_cmd_unlink: enter\n");
+	DBGI(DBG_READWRITE, "process_cmd_unlink: enter\n");
+
+	if (cancel_pending_stub_res(devstub, hdr->u.cmd_unlink.seqnum)) {
+		reply_stub_req(devstub, USBIP_RET_UNLINK, hdr->base.seqnum);
+	}
+	else {
+		reply_stub_req_err(devstub, USBIP_RET_UNLINK, hdr->base.seqnum, -1);
+	}
 
 	irpstack = IoGetCurrentIrpStackLocation(irp);
 
@@ -329,19 +335,19 @@ stub_dispatch_write(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	struct usbip_header	*hdr;
 
-	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_write: enter\n");
-
 	hdr = get_usbip_hdr_from_write_irp(irp);
 	if (hdr == NULL) {
 		DBGE(DBG_READWRITE, "small write irp\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
+	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_write: hdr: %s\n", dbg_usbip_hdr(hdr));
+
 	switch (hdr->base.command) {
 	case USBIP_CMD_SUBMIT:
 		return process_cmd_submit(devstub, irp, hdr);
 	case USBIP_CMD_UNLINK:
-		return process_cmd_unlink(devstub, irp);
+		return process_cmd_unlink(devstub, irp, hdr);
 	default:
 		DBGE(DBG_READWRITE, "invalid command: %s\n", dbg_command(hdr->base.command));
 		return STATUS_INVALID_PARAMETER;

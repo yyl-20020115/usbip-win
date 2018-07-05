@@ -33,7 +33,8 @@ typedef struct {
 
 	KSPIN_LOCK	lock_stub_res;
 	PIRP		irp_stub_read;
-	LIST_ENTRY	stub_res_head;
+	LIST_ENTRY	stub_res_head_done;
+	LIST_ENTRY	stub_res_head_pending;
 } usbip_stub_dev_t;
 
 void init_dev_removal_lock(usbip_stub_dev_t *devstub);

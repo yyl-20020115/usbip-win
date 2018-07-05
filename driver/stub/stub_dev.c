@@ -233,7 +233,8 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 	}
 
 	init_dev_removal_lock(devstub);
-	InitializeListHead(&devstub->stub_res_head);
+	InitializeListHead(&devstub->stub_res_head_pending);
+	InitializeListHead(&devstub->stub_res_head_done);
 
 	status = IoRegisterDeviceInterface(pdo, (LPGUID)&GUID_DEVINTERFACE_STUB_USBIP, NULL, &devstub->interface_name);
 	if (NT_ERROR(status)) {

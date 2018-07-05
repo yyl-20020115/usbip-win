@@ -28,7 +28,7 @@ typedef struct {
 	PURB	purb;
 	IO_STATUS_BLOCK	io_status;
 	PIO_COMPLETION_ROUTINE	completion;
-	PVOID	ctx;
+	stub_res_t	*sres;
 } safe_completion_t;
 
 static NTSTATUS
@@ -39,7 +39,9 @@ do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 
 	UNREFERENCED_PARAMETER(devobj);
 
-	status = safe_completion->completion(safe_completion->devobj, irp, safe_completion->ctx);
+	del_pending_stub_res((usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension, safe_completion->sres);
+
+	status = safe_completion->completion(safe_completion->devobj, irp, safe_completion->sres);
 
 	ExFreePoolWithTag(safe_completion->purb, USBIP_STUB_POOL_TAG);
 	ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
@@ -49,7 +51,7 @@ do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 }
 
 static NTSTATUS
-call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE completion, PVOID ctx)
+call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE completion, stub_res_t *sres)
 {
 	IRP *irp;
 	IO_STACK_LOCATION	*irpstack;
@@ -66,7 +68,7 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE comple
 	safe_completion->devobj = devstub->self;
 	safe_completion->purb = purb;
 	safe_completion->completion = completion;
-	safe_completion->ctx = ctx;
+	safe_completion->sres = sres;
 
 	irp = IoAllocateIrp(devstub->self->StackSize + 1, FALSE);
 	if (irp == NULL) {
@@ -84,13 +86,15 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE comple
 
 	IoSetCompletionRoutine(irp, do_safe_completion, safe_completion, TRUE, TRUE, TRUE);
 
+	add_pending_stub_res(devstub, sres, irp);
 	status = IoCallDriver(devstub->next_stack_dev, irp);
 	if (status != STATUS_PENDING) {
 		DBGI(DBG_GENERAL, "call_usbd_nb: status = %s, usbd_status:%x\n", dbg_ntstatus(status), purb->UrbHeader.Status);
+		del_pending_stub_res(devstub, sres);
 		ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
 	}
 	else {
-		DBGI(DBG_GENERAL, "call_usbd_nb: request pending\n");
+		DBGI(DBG_GENERAL, "call_usbd_nb: request pending: %s\n", dbg_stub_res(sres));
 	}
 	return status;
 }
@@ -346,11 +350,17 @@ done_bulk_intr_transfer(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 	status = irp->IoStatus.Status;
 
 	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: status = %s\n", dbg_ntstatus(status));
+	if (status == STATUS_CANCELLED) {
+		/* cancelled. just drop it */
+		free_stub_res(sres);
+		return STATUS_CANCELLED;
+	}
+	else {
+		if (!NT_SUCCESS(status))
+			sres->err = -1;
 
-	if (!NT_SUCCESS(status))
-		sres->err = -1;
-
-	reply_stub_req_async(devstub, sres);
+		reply_stub_req_async(devstub, sres);
+	}
 	return STATUS_SUCCESS;
 }
 
@@ -370,7 +380,7 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	if (is_in)
 		flags |= USBD_TRANSFER_DIRECTION_IN;
 	UsbBuildInterruptOrBulkTransferRequest(purb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, datalen, flags, NULL);
-	sres = create_stub_res(seqnum, 0, data, datalen, !is_in);
+	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, data, datalen, !is_in);
 	if (sres == NULL) {
 		if (is_in)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);

@@ -20,10 +20,21 @@ swap_ret_submit(struct usbip_header_ret_submit *ret_submit)
 	ret_submit->error_count = RtlUlongByteSwap(ret_submit->error_count);
 }
 
+static void
+swap_cmd_unlink(struct usbip_header_cmd_unlink *cmd_unlink)
+{
+	cmd_unlink->seqnum = RtlUlongByteSwap(cmd_unlink->seqnum);
+}
+
+static void
+swap_ret_unlink(struct usbip_header_ret_unlink *ret_unlink)
+{
+	ret_unlink->status = RtlUlongByteSwap(ret_unlink->status);
+}
+
 void
 swap_usbip_header(struct usbip_header *hdr)
 {
-	hdr->base.command = RtlUlongByteSwap(hdr->base.command);
 	hdr->base.seqnum = RtlUlongByteSwap(hdr->base.seqnum);
 	hdr->base.devid = RtlUlongByteSwap(hdr->base.devid);
 	hdr->base.direction = RtlUlongByteSwap(hdr->base.direction);
@@ -36,8 +47,15 @@ swap_usbip_header(struct usbip_header *hdr)
 	case USBIP_RET_SUBMIT:
 		swap_ret_submit(&hdr->u.ret_submit);
 		break;
+	case USBIP_CMD_UNLINK:
+		swap_cmd_unlink(&hdr->u.cmd_unlink);
+		break;
+	case USBIP_RET_UNLINK:
+		swap_ret_unlink(&hdr->u.ret_unlink);
+		break;
 	default:
-		///TODO
 		break;
 	}
+
+	hdr->base.command = RtlUlongByteSwap(hdr->base.command);
 }

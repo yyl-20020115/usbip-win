@@ -41,6 +41,12 @@ dbg_usbip_hdr(struct usbip_header *hdr)
 	case USBIP_RET_SUBMIT:
 		dbg_snprintf(buf + n, 512 - n, ",alen:%u", hdr->u.ret_submit.actual_length);
 		break;
+	case USBIP_CMD_UNLINK:
+		dbg_snprintf(buf + n, 512 - n, ",unlink_seqnum:%u", hdr->u.cmd_unlink.seqnum);
+		break;
+	case USBIP_RET_UNLINK:
+		dbg_snprintf(buf + n, 512 - n, ",st:%u", hdr->u.ret_unlink.status);
+		break;
 	default:
 		break;
 	}

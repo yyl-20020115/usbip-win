@@ -29,7 +29,6 @@
     <ClCompile Include="stub_irp.c" />
     <ClCompile Include="stub_pnp.c" />
     <ClCompile Include="stub_power.c" />
-    <ClCompile Include="stub_proto.c" />
     <ClCompile Include="stub_read.c" />
     <ClCompile Include="stub_reg.c" />
     <ClCompile Include="stub_res.c" />
