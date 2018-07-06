@@ -23,25 +23,26 @@
 
 #include <usbdlib.h>
 
+typedef void (*cb_urb_done_t)(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres);
+
 typedef struct {
 	PDEVICE_OBJECT	devobj;
 	PURB	purb;
 	IO_STATUS_BLOCK	io_status;
-	PIO_COMPLETION_ROUTINE	completion;
+	cb_urb_done_t	cb_urb_done;
 	stub_res_t	*sres;
 } safe_completion_t;
 
 static NTSTATUS
 do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 {
-	NTSTATUS	status;
 	safe_completion_t	*safe_completion = (safe_completion_t *)ctx;
 
 	UNREFERENCED_PARAMETER(devobj);
 
 	del_pending_stub_res((usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension, safe_completion->sres);
 
-	status = safe_completion->completion(safe_completion->devobj, irp, safe_completion->sres);
+	safe_completion->cb_urb_done((usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension, irp->IoStatus.Status, safe_completion->purb, safe_completion->sres);
 
 	ExFreePoolWithTag(safe_completion->purb, USBIP_STUB_POOL_TAG);
 	ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
@@ -51,7 +52,7 @@ do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 }
 
 static NTSTATUS
-call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE completion, stub_res_t *sres)
+call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, cb_urb_done_t cb_urb_done, stub_res_t *sres)
 {
 	IRP *irp;
 	IO_STACK_LOCATION	*irpstack;
@@ -67,7 +68,7 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, PIO_COMPLETION_ROUTINE comple
 	}
 	safe_completion->devobj = devstub->self;
 	safe_completion->purb = purb;
-	safe_completion->completion = completion;
+	safe_completion->cb_urb_done = cb_urb_done;
 	safe_completion->sres = sres;
 
 	irp = IoAllocateIrp(devstub->self->StackSize + 1, FALSE);
@@ -340,32 +341,27 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 
 void reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres);
 
-static NTSTATUS
-done_bulk_intr_transfer(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
+static void
+done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres)
 {
-	usbip_stub_dev_t	*devstub = (usbip_stub_dev_t *)devobj->DeviceExtension;
-	stub_res_t	*sres = (stub_res_t *)ctx;
-	NTSTATUS	status;
-
-	status = irp->IoStatus.Status;
-
-	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: status = %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: seq:%u,status:%s\n", sres->seqnum, dbg_ntstatus(status));
 	if (status == STATUS_CANCELLED) {
 		/* cancelled. just drop it */
 		free_stub_res(sres);
-		return STATUS_CANCELLED;
 	}
 	else {
-		if (!NT_SUCCESS(status))
+		if (NT_SUCCESS(status)) {
+			if (sres->data)
+				sres->data_len = purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+		}
+		else
 			sres->err = -1;
-
 		reply_stub_req_async(devstub, sres);
 	}
-	return STATUS_SUCCESS;
 }
 
 NTSTATUS
-submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, USHORT datalen, BOOLEAN is_in)
+submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, USHORT *pdatalen, BOOLEAN is_in)
 {
 	PURB		purb;
 	ULONG		flags = USBD_SHORT_TRANSFER_OK;
@@ -379,8 +375,11 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	}
 	if (is_in)
 		flags |= USBD_TRANSFER_DIRECTION_IN;
-	UsbBuildInterruptOrBulkTransferRequest(purb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, datalen, flags, NULL);
-	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, data, datalen, !is_in);
+	UsbBuildInterruptOrBulkTransferRequest(purb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, *pdatalen, flags, NULL);
+
+	/* data length will be set by when urb is completed */
+	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, is_in ? data: NULL, 0, FALSE);
+
 	if (sres == NULL) {
 		if (is_in)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
@@ -388,9 +387,11 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	}
 	status = call_usbd_nb(devstub, purb, done_bulk_intr_transfer, sres);
 	if (status != STATUS_PENDING) {
-		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 		if (NT_SUCCESS(status))
-			sres->data = NULL;
+			*pdatalen = (USHORT)purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+		/* Clear data of stub result, which will be freed by caller */
+		sres->data = NULL;
+		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 		free_stub_res(sres);
 	}
 	return status;

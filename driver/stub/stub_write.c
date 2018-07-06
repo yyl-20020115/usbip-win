@@ -27,14 +27,6 @@
 
 #define HDR_IS_CONTROL_TRANSFER(hdr)	((hdr)->base.ep == 0)
 
-static NTSTATUS
-not_supported(PIRP irp)
-{
-	irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-	IoCompleteRequest(irp, IO_NO_INCREMENT);
-	return STATUS_NOT_SUPPORTED;
-}
-
 static void
 process_get_status(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
@@ -117,8 +109,10 @@ process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_csp
 		process_select_conf(devstub, seqnum, csp);
 		break;
 	case USB_REQUEST_SET_INTERFACE:
+		DBGE(DBG_READWRITE, "not supported set interface\n");
 		break;
 	default:
+		DBGE(DBG_READWRITE, "not supported standard request\n");
 		break;
 	}
 }
@@ -178,7 +172,7 @@ process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	DBGI(DBG_READWRITE, "dispatch_write: hdr: %s, csp: %s\n", dbg_usbip_hdr(hdr), dbg_ctlsetup_packet(csp));
+	DBGI(DBG_READWRITE, "control_transfer: seq:%u, csp:%s\n", hdr->base.seqnum, dbg_ctlsetup_packet(csp));
 
 	reqType = CSPKT_REQUEST_TYPE(csp);
 	switch (reqType) {
@@ -205,7 +199,7 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 	BOOLEAN	is_in;
 	NTSTATUS	status;
 
-	DBGI(DBG_READWRITE, "bulk_intr_transfer: hdr:%s, ep:%s\n", dbg_usbip_hdr(hdr), dbg_info_pipe(info_pipe));
+	DBGI(DBG_READWRITE, "bulk_intr_transfer: seq:%u, ep:%s\n", hdr->base.seqnum, dbg_info_pipe(info_pipe));
 
 	datalen = (USHORT)hdr->u.cmd_submit.transfer_buffer_length;
 	is_in = hdr->base.direction ? TRUE : FALSE;
@@ -221,7 +215,7 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 		data = (PVOID)(hdr + 1);
 	}
 
-	status = submit_bulk_intr_transfer(devstub, info_pipe->PipeHandle, hdr->base.seqnum, data, datalen, is_in);
+	status = submit_bulk_intr_transfer(devstub, info_pipe->PipeHandle, hdr->base.seqnum, data, &datalen, is_in);
 	if (status == STATUS_PENDING)
 		return;
 	if (NT_SUCCESS(status)) {

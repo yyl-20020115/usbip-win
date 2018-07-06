@@ -26,13 +26,30 @@ dbg_snprintf(char *buf, int size, const char *fmt, ...)
 	return (int)len;
 }
 
+static const char *
+dbg_usbip_hdr_cmd(unsigned int cmd)
+{
+	switch (cmd) {
+	case USBIP_CMD_SUBMIT:
+		return "cmd_submit";
+	case USBIP_RET_SUBMIT:
+		return "ret_submit";
+	case USBIP_CMD_UNLINK:
+		return "cmd_unlink";
+	case USBIP_RET_UNLINK:
+		return "ret_unlink";
+	default:
+		return "unknown";
+	}
+}
+
 const char *
 dbg_usbip_hdr(struct usbip_header *hdr)
 {
 	static char	buf[512];
 	int	n;
 
-	n = dbg_snprintf(buf, 512, "seq:%u,%s,ep:%u", hdr->base.seqnum, hdr->base.direction ? "in": "out", hdr->base.ep);
+	n = dbg_snprintf(buf, 512, "cmd:%s,seq:%u,%s,ep:%u", dbg_usbip_hdr_cmd(hdr->base.command), hdr->base.seqnum, hdr->base.direction ? "in": "out", hdr->base.ep);
 	switch (hdr->base.command) {
 	case USBIP_CMD_SUBMIT:
 		dbg_snprintf(buf + n, 512 - n, ",tlen:%d,intv:%d",
@@ -42,7 +59,7 @@ dbg_usbip_hdr(struct usbip_header *hdr)
 		dbg_snprintf(buf + n, 512 - n, ",alen:%u", hdr->u.ret_submit.actual_length);
 		break;
 	case USBIP_CMD_UNLINK:
-		dbg_snprintf(buf + n, 512 - n, ",unlink_seqnum:%u", hdr->u.cmd_unlink.seqnum);
+		dbg_snprintf(buf + n, 512 - n, ",unlinkseq:%u", hdr->u.cmd_unlink.seqnum);
 		break;
 	case USBIP_RET_UNLINK:
 		dbg_snprintf(buf + n, 512 - n, ",st:%u", hdr->u.ret_unlink.status);

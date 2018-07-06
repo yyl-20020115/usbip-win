@@ -74,35 +74,17 @@ dump_usbip_header(struct usbip_header *hdr)
 #endif
 
 static void
-correct_endian_basic(struct usbip_header_basic *base, int send)
+swap_usbip_header_base_endian(struct usbip_header_basic *base)
 {
-	if (send) {
-		base->command	= htonl(base->command);
-		base->seqnum	= htonl(base->seqnum);
-		base->devid	= htonl(base->devid);
-		base->direction	= htonl(base->direction);
-		base->ep	= htonl(base->ep);
-	} else {
-		base->command	= ntohl(base->command);
-		base->seqnum	= ntohl(base->seqnum);
-		base->devid	= ntohl(base->devid);
-		base->direction	= ntohl(base->direction);
-		base->ep	= ntohl(base->ep);
-	}
+	base->command	= htonl(base->command);
+	base->seqnum	= htonl(base->seqnum);
+	base->devid	= htonl(base->devid);
+	base->direction	= htonl(base->direction);
+	base->ep	= htonl(base->ep);
 }
 
 static void
-correct_endian_ret_submit(struct usbip_header_ret_submit *pdu)
-{
-	pdu->status	= ntohl(pdu->status);
-	pdu->actual_length = ntohl(pdu->actual_length);
-	pdu->start_frame = ntohl(pdu->start_frame);
-	pdu->number_of_packets = ntohl(pdu->number_of_packets);
-	pdu->error_count = ntohl(pdu->error_count);
-}
-
-static void
-correct_endian_cmd_submit(struct usbip_header_cmd_submit *pdu)
+swap_cmd_submit_endian(struct usbip_header_cmd_submit *pdu)
 {
 	pdu->transfer_flags	= ntohl(pdu->transfer_flags);
 	pdu->transfer_buffer_length = ntohl(pdu->transfer_buffer_length);
@@ -112,24 +94,47 @@ correct_endian_cmd_submit(struct usbip_header_cmd_submit *pdu)
 }
 
 static void
-usbip_header_correct_endian(struct usbip_header *pdu, int send)
+swap_ret_submit_endian(struct usbip_header_ret_submit *pdu)
 {
-	unsigned int cmd = 0;
+	pdu->status = ntohl(pdu->status);
+	pdu->actual_length = ntohl(pdu->actual_length);
+	pdu->start_frame = ntohl(pdu->start_frame);
+	pdu->number_of_packets = ntohl(pdu->number_of_packets);
+	pdu->error_count = ntohl(pdu->error_count);
+}
 
-	if (send)
-		cmd = pdu->base.command;
+static void
+swap_cmd_unlink_endian(struct usbip_header_cmd_unlink *pdu)
+{
+	pdu->seqnum = ntohl(pdu->seqnum);
+}
 
-	correct_endian_basic(&pdu->base, send);
+static void
+swap_ret_unlink_endian(struct usbip_header_ret_unlink *pdu)
+{
+	pdu->status = ntohl(pdu->status);
+}
 
-	if (!send)
-		cmd = pdu->base.command;
+static void
+swap_usbip_header_endian(struct usbip_header *pdu)
+{
+	unsigned int	cmd;
+
+	swap_usbip_header_base_endian(&pdu->base);
+	cmd = pdu->base.command;
 
 	switch (cmd) {
 	case USBIP_CMD_SUBMIT:
-		correct_endian_cmd_submit(&pdu->u.cmd_submit);
+		swap_cmd_submit_endian(&pdu->u.cmd_submit);
 		break;
 	case USBIP_RET_SUBMIT:
-		correct_endian_ret_submit(&pdu->u.ret_submit);
+		swap_ret_submit_endian(&pdu->u.ret_submit);
+		break;
+	case USBIP_CMD_UNLINK:
+		swap_cmd_unlink_endian(&pdu->u.cmd_unlink);
+		break;
+	case USBIP_RET_UNLINK:
+		swap_ret_unlink_endian(&pdu->u.ret_unlink);
 		break;
 	default:
 		/* NOTREACHED */
@@ -189,17 +194,37 @@ static int
 get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 {
 	if (is_req) {
+		if (ntohl(hdr->base.command) == USBIP_CMD_UNLINK)
+			return 0;
 		if (hdr->base.direction)
 			return 0;
 		if (!record_outq_seqnum(ntohl(hdr->base.seqnum))) {
 			err("failed to record. out queue full");
 		}
+		return ntohl(hdr->u.cmd_submit.transfer_buffer_length);
 	}
 	else {
+		if (ntohl(hdr->base.command) == USBIP_RET_UNLINK)
+			return 0;
 		if (is_outq_seqnum(ntohl(hdr->base.seqnum)))
 			return 0;
+		return ntohl(hdr->u.ret_submit.actual_length);
 	}
-	return ntohl(hdr->u.ret_submit.actual_length);
+}
+
+static int
+get_iso_len(BOOL is_req, struct usbip_header *hdr)
+{
+	if (is_req) {
+		if (ntohl(hdr->base.command) == USBIP_CMD_UNLINK)
+			return 0;
+		return ntohl(hdr->u.cmd_submit.number_of_packets) * sizeof(struct usbip_iso_packet_descriptor);
+	}
+	else {
+		if (ntohl(hdr->base.command) == USBIP_RET_UNLINK)
+			return 0;
+		return ntohl(hdr->u.ret_submit.number_of_packets) * sizeof(struct usbip_iso_packet_descriptor);
+	}
 }
 
 static BOOL
@@ -218,13 +243,13 @@ write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE
 	}
 
 	xfer_len = get_xfer_len(is_req, hdr);
-	usbip_header_correct_endian(hdr, 0);
+	iso_len = get_iso_len(is_req, hdr);
+
+	swap_usbip_header_endian(hdr);
 
 	DBGF("dev: write: seq %d\n", hdr->base.seqnum);
 
 	DBG_USBIP_HEADER(hdr);
-
-	iso_len = hdr->u.ret_submit.number_of_packets * sizeof(struct usbip_iso_packet_descriptor);
 
 	len_data = xfer_len + iso_len;
 	if (buf_len < len_data + sizeof(struct usbip_header)) {
@@ -319,11 +344,8 @@ write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 		return FALSE;
 	}
 	xfer_len = get_xfer_len(is_req, hdr);
+	iso_len = get_iso_len(is_req, hdr);
 
-	if (hdr->u.cmd_submit.number_of_packets)
-		iso_len = sizeof(struct usbip_iso_packet_descriptor) * ntohl(hdr->u.cmd_submit.number_of_packets);
-	else
-		iso_len = 0;
 	if (len != sizeof(struct usbip_header) + xfer_len + iso_len) {
 		err("invalid buffer length:%d, out_len:%ld, iso_len:%ld\n", len, xfer_len, iso_len);
 		return FALSE;
