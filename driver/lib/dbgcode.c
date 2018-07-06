@@ -19,6 +19,13 @@ static namecode_t namecodes_ntstatus[] = {
 	{0,0}
 };
 
+static namecode_t namecodes_usbd_status[] = {
+	K_V(USBD_STATUS_SUCCESS)
+	K_V(USBD_STATUS_PENDING)
+	K_V(USBD_STATUS_STALL_PID)
+	{0,0}
+};
+
 static namecode_t	namecodes_dispatch_major[] = {
 	K_V(IRP_MJ_READ)
 	K_V(IRP_MJ_WRITE)
@@ -143,6 +150,12 @@ const char *
 dbg_ntstatus(NTSTATUS status)
 {
 	return dbg_namecode(namecodes_ntstatus, "ntstatus", status);
+}
+
+const char *
+dbg_usbd_status(USBD_STATUS status)
+{
+	return dbg_namecode(namecodes_usbd_status, "usbd status", status);
 }
 
 const char *

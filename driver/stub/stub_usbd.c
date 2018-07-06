@@ -20,6 +20,7 @@
 #include "stub_dbg.h"
 #include "stub_dev.h"
 #include "stub_res.h"
+#include "usbd_status.h"
 
 #include <usbdlib.h>
 
@@ -90,7 +91,7 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, cb_urb_done_t cb_urb_done, st
 	add_pending_stub_res(devstub, sres, irp);
 	status = IoCallDriver(devstub->next_stack_dev, irp);
 	if (status != STATUS_PENDING) {
-		DBGI(DBG_GENERAL, "call_usbd_nb: status = %s, usbd_status:%x\n", dbg_ntstatus(status), purb->UrbHeader.Status);
+		DBGI(DBG_GENERAL, "call_usbd_nb: status = %s, usbd_status:%s\n", dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
 		del_pending_stub_res(devstub, sres);
 		ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
 	}
@@ -128,7 +129,7 @@ call_usbd(usbip_stub_dev_t *devstub, PURB purb)
 		status = io_status.Status;
 	}
 
-	DBGI(DBG_GENERAL, "call_usbd: status = %s, usbd_status:%x\n", dbg_ntstatus(status), purb->UrbHeader.Status);
+	DBGI(DBG_GENERAL, "call_usbd: status = %s, usbd_status:%s\n", dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
 	return status;
 }
 
@@ -344,7 +345,8 @@ void reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres);
 static void
 done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres)
 {
-	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: seq:%u,status:%s\n", sres->seqnum, dbg_ntstatus(status));
+	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: seq:%u,status:%s,usbd_status:%s\n", sres->seqnum, dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
+
 	if (status == STATUS_CANCELLED) {
 		/* cancelled. just drop it */
 		free_stub_res(sres);
@@ -354,8 +356,9 @@ done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, s
 			if (sres->data)
 				sres->data_len = purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
 		}
-		else
-			sres->err = -1;
+		else {
+			sres->err = to_usbip_status(purb->UrbHeader.Status);
+		}
 		reply_stub_req_async(devstub, sres);
 	}
 }

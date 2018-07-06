@@ -3,6 +3,7 @@
 #ifdef DBG
 
 #include <ntddk.h>
+#include <usb.h>
 
 #define K_V(a) {#a, (unsigned int)a},
 
@@ -13,6 +14,7 @@ typedef struct namecode {
 
 const char *dbg_namecode(namecode_t *namecodes, const char *codetype, unsigned int code);
 const char *dbg_ntstatus(NTSTATUS status);
+const char *dbg_usbd_status(USBD_STATUS status);
 const char *dbg_dispatch_major(UCHAR major);
 const char *dbg_pnp_minor(UCHAR minor);
 const char *dbg_bus_query_id_type(BUS_QUERY_ID_TYPE type);

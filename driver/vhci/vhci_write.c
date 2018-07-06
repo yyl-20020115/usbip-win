@@ -2,32 +2,10 @@
 
 #include "usbip_proto.h"
 #include "usbreq.h"
+#include "usbd_status.h"
 
 extern struct urb_req *
 find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
-
-#define EPIPE 32
-#define EOVERFLOW 75
-#define EREMOTEIO 121
-
-static USBD_STATUS
-to_usbd_status(int linux_status)
-{
-	switch (linux_status) {
-	case 0:
-		return USBD_STATUS_SUCCESS;
-		/* I guess it */
-	case -EPIPE:
-		return USBD_STATUS_ENDPOINT_HALTED;
-	case -EOVERFLOW:
-		return USBD_STATUS_DATA_OVERRUN;
-	case -EREMOTEIO:
-		return USBD_STATUS_ERROR_SHORT_TRANSFER;
-	default:
-		DBGE(DBG_WRITE, "linux status: %d\n", linux_status);
-		return USBD_STATUS_ERROR;
-	}
-}
 
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
