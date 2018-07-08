@@ -22,6 +22,8 @@
 #include "stub_res.h"
 #include "usbd_status.h"
 
+#include "stub_cspkt.h"
+
 #include <usbdlib.h>
 
 typedef void (*cb_urb_done_t)(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres);
@@ -398,4 +400,29 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 		free_stub_res(sres);
 	}
 	return status;
+}
+
+BOOLEAN
+submit_control_transfer(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, PVOID data, ULONG *pdata_len)
+{
+	struct _URB_CONTROL_TRANSFER	UrbControl;
+	ULONG		flags = USBD_DEFAULT_PIPE_TRANSFER;
+	NTSTATUS	status;
+
+	if (CSPKT_DIRECTION(csp))
+		flags |= USBD_TRANSFER_DIRECTION_IN;
+	RtlZeroMemory(&UrbControl, sizeof(struct _URB_CONTROL_TRANSFER));
+	UrbControl.Hdr.Function = URB_FUNCTION_CONTROL_TRANSFER;
+	UrbControl.Hdr.Length = sizeof(struct _URB_CONTROL_TRANSFER);
+	RtlCopyMemory(UrbControl.SetupPacket, csp, 8);
+	UrbControl.TransferFlags = flags;
+	UrbControl.TransferBuffer = data;
+	UrbControl.TransferBufferLength = *pdata_len;
+
+	status = call_usbd(devstub, (PURB)&UrbControl);
+	if (NT_SUCCESS(status)) {
+		*pdata_len = UrbControl.TransferBufferLength;
+		return TRUE;
+	}
+	return FALSE;
 }

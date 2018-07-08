@@ -62,8 +62,8 @@ static void
 process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	UCHAR	descType = CSPKT_DESCRIPTOR_TYPE(csp);
-	USHORT	idLang = 0;
 	PVOID	pdesc = NULL;
+	BOOLEAN	res;
 	ULONG	len;
 
 	DBGI(DBG_READWRITE, "get_desc: %s\n", dbg_cspkt_desctype(CSPKT_DESCRIPTOR_TYPE(csp)));
@@ -74,10 +74,23 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *cs
 		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
 		return;
 	}
-	if (descType == USB_STRING_DESCRIPTOR_TYPE)
-		idLang = csp->wIndex.W;
+
 	len = csp->wLength;
-	if (!get_usb_desc(devstub, descType, CSPKT_DESCRIPTOR_INDEX(csp), idLang, pdesc, &len)) {
+	if (descType == 0x22) {
+		/* NOTE: Try to tweak in a clumsy way.
+		 * Windows gives an USBD_STATUS_STALL_PID for non-designated descriptor
+		 * such as USBHID REPORT. With raw control transfer URB, it has no problem.
+		 */
+		res = submit_control_transfer(devstub, csp, pdesc, &len);
+	}
+	else {
+		USHORT	idLang = 0;
+
+		if (descType == USB_STRING_DESCRIPTOR_TYPE)
+			idLang = csp->wIndex.W;
+		res = get_usb_desc(devstub, descType, CSPKT_DESCRIPTOR_INDEX(csp), idLang, pdesc, &len);
+	}
+	if (!res) {
 		DBGW(DBG_READWRITE, "process_get_desc: failed to get descriptor\n");
 		ExFreePool(pdesc);
 		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
@@ -130,9 +143,8 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 	datalen = hdr->u.cmd_submit.transfer_buffer_length;
 	if (datalen == 0)
 		data = NULL;
-	else {
+	else
 		data = (PVOID)(hdr + 1);
-	}
 
 	is_in = csp->bmRequestType.Dir ? TRUE : FALSE;
 
