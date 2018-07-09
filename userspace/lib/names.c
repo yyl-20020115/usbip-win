@@ -410,7 +410,7 @@ static void parse(FILE *f)
 		if (buf[0] == '\t' && isxdigit(buf[1])) {
 			/* product or subclass spec */
 			u = strtoul(buf+1, &cp, 16);
-			while (isspace(*cp))
+			while (isspace((unsigned char)*cp))
 				cp++;
 			if (!*cp) {
 				err("Invalid product/subclass spec at line %u",

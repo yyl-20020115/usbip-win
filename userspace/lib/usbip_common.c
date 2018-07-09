@@ -6,6 +6,7 @@
 
 #include "usbip_common.h"
 #include "names.h"
+#include "usbip_util.h"
 
 #include "usbip_proto.h"
 
@@ -111,9 +112,19 @@ void dump_usb_device(struct usbip_usb_device *udev)
 	DBG_UDEV_INTEGER(devnum);
 }
 
-int usbip_names_init(char *f)
+int usbip_names_init(void)
 {
-	return names_init(f);
+	char	*fpath_db, *fpath_mod;
+	int	ret;
+
+	fpath_mod = get_module_dir();
+	asprintf(&fpath_db, "%s\\usb.ids", fpath_mod);
+	free(fpath_mod);
+
+	ret = names_init(fpath_db);
+	free(fpath_db);
+
+	return ret;
 }
 
 void usbip_names_free()

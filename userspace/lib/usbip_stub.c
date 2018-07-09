@@ -26,33 +26,6 @@ is_service_usbip_stub(HDEVINFO dev_info, SP_DEVINFO_DATA *dev_info_data)
 	return res;
 }
 
-static char *
-get_module_dir(void)
-{
-	DWORD	size = 1024;
-
-	while (TRUE) {
-		char	*path_mod;
-
-		path_mod = (char *)malloc(size);
-		if (path_mod == NULL)
-			return NULL;
-		if (GetModuleFileName(NULL, path_mod, size) == size) {
-			free(path_mod);
-			if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-				return NULL;
-			size += 1024;
-		}
-		else {
-			char	*last_sep;
-			last_sep = strrchr(path_mod, '\\');
-			if (last_sep != NULL)
-				*last_sep = '\0';
-			return path_mod;
-		}
-	}
-}
-
 static void
 copy_file(const char *fname, const char *path_drvpkg)
 {

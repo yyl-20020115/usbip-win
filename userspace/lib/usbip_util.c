@@ -58,3 +58,30 @@ asprintf(char **strp, const char *fmt, ...)
 	va_end(ap);
 	return ret;
 }
+
+char *
+get_module_dir(void)
+{
+	DWORD	size = 1024;
+
+	while (TRUE) {
+		char	*path_mod;
+
+		path_mod = (char *)malloc(size);
+		if (path_mod == NULL)
+			return NULL;
+		if (GetModuleFileName(NULL, path_mod, size) == size) {
+			free(path_mod);
+			if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+				return NULL;
+			size += 1024;
+		}
+		else {
+			char	*last_sep;
+			last_sep = strrchr(path_mod, '\\');
+			if (last_sep != NULL)
+				*last_sep = '\0';
+			return path_mod;
+		}
+	}
+}

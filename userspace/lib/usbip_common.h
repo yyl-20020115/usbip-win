@@ -8,10 +8,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#ifndef USBIDS_FILE
-#define USBIDS_FILE "/usr/share/hwdata/usb.ids"
-#endif
-
 #ifndef VHCI_STATE_PATH
 #define VHCI_STATE_PATH "/var/run/vhci_hcd"
 #endif
@@ -118,7 +114,7 @@ void dump_usb_device(struct usbip_usb_device *);
 const char *usbip_speed_string(int num);
 const char *usbip_status_string(int32_t status);
 
-int usbip_names_init(char *);
+int usbip_names_init(void);
 void usbip_names_free(void);
 void usbip_names_get_product(char *buff, size_t size, uint16_t vendor, uint16_t product);
 void usbip_names_get_class(char *buff, size_t size, uint8_t class, uint8_t subclass, uint8_t protocol);

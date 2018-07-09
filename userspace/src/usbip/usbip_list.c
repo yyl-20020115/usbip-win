@@ -61,8 +61,8 @@ int usbip_list(int argc, char *argv[])
 	int opt;
 	int ret = -1;
 
-	if (usbip_names_init(USBIDS_FILE))
-		err("failed to open %s", USBIDS_FILE);
+	if (usbip_names_init() != 0)
+		err("failed to open usb id database");
 
 	for (;;) {
 		opt = getopt_long(argc, argv, "pr:l", opts, NULL);
