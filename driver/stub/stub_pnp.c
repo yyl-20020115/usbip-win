@@ -42,7 +42,8 @@ disable_interface(usbip_stub_dev_t *devstub)
 {
 	NTSTATUS	status;
 
-	///TODO set_filter_interface_key(dev, (ULONG)-1);
+	if (devstub->interface_name.Buffer == NULL)
+		return;
 
 	status = IoSetDeviceInterfaceState(&devstub->interface_name, FALSE);
 	if (NT_ERROR(status)) {
@@ -76,14 +77,15 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		}
 		return pass_irp_down(devstub, irp, on_start_complete, NULL);
 	case IRP_MN_REMOVE_DEVICE:
-		if (devstub->is_started) {
-			disable_interface(devstub);
-		}
+		disable_interface(devstub);
 
 		devstub->is_started = FALSE;
 
 		/* wait until all outstanding requests are finished */
 		unlock_wait_dev_removal(devstub);
+
+		/* USBD_CloseHandle should be ahead of pass_irp_down */
+		USBD_CloseHandle(devstub->hUSBD);
 
 		status = pass_irp_down(devstub, irp, NULL, NULL);
 
@@ -92,10 +94,6 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		remove_devlink(devstub);
 		free_devconf(devstub->devconf);
 		devstub->devconf = NULL;
-#if 0 ////TODO
-		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
-#endif
-		USBD_CloseHandle(devstub->hUSBD);
 
 		/* delete the device object */
 		IoDetachDevice(devstub->next_stack_dev);
@@ -105,9 +103,6 @@ stub_dispatch_pnp(usbip_stub_dev_t *devstub, IRP *irp)
 		devstub->is_started = FALSE;
 
 		disable_interface(devstub);
-#if 0 /////TODO
-		UpdateContextConfigDescriptor(dev,NULL,0,0,-1);
-#endif
 		status = STATUS_SUCCESS;
 		break;
 	case IRP_MN_STOP_DEVICE:

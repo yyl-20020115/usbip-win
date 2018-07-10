@@ -280,8 +280,6 @@ stub_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT pdo)
 	// use the same Characteristics as the underlying object
 	devobj->Characteristics = devstub->next_stack_dev->Characteristics;
 
-	//////////TODO UpdateContextConfigDescriptor(devstub, NULL, 0, 0, -1);
-
 	DBGI(DBG_DEV, "add_device: device added: %s\n", dbg_devstub(devstub));
 
 	devobj->Flags &= ~DO_DEVICE_INITIALIZING;
