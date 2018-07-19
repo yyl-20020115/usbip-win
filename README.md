@@ -71,3 +71,6 @@
   - Click Finish at 'Completing the Add/Remove Hardware Wizard.'
 - Attach a remote USB device
   - *BUT* currently, it does not seem to be working
+
+<hr>
+<sub>This project was supported by Basic Science Research Program through the National Research Foundation of Korea(NRF) funded by the Ministry of Education(2016R1A6A3A11930295).</sub>
