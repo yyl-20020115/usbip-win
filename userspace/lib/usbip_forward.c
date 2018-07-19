@@ -31,23 +31,27 @@ dbg_to_file(char *fmt, ...)
 static void
 dump_usbip_header(struct usbip_header *hdr)
 {
-	dbg_to_file("cmd:%u,seq:%u,devid:%u,dir:%u,ep:%u\n",
+	dbg_to_file("cmd:%x,seq:%x,devid:%x,dir:%x,ep:%x\n",
 		hdr->base.command, hdr->base.seqnum, hdr->base.devid, hdr->base.direction, hdr->base.ep);
 
-	switch(hdr->base.command) {
+	switch (hdr->base.command) {
 	case USBIP_CMD_SUBMIT:
-		dbg_to_file("CMD_SUBMIT: flags:%u,len:%u,sf:%u,#p:%u,intv:%u\n",
+		dbg_to_file("CMD_SUBMIT: flags:%x,len:%x,sf:%x,#p:%x,intv:%x\n",
 			hdr->u.cmd_submit.transfer_flags,
 			hdr->u.cmd_submit.transfer_buffer_length,
 			hdr->u.cmd_submit.start_frame,
 			hdr->u.cmd_submit.number_of_packets,
 			hdr->u.cmd_submit.interval);
+		dbg_to_file("     setup: %02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx\n",
+			hdr->u.cmd_submit.setup[0], hdr->u.cmd_submit.setup[1], hdr->u.cmd_submit.setup[2],
+			hdr->u.cmd_submit.setup[3], hdr->u.cmd_submit.setup[4], hdr->u.cmd_submit.setup[5],
+			hdr->u.cmd_submit.setup[6], hdr->u.cmd_submit.setup[7]);
 			break;
 	case USBIP_CMD_UNLINK:
-		dbg_to_file("CMD_UNLINK: seq:%u\n", hdr->u.cmd_unlink.seqnum);
+		dbg_to_file("CMD_UNLINK: seq:%x\n", hdr->u.cmd_unlink.seqnum);
 		break;
 	case USBIP_RET_SUBMIT:
-		dbg_to_file("RET_SUBMIT: st:%d,al:%u,sf:%d,#p:%d,ec:%d\n",
+		dbg_to_file("RET_SUBMIT: st:%x,al:%x,sf:%x,#p:%x,ec:%x\n",
 			hdr->u.ret_submit.status,
 			hdr->u.ret_submit.actual_length,
 			hdr->u.ret_submit.start_frame,
@@ -55,21 +59,24 @@ dump_usbip_header(struct usbip_header *hdr)
 			hdr->u.ret_submit.error_count);
 		break;
 	case USBIP_RET_UNLINK:
-		dbg_to_file("RET_UNLINK: status:%d\n", hdr->u.ret_unlink.status);
+		dbg_to_file("RET_UNLINK: status:%x\n", hdr->u.ret_unlink.status);
 		break;
 	default:
 		/* NOT REACHED */
 		dbg_to_file("UNKNOWN\n");
+		break;
 	}
 }
 
 #define DBGF(fmt, ...)		dbg_to_file(fmt, ## __VA_ARGS__)
 #define DBG_USBIP_HEADER(hdr)	dump_usbip_header(hdr)
+#define DBG_USBIP_HEADER_R(hdr)	do { struct usbip_header Hdr = *hdr; swap_usbip_header_endian(&Hdr); dump_usbip_header(&Hdr); } while (0)
 
 #else
 
 #define DBGF(fmt, ...)
 #define DBG_USBIP_HEADER(hdr)
+#define DBG_USBIP_HEADER_R(hdr)
 
 #endif
 
@@ -352,6 +359,7 @@ write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 	}
 
 	DBGF("sock: write: seq:%d\n", ntohl(hdr->base.seqnum));
+	DBG_USBIP_HEADER_R(hdr);
 
 	ret = usbip_net_send(sockfd, buf, len);
 	if (ret != len) {
