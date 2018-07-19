@@ -291,128 +291,104 @@ Return Value:
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS
+setup_pdo_device_id(PPDO_DEVICE_DATA DeviceData, PIRP irp)
+{
+	PWCHAR	id_dev;
+
+	id_dev = ExAllocatePoolWithTag(PagedPool, 22 * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+	if (id_dev == NULL) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+	RtlStringCchPrintfW(id_dev, 22, L"USB\\Vid_%04hx&Pid_%04hx", DeviceData->vendor, DeviceData->product);
+	irp->IoStatus.Information = (ULONG_PTR)id_dev;
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+setup_pdo_inst_id(PPDO_DEVICE_DATA DeviceData, PIRP irp)
+{
+	PWCHAR	id_inst;
+
+	id_inst = ExAllocatePoolWithTag(PagedPool, 5 * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+	if (id_inst == NULL) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+	RtlStringCchPrintfW(id_inst, 5, L"%04hx", DeviceData->SerialNo);
+	irp->IoStatus.Information = (ULONG_PTR)id_inst;
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+setup_pdo_hw_ids(PPDO_DEVICE_DATA DeviceData, PIRP irp)
+{
+	PWCHAR	ids_hw;
+
+	ids_hw = ExAllocatePoolWithTag(PagedPool, 54 * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+	if (ids_hw == NULL) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+	RtlStringCchPrintfW(ids_hw, 31, L"USB\\Vid_%04hx&Pid_%04hx&Rev_%04hx", DeviceData->vendor, DeviceData->product, DeviceData->revision);
+	RtlStringCchPrintfW(ids_hw + 31, 22, L"USB\\Vid_%04hx&Pid_%04hx", DeviceData->vendor, DeviceData->product);
+	ids_hw[53] = L'\0';
+	irp->IoStatus.Information = (ULONG_PTR)ids_hw;
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+setup_pdo_compat_ids(PPDO_DEVICE_DATA DeviceData, PIRP irp)
+{
+	PWCHAR	ids_compat;
+
+	ids_compat = ExAllocatePoolWithTag(PagedPool, 86 * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+	if (ids_compat == NULL) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+	RtlStringCchPrintfW(ids_compat, 33, L"USB\\Class_%02x&SubClass_%02x&Prot_%02x", DeviceData->usbclass, DeviceData->subclass, DeviceData->protocol);
+	RtlStringCchPrintfW(ids_compat + 33, 25, L"USB\\Class_%02x&SubClass_%02x", DeviceData->usbclass, DeviceData->subclass);
+	RtlStringCchPrintfW(ids_compat + 58, 13, L"USB\\Class_%02x", DeviceData->usbclass);
+	if (DeviceData->inum > 1) {
+		RtlStringCchCopyW(ids_compat + 71, 14, L"USB\\COMPOSITE");
+		ids_compat[85] = L'\0';
+	}
+	else
+		ids_compat[71] = L'\0';
+	irp->IoStatus.Information = (ULONG_PTR)ids_compat;
+	return STATUS_SUCCESS;
+}
+
 static PAGEABLE NTSTATUS
 Bus_PDO_QueryDeviceId(__in PPDO_DEVICE_DATA DeviceData, __in PIRP Irp)
-/*++
-
-Routine Description:
-
-    Bus drivers must handle BusQueryDeviceID requests for their
-    child devices (child PDOs). Bus drivers can handle requests
-    BusQueryHardwareIDs, BusQueryCompatibleIDs, and BusQueryInstanceID
-    for their child devices.
-
-    When returning more than one ID for hardware IDs or compatible IDs,
-    a driver should list the IDs in the order of most specific to most
-    general to facilitate choosing the best driver match for the device.
-
-    Bus drivers should be prepared to handle this IRP for a child device
-    immediately after the device is enumerated.
-
-
-Arguments:
-
-    DeviceData - Pointer to the PDO's device extension.
-    Irp          - Pointer to the irp.
-
-Return Value:
-
-    NT STATUS
-
---*/
 {
-    PIO_STACK_LOCATION      stack;
-    PWCHAR                  buffer;
-    ULONG                   length;
-    NTSTATUS                status = STATUS_SUCCESS;
+	PIO_STACK_LOCATION	irpstack;
+	NTSTATUS	status;
 
-    PAGED_CODE ();
+	PAGED_CODE();
 
-    stack = IoGetCurrentIrpStackLocation (Irp);
+	irpstack = IoGetCurrentIrpStackLocation(Irp);
 
-    switch (stack->Parameters.QueryId.IdType) {
-
-    case BusQueryDeviceID:
-
-        //
-        // DeviceID is unique string to identify a device.
-        // This can be the same as the hardware ids (which requires a multi
-        // sz).
-        //
-	#define DEVICEE_ID_SAMPLE L"USB\\Vid_1234&Pid_1234"
-
-	length = sizeof(DEVICEE_ID_SAMPLE);
-	buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
-	if (!buffer) {
-		status = STATUS_INSUFFICIENT_RESOURCES;
+	switch (irpstack->Parameters.QueryId.IdType) {
+	case BusQueryDeviceID:
+		status = setup_pdo_device_id(DeviceData, Irp);
+		break;
+	case BusQueryInstanceID:
+		status = setup_pdo_inst_id(DeviceData, Irp);
+		break;
+	case BusQueryHardwareIDs:
+		status = setup_pdo_hw_ids(DeviceData, Irp);
+		break;
+	case BusQueryCompatibleIDs:
+		status = setup_pdo_compat_ids(DeviceData, Irp);
+		break;
+	case BusQueryContainerID:
+		status = STATUS_NOT_SUPPORTED;
+		break;
+	default:
+		DBGE(DBG_PNP, "unhandled bus query: %s\n", dbg_bus_query_id_type(irpstack->Parameters.QueryId.IdType));
+		status = STATUS_NOT_SUPPORTED;
 		break;
 	}
-	RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
-	*(unsigned short *)((char *)buffer+length -2)=0;
-	DBGI(DBG_GENERAL, "dev id:%LS\r\n", buffer);
-        Irp->IoStatus.Information = (ULONG_PTR) buffer;
-        break;
-
-    case BusQueryInstanceID:
-        //
-        // total length = number (10 digits to be safe (2^32)) + null wide char
-        //
-        length = 11 * sizeof(WCHAR);
-
-        buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
-        if (!buffer) {
-           status = STATUS_INSUFFICIENT_RESOURCES;
-           break;
-        }
-        RtlStringCchPrintfW(buffer, length/sizeof(WCHAR), L"%02d", DeviceData->SerialNo);
-        DBGI(DBG_PNP, "\tInstanceID: %ws\n", buffer);
-        Irp->IoStatus.Information = (ULONG_PTR) buffer;
-        break;
-
-
-    case BusQueryHardwareIDs:
-
-	#define HARDWARE_IDS_SAMPLE L"USB\\Vid_1234&Pid_1234&Rev_1234\0USB\\Vid_1234&Pid_1234\0"
-
-		length = sizeof(HARDWARE_IDS_SAMPLE);
-		buffer = ExAllocatePoolWithTag (PagedPool, length, USBIP_VHCI_POOL_TAG);
-		if (!buffer) {
-			status = STATUS_INSUFFICIENT_RESOURCES;
-			break;
-		}
-		RtlCopyMemory (buffer, DeviceData->HardwareIDs, length);
-		DBGI(DBG_GENERAL, "hid:%LS\r\n", buffer);
-		Irp->IoStatus.Information = (ULONG_PTR) buffer;
-		break;
-
-    case BusQueryCompatibleIDs:
-
-        //
-        // The generic ids for installation of this pdo.
-        //
-
-        buffer = ExAllocatePoolWithTag (PagedPool, DeviceData->compatible_ids_len,
-					USBIP_VHCI_POOL_TAG);
-        if (!buffer) {
-           status = STATUS_INSUFFICIENT_RESOURCES;
-           break;
-        }
-        RtlCopyMemory (buffer, DeviceData->compatible_ids,
-		DeviceData->compatible_ids_len);
-	DBGI(DBG_GENERAL, "cid:%LS\r\n", buffer);
-        Irp->IoStatus.Information = (ULONG_PTR) buffer;
-        break;
-	case BusQueryContainerID:
-		// new for Windows 7
-		status=STATUS_NOT_SUPPORTED;
-        break;
-    default:
-
-        status = Irp->IoStatus.Status;
-
-    }
-    return status;
-
+	return status;
 }
 
 static PAGEABLE NTSTATUS
@@ -1028,7 +1004,6 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 	//
 
 	switch (IrpStack->MinorFunction) {
-
 	case IRP_MN_START_DEVICE:
 
 		//
@@ -1217,16 +1192,10 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 		status = Bus_PDO_QueryDeviceCaps(DeviceData, Irp);
 		break;
 	case IRP_MN_QUERY_ID:
-
-		// Query the IDs of the device
-
-		DBGI(DBG_PNP, "\tQueryId Type: %d %s\n", IrpStack->Parameters.QueryId.IdType,
-			dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
+		DBGI(DBG_PNP, "QueryId Type: %s\n", dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
 
 		status = Bus_PDO_QueryDeviceId(DeviceData, Irp);
-
 		break;
-
 	case IRP_MN_QUERY_DEVICE_RELATIONS:
 		DBGI(DBG_PNP, "QueryDeviceRelation Type: %s\n", dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
 		status = Bus_PDO_QueryDeviceRelations(DeviceData, Irp);
@@ -1292,59 +1261,14 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 		//
 		status = Bus_PDO_QueryInterface(DeviceData, Irp);
 		break;
-
-	case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
-
-		//
-		// OPTIONAL for bus drivers.
-		// The PnP Manager sends this IRP to a device
-		// stack so filter and function drivers can adjust the
-		// resources required by the device, if appropriate.
-		//
-
-		//break;
-
-		//case IRP_MN_QUERY_PNP_DEVICE_STATE:
-
-		//
-		// OPTIONAL for bus drivers.
-		// The PnP Manager sends this IRP after the drivers for
-		// a device return success from the IRP_MN_START_DEVICE
-		// request. The PnP Manager also sends this IRP when a
-		// driver for the device calls IoInvalidateDeviceState.
-		//
-
-		// break;
-
-		//case IRP_MN_READ_CONFIG:
-		//case IRP_MN_WRITE_CONFIG:
-
-		//
-		// Bus drivers for buses with configuration space must handle
-		// this request for their child devices. Our devices don't
-		// have a config space.
-		//
-
-		// break;
-
-		//case IRP_MN_SET_LOCK:
-
-		//
-		// Our device is not a lockable device
-		// so we don't support this Irp.
-		//
-
-		// break;
-
 	default:
-
+		DBGW(DBG_PNP, "not handled: %s\n", dbg_pnp_minor(IrpStack->MinorFunction));
 		//
 		//Bus_KdPrint_Cont (DeviceData, BUS_DBG_PNP_TRACE,("\t Not handled\n"));
 		// For PnP requests to the PDO that we do not understand we should
 		// return the IRP WITHOUT setting the status or information fields.
 		// These fields may have already been set by a filter (eg acpi).
 		status = Irp->IoStatus.Status;
-
 		break;
 	}
 

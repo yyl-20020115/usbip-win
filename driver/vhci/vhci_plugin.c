@@ -26,9 +26,7 @@ bus_plugin_dev(ioctl_usbip_vhci_plugin *plugin, PFDO_DEVICE_DATA fdodata, PFILE_
 	PDEVICE_OBJECT      pdo;
 	PPDO_DEVICE_DATA    pdodata, old_pdodata;
 	NTSTATUS            status;
-	ULONG               len;
 	PLIST_ENTRY         entry;
-	unsigned long i;
 
 	PAGED_CODE();
 
@@ -81,48 +79,17 @@ bus_plugin_dev(ioctl_usbip_vhci_plugin *plugin, PFDO_DEVICE_DATA fdodata, PFILE_
 
 	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
 
-#define HARDWARE_IDS_TPL L"USB\\Vid_%04x&Pid_%04x&Rev_%04xZUSB\\Vid_%04x&Pid_%04xZ"
+	pdodata->vendor = plugin->vendor;
+	pdodata->product = plugin->product;
+	pdodata->revision = plugin->version;
+	pdodata->usbclass = plugin->class;
+	pdodata->subclass = plugin->subclass;
+	pdodata->protocol = plugin->protocol;
+	pdodata->inum = plugin->inum;
 
-	len = sizeof(HARDWARE_IDS_TPL);
-	pdodata->HardwareIDs = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
-	if (NULL == pdodata->HardwareIDs) {
-		IoDeleteDevice(pdo);
-		return STATUS_INSUFFICIENT_RESOURCES;
-	}
-	RtlStringCchPrintfW(pdodata->HardwareIDs, len / sizeof(wchar_t), HARDWARE_IDS_TPL,
-		plugin->vendor, plugin->product, plugin->version, plugin->vendor, plugin->product);
-	for (i = 0; i<len / sizeof(wchar_t); i++) {
-		if ('Z' == pdodata->HardwareIDs[i])
-			pdodata->HardwareIDs[i] = 0;
-	}
-#define COMPATIBLE_IDS_TPL L"USB\\Class_%02x&SubClass_%02x&Prot_%02xZUSB\\Class_%02x&SubClass_%02xZUSB\\Class_%02xZ"
-#define COMPATIBLE_COMPOSITE_IDS_TPL L"USB\\Class_%02x&SubClass_%02x&Prot_%02xZUSB\\Class_%02x&SubClass_%02xZUSB\\Class_%02xZUSB\\COMPOSITEZ"
-	if (plugin->inum>1)
-		len = sizeof(COMPATIBLE_COMPOSITE_IDS_TPL);
-	else
-		len = sizeof(COMPATIBLE_IDS_TPL);
-	pdodata->compatible_ids = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
-
-	if (NULL == pdodata->compatible_ids) {
-		ExFreePool(pdodata->HardwareIDs);
-		IoDeleteDevice(pdo);
-		return STATUS_INSUFFICIENT_RESOURCES;
-	}
-	RtlZeroMemory(pdodata->compatible_ids, len);
-
-	pdodata->compatible_ids_len = len;
-	RtlStringCchPrintfW(pdodata->compatible_ids, len / sizeof(wchar_t),
-		(plugin->inum > 1) ? COMPATIBLE_COMPOSITE_IDS_TPL : COMPATIBLE_IDS_TPL,
-		plugin->class, plugin->subclass, plugin->protocol, plugin->class, plugin->subclass, plugin->class);
-	for (i = 0; i<len / sizeof(wchar_t); i++) {
-		if ('Z' == pdodata->compatible_ids[i])
-			pdodata->compatible_ids[i] = 0;
-	}
 	old_pdodata = (PPDO_DEVICE_DATA)InterlockedCompareExchangePointer(&(fo->FsContext), pdodata, 0);
 	if (old_pdodata) {
 		DBGI(DBG_GENERAL, "you can't plugin again");
-		ExFreePool(pdodata->HardwareIDs);
-		ExFreePool(pdodata->compatible_ids);
 		IoDeleteDevice(pdo);
 		return STATUS_INVALID_PARAMETER;
 	}

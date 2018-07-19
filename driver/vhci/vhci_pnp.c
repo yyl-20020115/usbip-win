@@ -288,15 +288,6 @@ query Device relations IRPS.
 	// Free any resources.
 	//
 
-	if (PdoData->HardwareIDs) {
-		ExFreePool(PdoData->HardwareIDs);
-		PdoData->HardwareIDs = NULL;
-	}
-
-	if (PdoData->compatible_ids) {
-		ExFreePool(PdoData->compatible_ids);
-		PdoData->compatible_ids = NULL;
-	}
 	//FIXME
 	if (PdoData->fo) {
 		PdoData->fo->FsContext = NULL;

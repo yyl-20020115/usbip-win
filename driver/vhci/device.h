@@ -66,9 +66,8 @@ typedef struct _PDO_DEVICE_DATA
 
 	// An array of (zero terminated wide character strings).
 	// The array itself also null terminated
-	PWCHAR	HardwareIDs;
-	PWCHAR	compatible_ids;
-	ULONG	compatible_ids_len;
+	USHORT	vendor, product, revision;
+	UCHAR	usbclass, subclass, protocol, inum;
 
 	// Unique serail number of the device on the bus
 	ULONG SerialNo;
