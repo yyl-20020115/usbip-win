@@ -25,6 +25,7 @@ dbg_urb_req(struct urb_req *urb_r)
 void
 build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request)
 {
+	csp->bmRequestType.B = 0;
 	csp->bmRequestType.Type = type;
 	if (direct_in)
 		csp->bmRequestType.Dir = BMREQUEST_DEVICE_TO_HOST;
@@ -196,6 +197,6 @@ submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		status = STATUS_INVALID_PARAMETER;
 	}
 	IoCompleteRequest(read_irp, IO_NO_INCREMENT);
-	DBGI(DBG_URB, "submit_urb_req: urb requested: status:%x\n", status);
+	DBGI(DBG_URB, "submit_urb_req: urb requested: status:%s\n", dbg_ntstatus(status));
 	return status;
 }
