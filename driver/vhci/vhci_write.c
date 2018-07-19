@@ -236,6 +236,10 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 	if (urb == NULL)
 		return STATUS_INVALID_PARAMETER;
 
+	if (hdr->u.ret_submit.status != 0) {
+		urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
+		return STATUS_UNSUCCESSFUL;
+	}
 	status = store_urb_data(urb, hdr);
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {

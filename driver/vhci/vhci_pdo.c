@@ -1261,6 +1261,9 @@ Bus_PDO_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp,
 		//
 		status = Bus_PDO_QueryInterface(DeviceData, Irp);
 		break;
+	case IRP_MN_DEVICE_ENUMERATED:
+		status = STATUS_SUCCESS;
+		break;
 	default:
 		DBGW(DBG_PNP, "not handled: %s\n", dbg_pnp_minor(IrpStack->MinorFunction));
 		//
