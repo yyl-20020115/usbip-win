@@ -165,7 +165,7 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 
 	reservedBits = csp->bmRequestType.Reserved;
 	seqnum = hdr->base.seqnum;
-	res = submit_class_vendor_req(devstub, is_in, cmd, reservedBits, csp->bRequest, csp->wValue.W, csp->wIndex.W, data, datalen);
+	res = submit_class_vendor_req(devstub, is_in, cmd, reservedBits, csp->bRequest, csp->wValue.W, csp->wIndex.W, data, &datalen);
 	if (res) {
 		if (is_in)
 			reply_stub_req_data(devstub, seqnum, data, datalen, TRUE);
@@ -234,7 +234,7 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 		if (is_in)
 			reply_stub_req_data(devstub, hdr->base.seqnum, data, datalen, FALSE);
 		else
-			reply_stub_req(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum);
+			reply_stub_req_out(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, datalen);
 	}
 	else {
 		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);

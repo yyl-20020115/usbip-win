@@ -82,7 +82,10 @@ static void
 send_stub_res(PIRP irp_read, unsigned int cmd, unsigned long seqnum, int err, PVOID data, int data_len)
 {
 	struct usbip_header	*hdr;
-	ULONG	len_read = sizeof(struct usbip_header) + data_len;
+	ULONG	len_read = sizeof(struct usbip_header);
+
+	if (data != NULL)
+		len_read += data_len;
 
 	hdr = get_usbip_hdr_from_read_irp(irp_read, len_read);
 	if (hdr == NULL) {
@@ -102,7 +105,7 @@ send_stub_res(PIRP irp_read, unsigned int cmd, unsigned long seqnum, int err, PV
 	case USBIP_RET_SUBMIT:
 		hdr->u.ret_submit.status = err;
 		hdr->u.ret_submit.actual_length = data_len;
-		if (data_len > 0)
+		if (data != NULL && data_len > 0)
 			RtlCopyMemory((PCHAR)hdr + sizeof(struct usbip_header), data, data_len);
 		hdr->u.ret_submit.number_of_packets = 0;
 		hdr->u.ret_submit.start_frame = 0;
@@ -223,7 +226,7 @@ reply_result(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum, 
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
 		send_stub_res(irp_read, cmd, seqnum, err, data, data_len);
-		if (data && !need_copy)
+		if (data != NULL && !need_copy)
 			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
 	}
 }
@@ -251,6 +254,12 @@ void
 reply_stub_req(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum)
 {
 	reply_result(devstub, cmd, seqnum, 0, NULL, 0, FALSE);
+}
+
+void
+reply_stub_req_out(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum, int data_len)
+{
+	reply_result(devstub, cmd, seqnum, 0, NULL, data_len, FALSE);
 }
 
 void

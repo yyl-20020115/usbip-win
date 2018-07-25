@@ -327,7 +327,7 @@ reset_pipe(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe)
 }
 
 BOOLEAN
-submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UCHAR reservedBits, UCHAR request, USHORT value, USHORT index, PVOID data, ULONG len)
+submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UCHAR reservedBits, UCHAR request, USHORT value, USHORT index, PVOID data, PULONG plen)
 {
 	URB		Urb;
 	ULONG		flags = 0;
@@ -335,10 +335,12 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 
 	if (is_in)
 		flags |= USBD_TRANSFER_DIRECTION_IN;
-	UsbBuildVendorRequest(&Urb, cmd, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST), flags, reservedBits, request, value, index, data, NULL, len, NULL);
+	UsbBuildVendorRequest(&Urb, cmd, sizeof(struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST), flags, reservedBits, request, value, index, data, NULL, *plen, NULL);
 	status = call_usbd(devstub, &Urb);
-	if (NT_SUCCESS(status))
+	if (NT_SUCCESS(status)) {
+		*plen = Urb.UrbControlVendorClassRequest.TransferBufferLength;
 		return TRUE;
+	}
 	return FALSE;
 }
 
@@ -355,8 +357,7 @@ done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, s
 	}
 	else {
 		if (NT_SUCCESS(status)) {
-			if (sres->data)
-				sres->data_len = purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+			sres->data_len = purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
 		}
 		else {
 			sres->err = to_usbip_status(purb->UrbHeader.Status);
