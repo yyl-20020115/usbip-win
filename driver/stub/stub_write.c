@@ -207,16 +207,16 @@ static void
 process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pipe, struct usbip_header *hdr)
 {
 	PVOID	data;
-	USHORT	datalen;
+	ULONG	datalen;
 	BOOLEAN	is_in;
 	NTSTATUS	status;
 
 	DBGI(DBG_READWRITE, "bulk_intr_transfer: seq:%u, ep:%s\n", hdr->base.seqnum, dbg_info_pipe(info_pipe));
 
-	datalen = (USHORT)hdr->u.cmd_submit.transfer_buffer_length;
+	datalen = (ULONG)hdr->u.cmd_submit.transfer_buffer_length;
 	is_in = hdr->base.direction ? TRUE : FALSE;
 	if (is_in) {
-		data = ExAllocatePoolWithTag(NonPagedPool, datalen, USBIP_STUB_POOL_TAG);
+		data = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)datalen, USBIP_STUB_POOL_TAG);
 		if (data == NULL) {
 			DBGE(DBG_GENERAL, "process_bulk_transfer: out of memory\n");
 			reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);

@@ -17,7 +17,7 @@ BOOLEAN submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT
 	UCHAR rv, UCHAR request, USHORT value, USHORT index, PVOID data, PULONG plen);
 
 NTSTATUS
-submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, USHORT *pdatalen, BOOLEAN is_in);
+submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, PULONG pdatalen, BOOLEAN is_in);
 
 BOOLEAN
 submit_control_transfer(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, PVOID data, PULONG pdata_len);

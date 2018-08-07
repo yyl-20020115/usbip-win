@@ -367,7 +367,7 @@ done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, s
 }
 
 NTSTATUS
-submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, USHORT *pdatalen, BOOLEAN is_in)
+submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, PULONG pdatalen, BOOLEAN is_in)
 {
 	PURB		purb;
 	ULONG		flags = USBD_SHORT_TRANSFER_OK;
@@ -394,7 +394,7 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	status = call_usbd_nb(devstub, purb, done_bulk_intr_transfer, sres);
 	if (status != STATUS_PENDING) {
 		if (NT_SUCCESS(status))
-			*pdatalen = (USHORT)purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+			*pdatalen = (ULONG)purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
 		/* Clear data of stub result, which will be freed by caller */
 		sres->data = NULL;
 		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
@@ -404,7 +404,7 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 }
 
 BOOLEAN
-submit_control_transfer(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, PVOID data, ULONG *pdata_len)
+submit_control_transfer(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, PVOID data, PULONG pdata_len)
 {
 	struct _URB_CONTROL_TRANSFER	UrbControl;
 	ULONG		flags = USBD_DEFAULT_PIPE_TRANSFER;
