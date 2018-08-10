@@ -6,10 +6,7 @@
 #include "usbip_proto.h"
 #include "usbip_network.h"
 
-#define FORWARD_BUFSIZE 1000000
-
-static char	*dev_read_buf;
-static char	*sock_read_buf;
+#define FORWARD_BUFSIZE (1024 * 1024)
 
 #ifdef DEBUG_PDU
 
@@ -275,7 +272,7 @@ write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE
 	}
 
 	if (iso_len > 0)
-		fix_iso_desc_endian(sock_read_buf + sizeof(struct usbip_header) + xfer_len,
+		fix_iso_desc_endian(buf + sizeof(struct usbip_header) + xfer_len,
 				    hdr->u.ret_submit.number_of_packets);
 	if (!WriteFile(hdev, buf, sizeof(struct usbip_header) + len_data, &out, pov)) {
 		err("failed to WriteFile: %ld", GetLastError());
@@ -289,7 +286,7 @@ write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE
 }
 
 static BOOL
-sock_read_async(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
+sock_read_async(BOOL is_req, SOCKET sockfd, HANDLE hdev, char *sock_read_buf, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
 {
 	while (TRUE) {
 		unsigned long	len;
@@ -321,7 +318,7 @@ sock_read_async(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OV
 }
 
 static BOOL
-sock_read_completed(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
+sock_read_completed(BOOL is_req, SOCKET sockfd, HANDLE hdev, char *sock_read_buf, OVERLAPPED *ov_sock, OVERLAPPED *ov_dev)
 {
 	unsigned long	len;
 
@@ -340,7 +337,7 @@ sock_read_completed(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock
 	if (!write_to_dev(!is_req, sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
 		return FALSE;
 
-	return sock_read_async(is_req, sockfd, hdev, ov_sock, ov_dev);
+	return sock_read_async(is_req, sockfd, hdev, sock_read_buf, ov_sock, ov_dev);
 }
 
 static BOOL
@@ -377,7 +374,7 @@ write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 }
 
 static BOOL
-dev_read_async(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
+dev_read_async(BOOL is_req, HANDLE hdev, SOCKET sockfd, char *dev_read_buf, OVERLAPPED *pov)
 {
 	while (TRUE) {
 		unsigned long	len;
@@ -399,7 +396,7 @@ dev_read_async(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *pov)
 }
 
 static BOOL
-dev_read_completed(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
+dev_read_completed(BOOL is_req, HANDLE hdev, SOCKET sockfd, char *dev_read_buf, OVERLAPPED *ov)
 {
 	unsigned long len;
 
@@ -412,7 +409,7 @@ dev_read_completed(BOOL is_req, HANDLE hdev, SOCKET sockfd, OVERLAPPED *ov)
 
 	if (!write_to_sock(!is_req, dev_read_buf, len, sockfd))
 		return FALSE;
-	return dev_read_async(is_req, hdev, sockfd, ov);
+	return dev_read_async(is_req, hdev, sockfd, dev_read_buf, ov);
 }
 
 static volatile BOOL	interrupted;
@@ -446,6 +443,7 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 	HANDLE		evts[3];
 	OVERLAPPED	ovs[3];
 	BOOL		is_req_sock, is_req_dev;
+	char		*dev_read_buf, *sock_read_buf;
 
 	dev_read_buf = (char *)malloc(FORWARD_BUFSIZE);
 	sock_read_buf = (char *)malloc(FORWARD_BUFSIZE);
@@ -463,8 +461,8 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 	is_req_sock = is_inbound ? FALSE: TRUE;
 	is_req_dev = !is_req_sock;
 
-	dev_read_async(is_req_dev, hdev, sockfd, &ovs[0]);
-	sock_read_async(is_req_sock, sockfd, hdev, &ovs[1], &ovs[2]);
+	dev_read_async(is_req_dev, hdev, sockfd, dev_read_buf, &ovs[0]);
+	sock_read_async(is_req_sock, sockfd, hdev, sock_read_buf, &ovs[1], &ovs[2]);
 
 	while (!interrupted) {
 		DWORD	ret;
@@ -478,11 +476,11 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 			// do nothing just give CTRL-C a chance to be detected
 			break;
 		case WAIT_OBJECT_0:
-			if (!dev_read_completed(is_req_dev, hdev, sockfd, &ovs[0]))
+			if (!dev_read_completed(is_req_dev, hdev, sockfd, dev_read_buf, &ovs[0]))
 				goto out;
 			break;
 		case WAIT_OBJECT_0 + 1:
-			if (!sock_read_completed(is_req_sock, sockfd, hdev, &ovs[1], &ovs[2]))
+			if (!sock_read_completed(is_req_sock, sockfd, hdev, sock_read_buf, &ovs[1], &ovs[2]))
 				goto out;
 			break;
 		default:
