@@ -180,17 +180,38 @@ cancel_pending_stub_res(usbip_stub_dev_t *devstub, unsigned int seqnum)
 	return FALSE;
 }
 
-BOOLEAN
+static VOID
+on_irp_read_cancelled(PDEVICE_OBJECT devobj, PIRP irp_read)
+{
+	KIRQL	oldirql;
+	usbip_stub_dev_t	*devstub = (usbip_stub_dev_t *)devobj->DeviceExtension;
+
+	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
+	if (devstub->irp_stub_read == irp_read) {
+		devstub->irp_stub_read = NULL;
+	}
+	else {
+		DBGE(DBG_GENERAL, "cancelled IRP does not match with devstub read irp");
+	}
+	KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
+	IoReleaseCancelSpinLock(irp_read->CancelIrql);
+
+	irp_read->IoStatus.Status = STATUS_CANCELLED;
+	IoCompleteRequest(irp_read, IO_NO_INCREMENT);
+}
+
+NTSTATUS
 collect_done_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 {
 	KIRQL	oldirql;
 
 	KeAcquireSpinLock(&devstub->lock_stub_res, &oldirql);
 	if (IsListEmpty(&devstub->stub_res_head_done)) {
+		IoSetCancelRoutine(irp_read, on_irp_read_cancelled);
 		IoMarkIrpPending(irp_read);
 		devstub->irp_stub_read = irp_read;
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
-		return FALSE;
+		return STATUS_PENDING;
 	}
 	else {
 		stub_res_t	*sres;
@@ -202,7 +223,7 @@ collect_done_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read)
 		KeReleaseSpinLock(&devstub->lock_stub_res, oldirql);
 
 		send_stub_res_async(irp_read, sres);
-		return TRUE;
+		return STATUS_SUCCESS;
 	}
 }
 

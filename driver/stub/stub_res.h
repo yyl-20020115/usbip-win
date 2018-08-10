@@ -27,7 +27,7 @@ void add_pending_stub_res(usbip_stub_dev_t *devstub, stub_res_t *sres, PIRP irp)
 void del_pending_stub_res(usbip_stub_dev_t *devstub, stub_res_t *sres);
 BOOLEAN cancel_pending_stub_res(usbip_stub_dev_t *devstub, unsigned int seqnum);
 
-BOOLEAN collect_done_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read);
+NTSTATUS collect_done_stub_res(usbip_stub_dev_t *devstub, PIRP irp_read);
 
 void reply_stub_req(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum);
 void reply_stub_req_out(usbip_stub_dev_t *devstub, unsigned int cmd, unsigned long seqnum, int data_len);

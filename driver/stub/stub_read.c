@@ -43,7 +43,5 @@ stub_dispatch_read(usbip_stub_dev_t *devstub, IRP *irp)
 {
 	DBGI(DBG_GENERAL | DBG_READWRITE, "dispatch_read: enter\n");
 
-	if (!collect_done_stub_res(devstub, irp))
-		return STATUS_PENDING;
-	return STATUS_SUCCESS;
+	return collect_done_stub_res(devstub, irp);
 }
