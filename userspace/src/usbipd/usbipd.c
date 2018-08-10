@@ -208,8 +208,10 @@ main(int argc, char *argv[])
 		printf(PROGNAME " (%s)\n", usbip_version_string);
 		return EXIT_SUCCESS;
 	case cmd_help:
-	default:
 		usbipd_help();
 		return EXIT_SUCCESS;
+	default:
+		usbipd_help();
+		return EXIT_FAILURE;
 	}
 }

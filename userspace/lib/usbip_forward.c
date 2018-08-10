@@ -244,7 +244,7 @@ write_to_dev(BOOL is_req, char *buf, int buf_len, int len, SOCKET sockfd, HANDLE
 	hdr = (struct usbip_header *)buf;
 
 	if (len < sizeof(struct usbip_header)) {
-		err("too small buffer: len: %d", len);
+		err("write_to_dev: too small buffer: len: %d", len);
 		DBG_USBIP_HEADER(hdr);
 		return FALSE;
 	}
@@ -305,7 +305,7 @@ sock_read_async(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock, OV
 		}
 
 		if (len == 0) {
-			info("connection closed\n");
+			DBGF("socket closed");
 			return FALSE;
 		}
 		if (len != sizeof(struct usbip_header)) {
@@ -330,10 +330,16 @@ sock_read_completed(BOOL is_req, SOCKET sockfd, HANDLE hdev, OVERLAPPED *ov_sock
 		return FALSE;
 	}
 
+	if (len == 0) {
+		DBGF("socket closed");
+		return FALSE;
+	}
+
 	DBGF("Bytes read from socket asynchronously: %d\n",len);
 
 	if (!write_to_dev(!is_req, sock_read_buf, FORWARD_BUFSIZE, len, sockfd, hdev, ov_dev))
 		return FALSE;
+
 	return sock_read_async(is_req, sockfd, hdev, ov_sock, ov_dev);
 }
 
@@ -347,7 +353,7 @@ write_to_sock(BOOL is_req, char *buf, int len, SOCKET sockfd)
 	hdr = (struct usbip_header *)buf;
 
 	if (len < sizeof(struct usbip_header)) {
-		err("too small buffer: %d\n", len);
+		err("write_to_sock: too small buffer: len: %d", len);
 		return FALSE;
 	}
 	xfer_len = get_xfer_len(is_req, hdr);
@@ -464,7 +470,7 @@ usbip_forward(SOCKET sockfd, HANDLE hdev, BOOL is_inbound)
 		DWORD	ret;
 
 		DBGF("waiting\n");
-		ret =  WaitForMultipleObjects(2, evts, FALSE, 500);
+		ret = WaitForMultipleObjects(2, evts, FALSE, 500);
 		DBGF("wait result: %x\n", ret);
 
 		switch (ret) {
@@ -489,7 +495,6 @@ out:
 	if (interrupted) {
 		info("CTRL-C received\n");
 	}
-
 	free(dev_read_buf);
 	free(sock_read_buf);
 
