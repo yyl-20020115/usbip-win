@@ -9,7 +9,7 @@ BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pd
 BOOLEAN get_usb_desc(usbip_stub_dev_t *devstub, UCHAR descType, UCHAR idx, USHORT idLang, PVOID buff, ULONG *pbufflen);
 
 BOOLEAN select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx);
-BOOLEAN select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, USHORT alt_setting);
+BOOLEAN select_usb_intf(usbip_stub_dev_t *devstub, UCHAR intf_num, USHORT alt_setting);
 
 BOOLEAN reset_pipe(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe);
 

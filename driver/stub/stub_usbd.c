@@ -270,7 +270,7 @@ select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 }
 
 BOOLEAN
-select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, USHORT alt_setting)
+select_usb_intf(usbip_stub_dev_t *devstub, UCHAR intf_num, USHORT alt_setting)
 {
 	PUSBD_INTERFACE_INFORMATION	info_intf;
 	PURB	purb;
@@ -278,7 +278,11 @@ select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, U
 	ULONG	len_urb;
 	NTSTATUS	status;
 
-	info_intf = get_info_intf(devconf, intf_num);
+	if (devstub->devconf == NULL) {
+		DBGW(DBG_GENERAL, "select_usb_intf: empty devconf: num: %hhu, alt:%hu\n", intf_num, alt_setting);
+		return FALSE;
+	}
+	info_intf = get_info_intf(devstub->devconf, intf_num);
 	if (info_intf == NULL) {
 		DBGW(DBG_GENERAL, "select_usb_intf: non-existent interface: num: %hhu, alt:%hu\n", intf_num, alt_setting);
 		return FALSE;
@@ -290,14 +294,14 @@ select_usb_intf(usbip_stub_dev_t *devstub, devconf_t *devconf, UCHAR intf_num, U
 		DBGE(DBG_GENERAL, "select_usb_intf: out of memory\n");
 		return FALSE;
 	}
-	UsbBuildSelectInterfaceRequest(purb, (USHORT)len_urb, devconf->hConf, intf_num, (UCHAR)alt_setting);
+	UsbBuildSelectInterfaceRequest(purb, (USHORT)len_urb, devstub->devconf->hConf, intf_num, (UCHAR)alt_setting);
 	purb_seli = &purb->UrbSelectInterface;
 	RtlCopyMemory(&purb_seli->Interface, info_intf, INFO_INTF_SIZE(info_intf));
 
 	status = call_usbd(devstub, purb);
 	ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 	if (NT_SUCCESS(status)) {
-		update_devconf(devconf, info_intf);
+		update_devconf(devstub->devconf, info_intf);
 		return TRUE;
 	}
 	return FALSE;

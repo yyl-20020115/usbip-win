@@ -109,6 +109,15 @@ process_select_conf(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t 
 }
 
 static void
+process_select_intf(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
+{
+	if (select_usb_intf(devstub, (UCHAR)csp->wIndex.W, csp->wValue.W))
+		reply_stub_req(devstub, USBIP_RET_SUBMIT, seqnum);
+	else
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
+}
+
+static void
 process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	switch (csp->bRequest) {
@@ -122,7 +131,7 @@ process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_csp
 		process_select_conf(devstub, seqnum, csp);
 		break;
 	case USB_REQUEST_SET_INTERFACE:
-		DBGE(DBG_READWRITE, "not supported set interface\n");
+		process_select_intf(devstub, seqnum, csp);
 		break;
 	default:
 		DBGE(DBG_READWRITE, "not supported standard request\n");
