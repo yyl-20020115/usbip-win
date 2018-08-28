@@ -238,120 +238,59 @@ DriverEntry(__in  PDRIVER_OBJECT DriverObject, __in PUNICODE_STRING RegistryPath
 	return STATUS_SUCCESS;
 }
 
-void
-show_iso_urb(struct _URB_ISOCH_TRANSFER *iso)
+VOID
+Bus_IncIoCount(__in PFDO_DEVICE_DATA FdoData)
 {
-	ULONG	i;
+	LONG	result;
 
-	DBGI(DBG_GENERAL, "iso_num:%d len:%d", iso->NumberOfPackets, iso->TransferBufferLength);
-	for (i = 0; i < iso->NumberOfPackets; i++) {
-		DBGI(DBG_GENERAL, "num: %d len:%d off:%d\n", i, iso->IsoPacket[i].Length, iso->IsoPacket[i].Offset);
+	result = InterlockedIncrement(&FdoData->OutstandingIO);
+
+	ASSERT(result > 0);
+	//
+	// Need to clear StopEvent (when OutstandingIO bumps from 1 to 2)
+	//
+	if (result == 2) {
+		//
+		// We need to clear the event
+		//
+		KeClearEvent(&FdoData->StopEvent);
 	}
 }
 
 VOID
-Bus_IncIoCount (
-    __in  PFDO_DEVICE_DATA   FdoData
-    )
-
-/*++
-
-Routine Description:
-
-    This routine increments the number of requests the device receives
-
-
-Arguments:
-
-    FdoData - pointer to the FDO device extension.
-
-Return Value:
-
-    VOID
-
---*/
-
+Bus_DecIoCount(__in PFDO_DEVICE_DATA FdoData)
 {
+	LONG	result;
 
-    LONG            result;
+	result = InterlockedDecrement(&FdoData->OutstandingIO);
 
+	ASSERT(result >= 0);
 
-    result = InterlockedIncrement(&FdoData->OutstandingIO);
+	if (result == 1) {
+		//
+		// Set the stop event. Note that when this happens
+		// (i.e. a transition from 2 to 1), the type of requests we
+		// want to be processed are already held instead of being
+		// passed away, so that we can't "miss" a request that
+		// will appear between the decrement and the moment when
+		// the value is actually used.
+		//
 
-    ASSERT(result > 0);
-    //
-    // Need to clear StopEvent (when OutstandingIO bumps from 1 to 2)
-    //
-    if (result == 2) {
-        //
-        // We need to clear the event
-        //
-        KeClearEvent(&FdoData->StopEvent);
-    }
+		KeSetEvent (&FdoData->StopEvent, IO_NO_INCREMENT, FALSE);
+	}
 
-    return;
+	if (result == 0) {
+		//
+		// The count is 1-biased, so it can be zero only if an
+		// extra decrement is done when a remove Irp is received
+		//
+
+		ASSERT(FdoData->common.DevicePnPState == Deleted);
+
+		//
+		// Set the remove event, so the device object can be deleted
+		//
+
+		KeSetEvent (&FdoData->RemoveEvent, IO_NO_INCREMENT, FALSE);
+	}
 }
-
-VOID
-Bus_DecIoCount(
-    __in  PFDO_DEVICE_DATA  FdoData
-    )
-
-/*++
-
-Routine Description:
-
-    This routine decrements as it complete the request it receives
-
-Arguments:
-
-    FdoData - pointer to the FDO device extension.
-
-Return Value:
-
-    VOID
-
---*/
-{
-
-    LONG            result;
-
-    result = InterlockedDecrement(&FdoData->OutstandingIO);
-
-    ASSERT(result >= 0);
-
-    if (result == 1) {
-        //
-        // Set the stop event. Note that when this happens
-        // (i.e. a transition from 2 to 1), the type of requests we
-        // want to be processed are already held instead of being
-        // passed away, so that we can't "miss" a request that
-        // will appear between the decrement and the moment when
-        // the value is actually used.
-        //
-
-        KeSetEvent (&FdoData->StopEvent, IO_NO_INCREMENT, FALSE);
-
-    }
-
-    if (result == 0) {
-
-        //
-        // The count is 1-biased, so it can be zero only if an
-        // extra decrement is done when a remove Irp is received
-        //
-
-        ASSERT(FdoData->common.DevicePnPState == Deleted);
-
-        //
-        // Set the remove event, so the device object can be deleted
-        //
-
-        KeSetEvent (&FdoData->RemoveEvent, IO_NO_INCREMENT, FALSE);
-
-    }
-
-    return;
-}
-
-

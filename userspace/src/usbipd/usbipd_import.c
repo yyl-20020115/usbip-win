@@ -17,7 +17,7 @@ forwarder_stub(PTP_CALLBACK_INSTANCE inst, PVOID ctx, PTP_WORK work)
 
 	dbg("stub forwarding started");
 
-	usbip_forward(pctx->sockfd, pctx->hdev, TRUE);
+	usbip_forward((HANDLE)pctx->sockfd, pctx->hdev, TRUE);
 
 	closesocket(pctx->sockfd);
 	CloseHandle(pctx->hdev);

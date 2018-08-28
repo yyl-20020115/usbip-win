@@ -59,3 +59,21 @@ swap_usbip_header(struct usbip_header *hdr)
 
 	hdr->base.command = RtlUlongByteSwap(hdr->base.command);
 }
+
+void
+swap_usbip_iso_descs(struct usbip_header *hdr)
+{
+	struct usbip_iso_packet_descriptor	*iso_desc;
+	int	n_pkts;
+	int	i;
+
+	n_pkts = hdr->u.ret_submit.number_of_packets;
+	iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + hdr->u.ret_submit.actual_length);
+	for (i = 0; i < n_pkts; i++) {
+		iso_desc->offset = RtlUlongByteSwap(iso_desc->offset);
+		iso_desc->length = RtlUlongByteSwap(iso_desc->length);
+		iso_desc->actual_length = RtlUlongByteSwap(iso_desc->actual_length);
+		iso_desc->status = RtlUlongByteSwap(iso_desc->status);
+		iso_desc++;
+	}
+}

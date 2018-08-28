@@ -2,6 +2,7 @@
 
 #include "stub_dev.h"
 
+#include "usbip_proto.h"
 #include "usb_cspkt.h"
 
 BOOLEAN get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buff, PUCHAR plen);
@@ -18,6 +19,10 @@ BOOLEAN submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT
 
 NTSTATUS
 submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, PVOID data, PULONG pdatalen, BOOLEAN is_in);
+
+NTSTATUS
+submit_iso_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum, ULONG usbd_flags, ULONG n_pkts, ULONG start_frame,
+	struct usbip_iso_packet_descriptor *iso_descs, PVOID data, ULONG datalen);
 
 BOOLEAN
 submit_control_transfer(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, PVOID data, PULONG pdata_len);

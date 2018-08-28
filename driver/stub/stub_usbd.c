@@ -20,7 +20,7 @@
 #include "stub_dbg.h"
 #include "stub_dev.h"
 #include "stub_res.h"
-#include "usbd_status.h"
+#include "usbd_helper.h"
 
 #include "stub_cspkt.h"
 
@@ -40,14 +40,17 @@ static NTSTATUS
 do_safe_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID ctx)
 {
 	safe_completion_t	*safe_completion = (safe_completion_t *)ctx;
+	usbip_stub_dev_t	*devstub;
 
 	UNREFERENCED_PARAMETER(devobj);
 
-	del_pending_stub_res((usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension, safe_completion->sres);
+	DBGI(DBG_GENERAL, "do_safe_completion: status = %s\n", dbg_usbd_status(safe_completion->purb->UrbHeader.Status));
 
-	safe_completion->cb_urb_done((usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension, irp->IoStatus.Status, safe_completion->purb, safe_completion->sres);
+	devstub = (usbip_stub_dev_t *)safe_completion->devobj->DeviceExtension;
+	del_pending_stub_res(devstub, safe_completion->sres);
 
-	ExFreePoolWithTag(safe_completion->purb, USBIP_STUB_POOL_TAG);
+	safe_completion->cb_urb_done(devstub, irp->IoStatus.Status, safe_completion->purb, safe_completion->sres);
+
 	ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
 	IoFreeIrp(irp);
 
@@ -59,7 +62,7 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, cb_urb_done_t cb_urb_done, st
 {
 	IRP *irp;
 	IO_STACK_LOCATION	*irpstack;
-	safe_completion_t	*safe_completion = NULL;
+	safe_completion_t	*safe_completion;
 	NTSTATUS status;
 
 	DBGI(DBG_GENERAL, "call_usbd_nb: enter\n");
@@ -91,15 +94,14 @@ call_usbd_nb(usbip_stub_dev_t *devstub, PURB purb, cb_urb_done_t cb_urb_done, st
 	IoSetCompletionRoutine(irp, do_safe_completion, safe_completion, TRUE, TRUE, TRUE);
 
 	add_pending_stub_res(devstub, sres, irp);
+	DBGI(DBG_GENERAL, "call_usbd_nb: call_usbd_nb: %s\n", dbg_stub_res(sres));
 	status = IoCallDriver(devstub->next_stack_dev, irp);
-	if (status != STATUS_PENDING) {
-		DBGI(DBG_GENERAL, "call_usbd_nb: status = %s, usbd_status:%s\n", dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
-		del_pending_stub_res(devstub, sres);
-		ExFreePoolWithTag(safe_completion, USBIP_STUB_POOL_TAG);
-	}
-	else {
-		DBGI(DBG_GENERAL, "call_usbd_nb: request pending: %s\n", dbg_stub_res(sres));
-	}
+	DBGI(DBG_GENERAL, "call_usbd_nb: status = %s\n", dbg_ntstatus(status));
+
+	/* Completion routine will treat remaining works depending on success or failure.
+	 * Just return success code so a caller doesn't have to take any action such as releasing sres.  
+	 */
+	status = STATUS_SUCCESS;
 	return status;
 }
 
@@ -197,30 +199,22 @@ get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx)
 }
 
 static PUSBD_INTERFACE_LIST_ENTRY
-build_intf_list(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
+build_default_intf_list(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 {
 	PUSBD_INTERFACE_LIST_ENTRY	pintf_list;
-	PVOID	start;
 	int	size;
-	int	n_dsc_intf;
+	unsigned	i;
 
 	size = sizeof(USBD_INTERFACE_LIST_ENTRY) * (dsc_conf->bNumInterfaces + 1);
 	pintf_list = ExAllocatePoolWithTag(NonPagedPool, size, USBIP_STUB_POOL_TAG);
 	RtlZeroMemory(pintf_list, size);
 
-	n_dsc_intf = 0;
-	start = dsc_conf;
-	while (n_dsc_intf < dsc_conf->bNumInterfaces) {
+	for (i = 0; i < dsc_conf->bNumInterfaces; i++) {
 		PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
-		dsc_intf = dsc_find_intf(dsc_conf, start);
+		dsc_intf = dsc_find_intf(dsc_conf, (UCHAR)i, 0);
 		if (dsc_intf == NULL)
 			break;
-		if (dsc_intf->bAlternateSetting == 0) {
-			/* add only a interface with 0 alternate value */
-			pintf_list[n_dsc_intf].InterfaceDescriptor = dsc_intf;
-			n_dsc_intf++;
-		}
-		start = NEXT_DESC(dsc_intf);
+		pintf_list[i].InterfaceDescriptor = dsc_intf;
 	}
 	return pintf_list;
 }
@@ -239,7 +233,7 @@ select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 		return FALSE;
 	}
 
-	pintf_list = build_intf_list(dsc_conf);
+	pintf_list = build_default_intf_list(dsc_conf);
 
 	status = USBD_SelectConfigUrbAllocateAndBuild(devstub->hUSBD, dsc_conf, pintf_list, &purb);
 	if (NT_ERROR(status)) {
@@ -272,9 +266,9 @@ select_usb_conf(usbip_stub_dev_t *devstub, USHORT idx)
 BOOLEAN
 select_usb_intf(usbip_stub_dev_t *devstub, UCHAR intf_num, USHORT alt_setting)
 {
-	PUSBD_INTERFACE_INFORMATION	info_intf;
 	PURB	purb;
 	struct _URB_SELECT_INTERFACE	*purb_seli;
+	USHORT	info_intf_size;
 	ULONG	len_urb;
 	NTSTATUS	status;
 
@@ -282,13 +276,14 @@ select_usb_intf(usbip_stub_dev_t *devstub, UCHAR intf_num, USHORT alt_setting)
 		DBGW(DBG_GENERAL, "select_usb_intf: empty devconf: num: %hhu, alt:%hu\n", intf_num, alt_setting);
 		return FALSE;
 	}
-	info_intf = get_info_intf(devstub->devconf, intf_num);
-	if (info_intf == NULL) {
+
+	info_intf_size = get_info_intf_size(devstub->devconf, intf_num, alt_setting);
+	if (info_intf_size == 0) {
 		DBGW(DBG_GENERAL, "select_usb_intf: non-existent interface: num: %hhu, alt:%hu\n", intf_num, alt_setting);
 		return FALSE;
 	}
 
-	len_urb = sizeof(struct _URB_SELECT_INTERFACE) - sizeof(USBD_INTERFACE_INFORMATION) + INFO_INTF_SIZE(info_intf);
+	len_urb = sizeof(struct _URB_SELECT_INTERFACE) - sizeof(USBD_INTERFACE_INFORMATION) + info_intf_size;
 	purb = (PURB)ExAllocatePoolWithTag(NonPagedPool, len_urb, USBIP_STUB_POOL_TAG);
 	if (purb == NULL) {
 		DBGE(DBG_GENERAL, "select_usb_intf: out of memory\n");
@@ -296,12 +291,11 @@ select_usb_intf(usbip_stub_dev_t *devstub, UCHAR intf_num, USHORT alt_setting)
 	}
 	UsbBuildSelectInterfaceRequest(purb, (USHORT)len_urb, devstub->devconf->hConf, intf_num, (UCHAR)alt_setting);
 	purb_seli = &purb->UrbSelectInterface;
-	RtlCopyMemory(&purb_seli->Interface, info_intf, INFO_INTF_SIZE(info_intf));
 
 	status = call_usbd(devstub, purb);
 	ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 	if (NT_SUCCESS(status)) {
-		update_devconf(devstub->devconf, info_intf);
+		update_devconf(devstub->devconf, &purb_seli->Interface);
 		return TRUE;
 	}
 	return FALSE;
@@ -348,12 +342,11 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 	return FALSE;
 }
 
-void reply_stub_req_async(usbip_stub_dev_t *devstub, stub_res_t *sres);
-
 static void
 done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres)
 {
-	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: seq:%u,status:%s,usbd_status:%s\n", sres->seqnum, dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
+	DBGI(DBG_GENERAL, "done_bulk_intr_transfer: sres:%s,status:%s,usbd_status:%s\n",
+		dbg_stub_res(sres), dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
 
 	if (status == STATUS_CANCELLED) {
 		/* cancelled. just drop it */
@@ -362,12 +355,14 @@ done_bulk_intr_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, s
 	else {
 		if (NT_SUCCESS(status)) {
 			sres->data_len = purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
+			sres->header.u.ret_submit.actual_length = sres->data_len;
 		}
 		else {
-			sres->err = to_usbip_status(purb->UrbHeader.Status);
+			sres->header.u.ret_submit.status = to_usbip_status(purb->UrbHeader.Status);
 		}
-		reply_stub_req_async(devstub, sres);
+		reply_stub_req(devstub, sres);
 	}
+	ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 }
 
 NTSTATUS
@@ -376,7 +371,6 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	PURB		purb;
 	ULONG		flags = USBD_SHORT_TRANSFER_OK;
 	stub_res_t	*sres;
-	NTSTATUS	status;
 
 	purb = ExAllocatePoolWithTag(NonPagedPool, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), USBIP_STUB_POOL_TAG);
 	if (purb == NULL) {
@@ -388,23 +382,109 @@ submit_bulk_intr_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, uns
 	UsbBuildInterruptOrBulkTransferRequest(purb, sizeof(struct _URB_BULK_OR_INTERRUPT_TRANSFER), hPipe, data, NULL, *pdatalen, flags, NULL);
 
 	/* data length will be set by when urb is completed */
-	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, is_in ? data: NULL, 0, FALSE);
-
+	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, is_in ? data: NULL, 0, 0, FALSE);
 	if (sres == NULL) {
-		if (is_in)
-			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
 		return STATUS_UNSUCCESSFUL;
 	}
-	status = call_usbd_nb(devstub, purb, done_bulk_intr_transfer, sres);
-	if (status != STATUS_PENDING) {
-		if (NT_SUCCESS(status))
-			*pdatalen = (ULONG)purb->UrbBulkOrInterruptTransfer.TransferBufferLength;
-		/* Clear data of stub result, which will be freed by caller */
-		sres->data = NULL;
-		ExFreePoolWithTag(purb, USBIP_STUB_POOL_TAG);
+	return call_usbd_nb(devstub, purb, done_bulk_intr_transfer, sres);
+}
+
+static void
+done_iso_transfer(usbip_stub_dev_t *devstub, NTSTATUS status, PURB purb, stub_res_t *sres)
+{
+	DBGI(DBG_GENERAL, "done_iso_transfer: sres:%s,status:%s,usbd_status:%s\n",
+		dbg_stub_res(sres), dbg_ntstatus(status), dbg_usbd_status(purb->UrbHeader.Status));
+
+	if (status == STATUS_CANCELLED) {
+		/* cancelled. just drop it */
 		free_stub_res(sres);
 	}
-	return status;
+	else {
+		if (NT_SUCCESS(status)) {
+			struct _URB_ISOCH_TRANSFER	*purb_iso = &purb->UrbIsochronousTransfer;
+			struct usbip_iso_packet_descriptor	*iso_descs;
+			int	actual_len, n_pkts, iso_descs_len;
+
+			n_pkts = sres->header.u.ret_submit.number_of_packets;
+			iso_descs_len = sizeof(struct usbip_iso_packet_descriptor) * n_pkts;
+
+			if (sres->data != NULL) { /* direction IN case */
+				actual_len = get_usbd_iso_descs_len(purb_iso->NumberOfPackets, purb_iso->IsoPacket);
+				/* TODO: check if it is later */
+				NT_ASSERT(actual_len <= sres->data_len);
+				if (actual_len < sres->data_len) {
+					/* usbip expects a length field in iso descriptor to be intact.
+					 * Copying old isochronous descriptors maintain only length field.
+					 * Other fields will be overwritten by to_iso_descs() routine.
+					 */
+					RtlCopyMemory((char *)sres->data + actual_len, (char *)sres->data + sres->data_len, iso_descs_len);
+				}
+			}
+			else {
+				sres->data = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)sres->data_len, USBIP_STUB_POOL_TAG);
+				if (sres->data == NULL) {
+					DBGE(DBG_GENERAL, "done_iso_transfer: out of memory\n");
+					sres->data_len = 0;
+				}
+				else {
+					/* Copy old iso descriptors. */
+					RtlCopyMemory(sres->data, (char *)purb_iso->TransferBuffer + sres->data_len, iso_descs_len);
+				}
+				sres->data_len = iso_descs_len;
+				actual_len = 0;
+				ExFreePoolWithTag(purb_iso->TransferBuffer, USBIP_STUB_POOL_TAG);
+			}
+
+			iso_descs = (struct usbip_iso_packet_descriptor *)((char *)sres->data + actual_len);
+			to_iso_descs(n_pkts, iso_descs, purb_iso->IsoPacket, TRUE);
+			sres->data_len = actual_len + iso_descs_len;
+			sres->header.u.ret_submit.actual_length = actual_len;
+			sres->header.u.ret_submit.start_frame = purb_iso->StartFrame;
+			sres->header.u.ret_submit.error_count = purb_iso->ErrorCount;
+		}
+		else {
+			sres->header.u.ret_submit.status = to_usbip_status(purb->UrbHeader.Status);
+		}
+		reply_stub_req(devstub, sres);
+	}
+	USBD_UrbFree(devstub->hUSBD, purb);
+}
+
+NTSTATUS
+submit_iso_transfer(usbip_stub_dev_t *devstub, USBD_PIPE_HANDLE hPipe, unsigned long seqnum,
+	ULONG usbd_flags, ULONG n_pkts, ULONG start_frame, struct usbip_iso_packet_descriptor *iso_descs, PVOID data, ULONG datalen)
+{
+	PURB	purb;
+	struct _URB_ISOCH_TRANSFER	*purb_iso;
+	stub_res_t	*sres;
+	BOOLEAN		is_in;
+	NTSTATUS	status;
+
+	status = USBD_IsochUrbAllocate(devstub->hUSBD, n_pkts, &purb);
+	if (NT_ERROR(status)) {
+		DBGE(DBG_GENERAL, "submit_iso_transfer: out of memory: urb\n");
+		return status;
+	}
+
+	purb_iso = &purb->UrbIsochronousTransfer;
+	purb_iso->Hdr.Function = URB_FUNCTION_ISOCH_TRANSFER;
+	purb_iso->Hdr.Length = (USHORT)GET_ISO_URB_SIZE(n_pkts - 1);
+	purb_iso->PipeHandle = hPipe;
+	purb_iso->TransferFlags = usbd_flags;
+	purb_iso->TransferBuffer = data;
+	purb_iso->TransferBufferLength = datalen;
+	purb_iso->NumberOfPackets = n_pkts;
+	purb_iso->StartFrame = start_frame;
+	to_usbd_iso_descs(n_pkts, purb_iso->IsoPacket, iso_descs, FALSE);
+
+	is_in = usbd_flags & USBD_TRANSFER_DIRECTION_IN ? TRUE: FALSE;
+	sres = create_stub_res(USBIP_RET_SUBMIT, seqnum, 0, is_in ? data: NULL, datalen, n_pkts, FALSE);
+	if (sres == NULL) {
+		USBD_UrbFree(devstub->hUSBD, purb);
+		return STATUS_UNSUCCESSFUL;
+	}
+	return call_usbd_nb(devstub, purb, done_iso_transfer, sres);
 }
 
 BOOLEAN

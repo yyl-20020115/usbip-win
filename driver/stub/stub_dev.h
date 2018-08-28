@@ -15,6 +15,8 @@ typedef struct {
 	KEVENT	event;
 } usbip_stub_remove_lock_t;
 
+struct stub_res;
+
 typedef struct {
 	PDEVICE_OBJECT	self;
 	PDEVICE_OBJECT	pdo;
@@ -33,6 +35,8 @@ typedef struct {
 
 	KSPIN_LOCK	lock_stub_res;
 	PIRP		irp_stub_read;
+	/* save an ongoing stub result which has sent only a usbip header */
+	struct stub_res	*sres_pending;
 	LIST_ENTRY	stub_res_head_done;
 	LIST_ENTRY	stub_res_head_pending;
 } usbip_stub_dev_t;

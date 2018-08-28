@@ -2,7 +2,7 @@
 
 #include "usbip_proto.h"
 #include "usbreq.h"
-#include "usbd_status.h"
+#include "usbd_helper.h"
 
 extern struct urb_req *
 find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);

@@ -118,10 +118,9 @@ do_standalone_mode(void)
 		if (rc == SOCKET_ERROR) {
 			dbg("failed to select: err: %d", WSAGetLastError());
 			break;
-		} else if (rc > 0) {
+		}
+		else if (rc > 0) {
 			accept_request(sockfds, &fds);
-		} else {
-			dbg("heartbeat timeout on select()");
 		}
 	}
 

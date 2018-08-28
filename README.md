@@ -22,12 +22,18 @@
 
 ### Usbip server
 
+- Prepare a linux machine as a usbip client
+  - tested on Ubuntu 16.04
+  - Kernel 4.15.0-29 (usbip kernel module crash was observed on some other version)
+  - # modprobe vhci-hcd
+  
 - Install USBIP test certificate
   - Install driver/usbip_test.pfx(password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" and "Trusted Publishers"
     on local machine(not current user)
 - Enable test signing
-  - bcdedit.exe -set TESTSIGNING ON
+  - bcdedit.exe /set TESTSIGNING ON
+  - reboot the system to apply
 - Copy usbip.exe, usbipd.exe, usb.ids, usbip_stub.sys, usbip_stub.inx into a folder in target machine
   - You can find usbip.exe, usbipd.exe, usbip_stub.sys in output folder.
   - userspace/usb.ids
@@ -54,12 +60,24 @@
   - usbipd.exe -d -4
   - TCP port 3240 should be allowed by firewall
 
+- Attach usbip device on linux machine
+  - # usbip attach -r <usbip server ip> -p 1-59
+
 ### Usbip client
 
+- Prepare a linux machine as a usbip server
+  - tested on Ubuntu 16.04(Kernerl 4.15.0-29)
+  - # modprobe usbip-host
+
+- Run usbipd on a usbip server(Linux)
+  - # usbipd -4 -d
+
 - Install USBIP test certificate
+  - Install driver/usbip_test.pfx(password: usbip)
+  - Certificate should be installed into "Trusted Root Certification Authority" on local machine(not current user)
 - Enable test signing
-- Copy usbip.exe, usbip_vhci.sys, usbip_vhci.inf, usbip_vhci.cat into a folder in target machine
-  - You can find usbip.exe, usbip_vhci.sys, usbip_vhci.inf in output folder.
+- Copy usbip.exe, usbip_vhci.sys, usbip_vhci.inf, usbip_vhci.cer, usbip_vhci.cat into a folder in target machine
+  - You can find usbip.exe, usbip_vhci.sys, usbip_vhci.cer, usbip_vhci.inf in output folder.
   - usbip_vhci.cat can be found from usbip_vhci subfolder of output folder
 - Install USBIP vhci driver
   - Start a device manager
