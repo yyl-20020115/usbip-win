@@ -5,7 +5,7 @@
 #include "usbd_helper.h"
 
 extern struct urb_req *
-find_urb_req(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
+find_sent_urbr(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
 
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
@@ -257,19 +257,19 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 }
 
 static NTSTATUS
-process_urb_res(PPDO_DEVICE_DATA pdodata, struct urb_req *urb_r, struct usbip_header *hdr)
+process_urb_res(struct urb_req *urbr, struct usbip_header *hdr)
 {
 	PIO_STACK_LOCATION	irpstack;
 	ULONG	ioctl_code;
 
-	irpstack = IoGetCurrentIrpStackLocation(urb_r->irp);
+	irpstack = IoGetCurrentIrpStackLocation(urbr->irp);
 	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
 
-	DBGI(DBG_WRITE, "process_urb_res: urb_r:%s, ioctl:%s\n", dbg_urb_req(urb_r), dbg_vhci_ioctl_code(ioctl_code));
+	DBGI(DBG_WRITE, "process_urb_res: urbr:%s, ioctl:%s\n", dbg_urbr(urbr), dbg_vhci_ioctl_code(ioctl_code));
 
 	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
-		return process_urb_res_submit(pdodata, irpstack->Parameters.Others.Argument1, hdr);
+		return process_urb_res_submit(urbr->pdodata, irpstack->Parameters.Others.Argument1, hdr);
 	case IOCTL_INTERNAL_USB_RESET_PORT:
 		return STATUS_SUCCESS;
 	default:
@@ -297,7 +297,7 @@ static NTSTATUS
 process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 {
 	struct usbip_header	*hdr;
-	struct urb_req	*urb_r;
+	struct urb_req	*urbr;
 	KIRQL	oldirql;
 	NTSTATUS	status;
 
@@ -307,32 +307,28 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	urb_r = find_urb_req(pdodata, hdr);
-	if (urb_r == NULL) {
+	urbr = find_sent_urbr(pdodata, hdr);
+	if (urbr == NULL) {
 		// Might have been cancelled before, so return STATUS_SUCCESS
-		DBGE(DBG_WRITE, "no urb: seqnum: %d\n", hdr->base.seqnum);
+		DBGE(DBG_WRITE, "no urbr: seqnum: %d\n", hdr->base.seqnum);
 		return STATUS_SUCCESS;
 	}
 
-	if (urb_r->sent) {
-		status = process_urb_res(pdodata, urb_r, hdr);
-	}
-	else {
-		DBGE(DBG_WRITE, "not sent: seqnum: %d\n", hdr->base.seqnum);
-		status = STATUS_INVALID_PARAMETER;
-	}
+	status = process_urb_res(urbr, hdr);
 
-	urb_r->irp->IoStatus.Status = status;
+	IoSetCancelRoutine(urbr->irp, NULL);
+	urbr->irp->IoStatus.Status = status;
 
 	/* it seems windows client usb driver will think
-	* IoCompleteRequest is running at DISPATCH_LEVEL
-	* so without this it will change IRQL sometimes,
-	* and introduce to a dead of my userspace program */
+	 * IoCompleteRequest is running at DISPATCH_LEVEL
+	 * so without this it will change IRQL sometimes,
+	 * and introduce to a dead of my userspace program
+	 */
 	KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-	IoCompleteRequest(urb_r->irp, IO_NO_INCREMENT);
+	IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
 	KeLowerIrql(oldirql);
 
-	ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
+	ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 
 	return STATUS_SUCCESS;
 }

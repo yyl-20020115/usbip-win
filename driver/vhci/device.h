@@ -53,6 +53,8 @@ typedef struct _COMMON_DEVICE_DATA
 	DEVICE_POWER_STATE	DevicePowerState;
 } COMMON_DEVICE_DATA, *PCOMMON_DEVICE_DATA;
 
+struct urb_req;
+
 //
 // The device extension for the PDOs.
 // That's of the USBIP device which this bus driver enumerates.
@@ -89,9 +91,19 @@ typedef struct _PDO_DEVICE_DATA
 	// Used to track the intefaces handed out to other drivers.
 	// If this value is non-zero, we fail query-remove.
 	LONG	InterfaceRefCount;
+	// a pending irp when no urb is requested
 	PIRP	pending_read_irp;
-	LIST_ENTRY	ioctl_q;
-	KSPIN_LOCK	q_lock;
+	// a partially transferred urb_req
+	struct urb_req	*urbr_sent_partial;
+	// a partially transferred length of urbr_sent_partial
+	ULONG	len_sent_partial;
+	// all urb_req's. This list will be used for clear or cancellation.
+	LIST_ENTRY	head_urbr;
+	// pending urb_req's which are not transferred yet
+	LIST_ENTRY	head_urbr_pending;
+	// urb_req's which had been sent and have waited for response
+	LIST_ENTRY	head_urbr_sent;
+	KSPIN_LOCK	lock_urbr;
 	PFILE_OBJECT	fo;
 	unsigned int	devid;
 	unsigned long	seq_num;

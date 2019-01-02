@@ -111,13 +111,16 @@ Bus_Cleanup(__in PDEVICE_OBJECT dev, __in PIRP irp)
 
 	PAGED_CODE();
 
+	DBGI(DBG_GENERAL, "Bus_Cleanup: Enter\n");
+
 	commondata = (PCOMMON_DEVICE_DATA)dev->DeviceExtension;
+
 	//
 	// We only allow create/close requests for the FDO.
 	// That is the bus itself.
 	//
-
 	if (!commondata->IsFDO) {
+		DBGW(DBG_GENERAL, "Bus_Cleanup: Invalid request\n");
 		irp->IoStatus.Status = status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return status;
@@ -132,6 +135,7 @@ Bus_Cleanup(__in PDEVICE_OBJECT dev, __in PIRP irp)
 	//
 
 	if (fdodata->common.DevicePnPState == Deleted) {
+		DBGW(DBG_GENERAL, "Bus_Cleanup: No such device\n");
 		irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return status;
@@ -149,6 +153,9 @@ Bus_Cleanup(__in PDEVICE_OBJECT dev, __in PIRP irp)
 	irp->IoStatus.Status = status;
 	IoCompleteRequest(irp, IO_NO_INCREMENT);
 	Bus_DecIoCount(fdodata);
+
+	DBGI(DBG_GENERAL, "Bus_Cleanup: Leave\n");
+
 	return status;
 }
 

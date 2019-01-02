@@ -17,7 +17,7 @@
 #define DBG_WMI		0x01000000
 #define DBG_URB		0x10000000
 
-extern const char *dbg_urb_req(struct urb_req *urb_r);
+extern const char *dbg_urbr(struct urb_req *urbr);
 
 extern const char *dbg_vhci_ioctl_code(unsigned int ioctl_code);
 extern const char *dbg_urbfunc(unsigned int urbfunc);

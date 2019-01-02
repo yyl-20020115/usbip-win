@@ -17,8 +17,8 @@ struct urb_req {
 	PIRP	irp;
 	KEVENT	*event;
 	unsigned long	seq_num;
-	BOOLEAN		sent;
-	LIST_ENTRY	list;
+	LIST_ENTRY	list_all;
+	LIST_ENTRY	list_state;
 };
 
 extern void

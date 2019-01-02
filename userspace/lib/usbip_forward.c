@@ -554,11 +554,11 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 		swap_req_src = FALSE;
 		swap_req_dst = TRUE;
 	}
-	if (!init_devbuf(&buff_src, desc_src, is_req_src, swap_req_src, hdev_src)) {
+	if (!init_devbuf(&buff_src, desc_src, TRUE, swap_req_src, hdev_src)) {
 		err("failed to initialize %s buffer", desc_src);
 		return;
 	}
-	if (!init_devbuf(&buff_dst, desc_dst, !is_req_src, swap_req_dst, hdev_dst)) {
+	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst)) {
 		err("failed to initialize %s buffer", desc_dst);
 		cleanup_devbuf(&buff_src);
 		return;

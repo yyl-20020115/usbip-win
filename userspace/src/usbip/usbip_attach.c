@@ -138,7 +138,7 @@ attach_device(const char *host, const char *busid)
 		return 1;
 	}
 
-	usbip_forward((HANDLE)sockfd, hdev, FALSE);
+	usbip_forward(hdev, (HANDLE)sockfd, FALSE);
 
 	usbip_vhci_detach_device(hdev, rhport);
 

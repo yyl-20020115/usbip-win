@@ -12,8 +12,8 @@
 
 ### Build Process
 - Open usbip_win.sln
-- Set certificate driver signing for usbip_stub, usbip_vhci project
-  - Use driver/usbip_test.pfx for testing usbip-win
+- Set certificate driver signing for usbip\_stub, usbip\_vhci project
+  - Use driver/usbip\_test.pfx for testing usbip-win
 - Build solution
 - x86/x64 platforms are supported
 - All output files are created under {Debug,Release}/{x64,x86} folder
@@ -25,19 +25,19 @@
 - Prepare a linux machine as a usbip client
   - tested on Ubuntu 16.04
   - Kernel 4.15.0-29 (usbip kernel module crash was observed on some other version)
-  - # modprobe vhci-hcd
+  - \# modprobe vhci-hcd
   
 - Install USBIP test certificate
-  - Install driver/usbip_test.pfx(password: usbip)
+  - Install driver/usbip\_test.pfx(password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" and "Trusted Publishers"
     on local machine(not current user)
 - Enable test signing
   - bcdedit.exe /set TESTSIGNING ON
   - reboot the system to apply
-- Copy usbip.exe, usbipd.exe, usb.ids, usbip_stub.sys, usbip_stub.inx into a folder in target machine
-  - You can find usbip.exe, usbipd.exe, usbip_stub.sys in output folder.
+- Copy usbip.exe, usbipd.exe, usb.ids, usbip\_stub.sys, usbip\_stub.inx into a folder in target machine
+  - You can find usbip.exe, usbipd.exe, usbip\_stub.sys in output folder.
   - userspace/usb.ids
-  - driver/stub/usbip_stub.inx
+  - driver/stub/usbip\_stub.inx
 - Find usb device id
   - You can get device id from usbip listing
     - &lt;target dir&gt;\usbip.exe list -l
@@ -61,24 +61,24 @@
   - TCP port 3240 should be allowed by firewall
 
 - Attach usbip device on linux machine
-  - # usbip attach -r <usbip server ip> -p 1-59
+  - \# usbip attach -r &lt;usbip server ip&gt; -p 1-59
 
 ### Usbip client
 
 - Prepare a linux machine as a usbip server
   - tested on Ubuntu 16.04(Kernerl 4.15.0-29)
-  - # modprobe usbip-host
+  - \# modprobe usbip-host
 
 - Run usbipd on a usbip server(Linux)
-  - # usbipd -4 -d
+  - \# usbipd -4 -d
 
 - Install USBIP test certificate
-  - Install driver/usbip_test.pfx(password: usbip)
+  - Install driver/usbip\_test.pfx(password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" on local machine(not current user)
 - Enable test signing
-- Copy usbip.exe, usbip_vhci.sys, usbip_vhci.inf, usbip_vhci.cer, usbip_vhci.cat into a folder in target machine
-  - You can find usbip.exe, usbip_vhci.sys, usbip_vhci.cer, usbip_vhci.inf in output folder.
-  - usbip_vhci.cat can be found from usbip_vhci subfolder of output folder
+- Copy usbip.exe, usbip\_vhci.sys, usbip\_vhci.inf, usbip\_vhci.cer, usbip\_vhci.cat into a folder in target machine
+  - You can find usbip.exe, usbip\_vhci.sys, usbip\_vhci.cer, usbip\_vhci.inf in output folder.
+  - usbip\_vhci.cat can be found from usbip\_vhci subfolder of output folder
 - Install USBIP vhci driver
   - Start a device manager
   - Choose "Add Legacy Hardware" from the "Action" menu.
@@ -88,7 +88,7 @@
   - Click on the 'USB/IP VHCI, and then click Next.
   - Click Finish at 'Completing the Add/Remove Hardware Wizard.'
 - Attach a remote USB device
-  - *BUT* currently, it does not seem to be working
+  - C:\usbip.exe attach -r &lt;usbip server ip&gt; -b 2-2
 
 <hr>
 <sub>This project was supported by Basic Science Research Program through the National Research Foundation of Korea(NRF) funded by the Ministry of Education(2016R1A6A3A11930295).</sub>

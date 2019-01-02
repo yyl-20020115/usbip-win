@@ -6,7 +6,7 @@
 #include "usbip_vhci_api.h"
 
 extern NTSTATUS
-submit_urb_req(PPDO_DEVICE_DATA pdodata, PIRP Irp);
+submit_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp);
 
 extern PAGEABLE NTSTATUS
 bus_plugin_dev(ioctl_usbip_vhci_plugin *plugin, PFDO_DEVICE_DATA dev_data, PFILE_OBJECT fo);
@@ -80,7 +80,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
 	case URB_FUNCTION_SELECT_INTERFACE:
-		return submit_urb_req(pdodata, irp);
+		return submit_urbr(pdodata, irp);
 	default:
 		DBGW(DBG_IOCTL, "process_irp_urb_req: unhandled function: %s: len: %d\n",
 			dbg_urbfunc(urb->UrbHeader.Function), urb->UrbHeader.Length);
@@ -131,7 +131,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		*(unsigned long *)irpStack->Parameters.Others.Argument1 = USBD_PORT_ENABLED | USBD_PORT_CONNECTED;
 		break;
 	case IOCTL_INTERNAL_USB_RESET_PORT:
-		status = submit_urb_req(pdoData, Irp);
+		status = submit_urbr(pdoData, Irp);
 		break;
 	default:
 		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", dbg_vhci_ioctl_code(ioctl_code));

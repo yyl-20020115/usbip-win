@@ -938,71 +938,77 @@ Bus_PnP(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	return status;
 }
 
-void complete_pending_read_irp(PPDO_DEVICE_DATA pdodata)
+static void
+complete_pending_read_irp(PPDO_DEVICE_DATA pdodata)
 {
-	KIRQL oldirql;
-	PIRP irp;
+	KIRQL	oldirql;
+	PIRP	irp;
 
-	KeAcquireSpinLock(&pdodata->q_lock, &oldirql);
-	irp=pdodata->pending_read_irp;
-	pdodata->pending_read_irp=NULL;
-	KeReleaseSpinLock(&pdodata->q_lock, oldirql);
-	if(NULL==irp)
-		return;
-	irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
-	IoSetCancelRoutine(irp, NULL);
-	KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-	IoCompleteRequest (irp, IO_NO_INCREMENT);
-	KeLowerIrql(oldirql);
-	return;
+	KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
+	irp = pdodata->pending_read_irp;
+	pdodata->pending_read_irp = NULL;
+	KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+
+	if (irp != NULL) {
+		irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+		IoSetCancelRoutine(irp, NULL);
+		KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
+		KeLowerIrql(oldirql);
+	}
 }
 
-void
+static void
 complete_pending_irp(PPDO_DEVICE_DATA pdodata)
 {
-    PIRP irp;
-    struct urb_req * urb_r = NULL;
-    PLIST_ENTRY le;
-    KIRQL oldirql;
-    KIRQL oldirql2;
-    int count=0;
-	LARGE_INTEGER interval;
+	int	count=0;
+	KIRQL oldirql;
 
-    //FIXME
-    DBGI(DBG_PNP, "finish pending irp\n");
-    KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-    do {
-	irp=NULL;
-	le=NULL;
-	KeAcquireSpinLockAtDpcLevel(&pdodata->q_lock);
-	if (!IsListEmpty(&pdodata->ioctl_q))
-		le = RemoveHeadList(&pdodata->ioctl_q);
-	if(le){
-		urb_r = CONTAINING_RECORD(le, struct urb_req, list);
+	//FIXME
+	DBGI(DBG_PNP, "finish pending irp\n");
+	KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+	do {
+		struct urb_req	*urbr;
+		PIRP	irp;
+		PLIST_ENTRY	le;
+		KIRQL	oldirql2;
+
+		KeAcquireSpinLockAtDpcLevel(&pdodata->lock_urbr);
+		if (IsListEmpty(&pdodata->head_urbr)) {
+			pdodata->urbr_sent_partial = NULL;
+			pdodata->len_sent_partial = 0;
+			InitializeListHead(&pdodata->head_urbr_sent);
+			InitializeListHead(&pdodata->head_urbr_pending);
+
+			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			break;
+		}
+
+		le = RemoveHeadList(&pdodata->head_urbr);
+		urbr = CONTAINING_RECORD(le, struct urb_req, list_all);
 		/* FIMXE event */
-		irp = urb_r->irp;
-	}
-	if(irp==NULL){
-		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
-		break;
-	}
-	if(count>2){
-		KeReleaseSpinLock(&pdodata->q_lock, oldirql);
-		DBGI(DBG_PNP, "sleep 50ms, let pnp manager send irp");
-		interval.QuadPart=-500000;
-		KeDelayExecutionThread(KernelMode, FALSE, &interval);
-		KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-	} else {
-		KeReleaseSpinLock(&pdodata->q_lock, DISPATCH_LEVEL);
-	}
-	ExFreeToNPagedLookasideList(&g_lookaside, urb_r);
-	irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
-	IoSetCancelRoutine(irp, NULL);
-	KeRaiseIrql(DISPATCH_LEVEL, &oldirql2);
-	IoCompleteRequest (irp, IO_NO_INCREMENT);
-	KeLowerIrql(oldirql2);
-	count++;
-    }while(1);
+		irp = urbr->irp;
+
+		if (count > 2) {
+			LARGE_INTEGER	interval;
+
+			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			DBGI(DBG_PNP, "sleep 50ms, let pnp manager send irp");
+			interval.QuadPart = -500000;
+			KeDelayExecutionThread(KernelMode, FALSE, &interval);
+			KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+		} else {
+			KeReleaseSpinLock(&pdodata->lock_urbr, DISPATCH_LEVEL);
+		}
+
+		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
+		irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+		IoSetCancelRoutine(irp, NULL);
+		KeRaiseIrql(DISPATCH_LEVEL, &oldirql2);
+		IoCompleteRequest (irp, IO_NO_INCREMENT);
+		KeLowerIrql(oldirql2);
+		count++;
+	} while (1);
 }
 
 PAGEABLE void
@@ -1036,8 +1042,10 @@ bus_init_pdo(__out PDEVICE_OBJECT pdo, PFDO_DEVICE_DATA fdodata)
     pdodata->common.DevicePowerState = PowerDeviceD3;
     pdodata->common.SystemPowerState = PowerSystemWorking;
 
-    InitializeListHead(&pdodata->ioctl_q);
-    KeInitializeSpinLock(&pdodata->q_lock);
+    InitializeListHead(&pdodata->head_urbr);
+    InitializeListHead(&pdodata->head_urbr_pending);
+    InitializeListHead(&pdodata->head_urbr_sent);
+    KeInitializeSpinLock(&pdodata->lock_urbr);
 
     pdo->Flags |= DO_POWER_PAGABLE|DO_DIRECT_IO;
 
@@ -1080,74 +1088,65 @@ bus_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, PFDO_DEVICE_DATA  fd
 }
 
 PAGEABLE NTSTATUS
-bus_unplug_dev (
-    int addr,
-    PFDO_DEVICE_DATA            fdodata
-    )
+bus_unplug_dev(int addr, PFDO_DEVICE_DATA fdodata)
 {
-    PLIST_ENTRY         entry;
-    PPDO_DEVICE_DATA    pdodata;
-    int found=0, all;
+	PPDO_DEVICE_DATA	pdodata;
+	PLIST_ENTRY		entry;
+	int	found = 0, all;
 
-    PAGED_CODE ();
+	PAGED_CODE();
 
-    if(addr<0||addr>127)
-	return STATUS_INVALID_PARAMETER;
+	if (addr < 0 || addr > 127)
+		return STATUS_INVALID_PARAMETER;
 
-    all = (0 == addr);
+	all = (0 == addr);
 
-    ExAcquireFastMutex (&fdodata->Mutex);
+	ExAcquireFastMutex (&fdodata->Mutex);
 
-    if (all) {
-	    DBGI(DBG_PNP, "Plugging out all the devices!\n");
-    } else {
-	    DBGI(DBG_PNP, "Plugging out %d\n", addr);
-    }
+	if (all) {
+		DBGI(DBG_PNP, "Plugging out all the devices!\n");
+	} else {
+		DBGI(DBG_PNP, "Plugging out single device: %d\n", addr);
+	}
 
-    if (fdodata->NumPDOs == 0) {
-        //
-        // We got a 2nd plugout...somebody in user space isn't playing nice!!!
-        //
-	    DBGW(DBG_PNP, "BAD BAD BAD...2 removes!!! Send only one!\n");
-	    ExReleaseFastMutex (&fdodata->Mutex);
-	    return STATUS_NO_SUCH_DEVICE;
-    }
+	if (fdodata->NumPDOs == 0) {
+		//
+		// We got a 2nd plugout...somebody in user space isn't playing nice!!!
+		//
+		DBGW(DBG_PNP, "BAD BAD BAD...2 removes!!! Send only one!\n");
+		ExReleaseFastMutex (&fdodata->Mutex);
+		return STATUS_NO_SUCH_DEVICE;
+	}
 
-    for (entry = fdodata->ListOfPDOs.Flink;
-         entry != &fdodata->ListOfPDOs;
-         entry = entry->Flink) {
+	for (entry = fdodata->ListOfPDOs.Flink; entry != &fdodata->ListOfPDOs; entry = entry->Flink) {
+		pdodata = CONTAINING_RECORD (entry, PDO_DEVICE_DATA, Link);
 
-        pdodata = CONTAINING_RECORD (entry, PDO_DEVICE_DATA, Link);
+		DBGI(DBG_PNP, "found device %d\n", pdodata->SerialNo);
 
-        DBGI(DBG_PNP, "found device %d\n", pdodata->SerialNo);
+		if (all || addr == (int)pdodata->SerialNo) {
+			DBGI(DBG_PNP, "Plugging out %d\n", pdodata->SerialNo);
+			pdodata->Present = FALSE;
+			complete_pending_read_irp(pdodata);
+			found = 1;
+			if (!all) {
+				break;
+			}
+		}
+	}
 
-        if (all || addr == (int)pdodata->SerialNo) {
-		DBGI(DBG_PNP, "Plugging out %d\n", pdodata->SerialNo);
-		pdodata->Present = FALSE;
-		complete_pending_read_irp(pdodata);
-		found = 1;
-            if (!all) {
-                break;
-            }
-        }
-    }
+	ExReleaseFastMutex (&fdodata->Mutex);
 
-    ExReleaseFastMutex (&fdodata->Mutex);
-
-    if (found) {
-        IoInvalidateDeviceRelations (fdodata->UnderlyingPDO, BusRelations);
+	if (found) {
+		IoInvalidateDeviceRelations (fdodata->UnderlyingPDO, BusRelations);
 
 		ExAcquireFastMutex (&fdodata->Mutex);
 
-		for (entry = fdodata->ListOfPDOs.Flink;
-			 entry != &fdodata->ListOfPDOs;
-			 entry = entry->Flink) {
-
+		for (entry = fdodata->ListOfPDOs.Flink; entry != &fdodata->ListOfPDOs; entry = entry->Flink) {
 			pdodata = CONTAINING_RECORD (entry, PDO_DEVICE_DATA, Link);
 
-			if( pdodata->Present ==FALSE){
+			if (!pdodata->Present) {
 				complete_pending_irp(pdodata);
-				SET_NEW_PNP_STATE(pdodata,PNP_DEVICE_REMOVED);
+				SET_NEW_PNP_STATE(pdodata, PNP_DEVICE_REMOVED);
 				IoInvalidateDeviceState(pdodata->common.Self);
 			}
 		}
@@ -1155,10 +1154,9 @@ bus_unplug_dev (
 
 		DBGI(DBG_PNP, "Device %d plug out finished\n", addr);
 		return  STATUS_SUCCESS;
-    }
+	}
 
-
-    return STATUS_INVALID_PARAMETER;
+	return STATUS_INVALID_PARAMETER;
 }
 
 PAGEABLE NTSTATUS
