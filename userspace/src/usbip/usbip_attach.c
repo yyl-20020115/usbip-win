@@ -21,6 +21,7 @@
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip_vhci.h"
+#include "usbip_proto.h"
 #include "usbip_forward.h"
 
 static const char usbip_attach_usage_string[] =
@@ -31,6 +32,67 @@ static const char usbip_attach_usage_string[] =
 void usbip_attach_usage(void)
 {
 	printf("usage: %s", usbip_attach_usage_string);
+}
+
+/*
+ * Sadly, udev structure from linux does not have an interface descriptor.
+ * So we should get interface class number via GET_DESCRIPTOR usb command.
+ */
+static void
+supplement_udev(SOCKET sockfd, UINT32 devid, struct usbip_usb_device *udev)
+{
+	struct usbip_header	uhdr;
+	unsigned char	buf[18];
+	unsigned	alen;
+
+	memset(&uhdr, 0, sizeof(uhdr));
+
+	uhdr.base.command = htonl(USBIP_CMD_SUBMIT);
+	/* sufficient large enough seq used to avoid conflict with normal vhci operation */
+	uhdr.base.seqnum = htonl(0x7fffffff);
+	uhdr.base.direction = htonl(USBIP_DIR_IN);
+	uhdr.base.devid = htonl(devid);
+
+	uhdr.u.cmd_submit.transfer_buffer_length = htonl(18);
+	uhdr.u.cmd_submit.setup[0] = 0x80;	/* IN/control port */
+	uhdr.u.cmd_submit.setup[1] = 6;		/* GetDescriptor */
+	uhdr.u.cmd_submit.setup[6] = 18;	/* Length */
+	uhdr.u.cmd_submit.setup[3] = 2;		/* Configuration Descriptor */
+
+	if (usbip_net_send(sockfd, &uhdr, sizeof(uhdr)) < 0) {
+		err("get_desc: failed to send usbip header\n");
+		return;
+	}
+	if (usbip_net_recv(sockfd, &uhdr, sizeof(uhdr)) < 0) {
+		err("get_desc: failed to recv usbip header\n");
+		return;
+	}
+	if (uhdr.u.ret_submit.status != 0) {
+		err("get_desc: command submit error\n");
+		return;
+	}
+	alen = ntohl(uhdr.u.ret_submit.actual_length);
+	if (alen < 18) {
+		err("get_desc: too short response\n");
+		return;
+	}
+	if (usbip_net_recv(sockfd, buf, 18) < 0) {
+		err("get_desc: failed to recv usbip payload\n");
+		return;
+	}
+	udev->bDeviceClass = buf[14];
+	udev->bDeviceSubClass = buf[15];
+	udev->bDeviceProtocol = buf[16];
+}
+
+static void
+try_to_tweak_udev(SOCKET sockfd, struct usbip_usb_device *udev)
+{
+	if (udev->bDeviceClass != 0 && udev->bDeviceSubClass != 0 && udev->bDeviceProtocol == 0)
+		return;
+	if (udev->bNumConfigurations != 1)
+		return;
+	supplement_udev(sockfd, udev->busnum << 16 | udev->devnum, udev);
 }
 
 static int import_device(SOCKET sockfd, struct usbip_usb_device *udev, HANDLE *phdev)
@@ -114,6 +176,13 @@ static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev)
 		err("recv different busid %s", reply.udev.busid);
 		return 1;
 	}
+
+	/* Many devices have 0 usb class number in a device descriptor.
+	 * 0 value means that class number is determined at interface level.
+	 * USB class, subclass and protocol numbers should be setup before importing.
+	 * Because windows vhci driver builds a device compatible id with those numbers.
+	 */
+	try_to_tweak_udev(sockfd, &reply.udev);
 
 	/* import a device */
 	return import_device(sockfd, &reply.udev, phdev);
