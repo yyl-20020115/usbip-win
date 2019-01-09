@@ -134,7 +134,7 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		status = submit_urbr(pdoData, Irp);
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s", dbg_vhci_ioctl_code(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}

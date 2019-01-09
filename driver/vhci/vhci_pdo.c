@@ -531,8 +531,9 @@ Return Value:
     PAGED_CODE ();
 
 	UNREFERENCED_PARAMETER(DeviceData);
+	UNREFERENCED_PARAMETER(Irp);
 
-    return Irp->IoStatus.Status;
+	return STATUS_SUCCESS;
 
     //
     // Following code shows how to provide

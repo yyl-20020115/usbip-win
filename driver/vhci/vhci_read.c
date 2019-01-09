@@ -153,7 +153,7 @@ store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_class_vendor_partial(PIRP irp, PURB urb)
+store_urb_class_vendor_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vc = &urb->UrbControlVendorClassRequest;
 	PVOID	dst;
@@ -164,6 +164,7 @@ store_urb_class_vendor_partial(PIRP irp, PURB urb)
 
 	RtlCopyMemory(dst, urb_vc->TransferBuffer, urb_vc->TransferBufferLength);
 	irp->IoStatus.Information = urb_vc->TransferBufferLength;
+	pdodata->len_sent_partial = 0;
 
 	return STATUS_SUCCESS;
 }
@@ -292,7 +293,7 @@ store_urb_select_interface(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_bulk_partial(PIRP irp, PURB urb)
+store_urb_bulk_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 {
 	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
 	PVOID	dst, src;
@@ -306,6 +307,7 @@ store_urb_bulk_partial(PIRP irp, PURB urb)
 		return STATUS_INSUFFICIENT_RESOURCES;
 	RtlCopyMemory(dst, src, urb_bi->TransferBufferLength);
 	irp->IoStatus.Information = urb_bi->TransferBufferLength;
+	pdodata->len_sent_partial = 0;
 
 	return STATUS_SUCCESS;
 }
@@ -315,14 +317,17 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urbr)
 {
 	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
 	struct usbip_header	*hdr;
-	int	type;
-	int	in = urb_bi->TransferFlags & USBD_TRANSFER_DIRECTION_IN ? 1 : 0;
+	int	in, type;
 
 	hdr = get_usbip_hdr_from_read_irp(irp);
 	if (hdr == NULL) {
 		return STATUS_BUFFER_TOO_SMALL;
 	}
 
+	/* Sometimes, direction in TransferFlags of _URB_BULK_OR_INTERRUPT_TRANSFER is not consistent with PipeHandle.
+	 * Use a direction flag in pipe handle.
+	 */
+	in = PIPE2DIRECT(urb_bi->PipeHandle);
 	type = PIPE2TYPE(urb_bi->PipeHandle);
 	if (type != USB_ENDPOINT_TYPE_BULK && type != USB_ENDPOINT_TYPE_INTERRUPT) {
 		DBGE(DBG_READ, "Error, not a bulk pipe\n");
@@ -384,7 +389,7 @@ copy_iso_data(PVOID dst, struct _URB_ISOCH_TRANSFER *urb_iso)
 }
 
 static NTSTATUS
-store_urb_iso_partial(PIRP irp, PURB urb)
+store_urb_iso_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 {
 	struct _URB_ISOCH_TRANSFER	*urb_iso = &urb->UrbIsochronousTransfer;
 	ULONG	len_iso = urb_iso->TransferBufferLength + urb_iso->NumberOfPackets * sizeof(struct usbip_iso_packet_descriptor);
@@ -396,6 +401,8 @@ store_urb_iso_partial(PIRP irp, PURB urb)
 
 	copy_iso_data(dst, urb_iso);
 	irp->IoStatus.Information = len_iso;
+	pdodata->len_sent_partial = 0;
+
 	return STATUS_SUCCESS;
 }
 
@@ -517,10 +524,10 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 
 	switch (code_func) {
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
-		status = store_urb_bulk_partial(irp, urb);
+		status = store_urb_bulk_partial(urbr->pdodata, irp, urb);
 		break;
 	case URB_FUNCTION_ISOCH_TRANSFER:
-		status = store_urb_iso_partial(irp, urb);
+		status = store_urb_iso_partial(urbr->pdodata, irp, urb);
 		break;
 	case URB_FUNCTION_CLASS_DEVICE:
 	case URB_FUNCTION_CLASS_INTERFACE:
@@ -529,7 +536,7 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 	case URB_FUNCTION_VENDOR_DEVICE:
 	case URB_FUNCTION_VENDOR_INTERFACE:
 	case URB_FUNCTION_VENDOR_ENDPOINT:
-		status = store_urb_class_vendor_partial(irp, urb);
+		status = store_urb_class_vendor_partial(urbr->pdodata, irp, urb);
 		break;
 	default:
 		irp->IoStatus.Information = 0;

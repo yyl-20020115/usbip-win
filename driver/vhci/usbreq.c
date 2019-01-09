@@ -193,23 +193,22 @@ submit_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
 	if (status == STATUS_SUCCESS) {
 		if (pdodata->len_sent_partial == 0) {
 			pdodata->urbr_sent_partial = NULL;
-			if (insert_pending_or_sent_urbr(pdodata, urbr, FALSE)) {
-				InsertTailList(&pdodata->head_urbr, &urbr->list_all);
-				status = STATUS_PENDING;
-				pdodata->pending_read_irp = NULL;
-				KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
-
-				read_irp->IoStatus.Status = STATUS_SUCCESS;
-				IoCompleteRequest(read_irp, IO_NO_INCREMENT);
-			}
-			else {
-				KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			if (!insert_pending_or_sent_urbr(pdodata, urbr, FALSE))
 				status = STATUS_CANCELLED;
-				ExFreeToNPagedLookasideList(&g_lookaside, urbr);
-			}
+		}
+
+		if (status == STATUS_SUCCESS) {
+			InsertTailList(&pdodata->head_urbr, &urbr->list_all);
+			pdodata->pending_read_irp = NULL;
+			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+
+			read_irp->IoStatus.Status = STATUS_SUCCESS;
+			IoCompleteRequest(read_irp, IO_NO_INCREMENT);
+			status = STATUS_PENDING;
 		}
 		else {
 			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 		}
 	}
 	else {

@@ -10,6 +10,9 @@
 		((info_intf)->NumberOfPipes - 1) * sizeof(USBD_PIPE_INFORMATION))
 
 #define MAKE_PIPE(ep, type, interval) ((USBD_PIPE_HANDLE)((ep) | ((interval) << 8) | ((type) << 16)))
+#define TO_INTF_HANDLE(intf_num, altsetting)	((USBD_INTERFACE_HANDLE)((intf_num << 8) + altsetting))
+#define TO_INTF_NUM(handle)		(UCHAR)(((UINT_PTR)(handle)) >> 8)
+#define TO_INTF_ALTSETTING(handle)	(UCHAR)((UINT_PTR)(handle) & 0xff)
 
 void
 show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)
@@ -46,21 +49,6 @@ set_pipe(PUSBD_PIPE_INFORMATION pipe, PUSB_ENDPOINT_DESCRIPTOR ep_desc, unsigned
 		pipe->MaximumPacketSize *= mult;
 	}
 	pipe->PipeHandle = MAKE_PIPE(ep_desc->bEndpointAddress, pipe->PipeType, ep_desc->bInterval);
-}
-
-static PUSB_INTERFACE_DESCRIPTOR
-find_dsc_intf_by_handle(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, USBD_INTERFACE_HANDLE handle)
-{
-	PUSB_INTERFACE_DESCRIPTOR	dsc_intf = (PUSB_INTERFACE_DESCRIPTOR)dsc_conf;
-	unsigned int	i;
-
-	for (i = 0; i < (UINT_PTR)handle; i++) {
-		dsc_intf = (PUSB_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, dsc_intf, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (dsc_intf == NULL)
-			return NULL;
-		dsc_intf = NEXT_DESC_INTF(dsc_intf);
-	}
-	return (PUSB_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, dsc_intf, USB_INTERFACE_DESCRIPTOR_TYPE);
 }
 
 static NTSTATUS
@@ -141,7 +129,7 @@ select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed)
 		if ((status = setup_intf(info_intf, dsc_conf, speed)) != STATUS_SUCCESS)
 			return status;
 
-		info_intf->InterfaceHandle = (USBD_INTERFACE_HANDLE)(i + 1);
+		info_intf->InterfaceHandle = TO_INTF_HANDLE(info_intf->InterfaceNumber, info_intf->AlternateSetting);
 		info_intf = NEXT_USBD_INTERFACE_INFO(info_intf);
 	}
 
@@ -154,12 +142,15 @@ select_interface(struct _URB_SELECT_INTERFACE *urb_seli, PUSB_CONFIGURATION_DESC
 {
 	PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
 	PUSBD_INTERFACE_INFORMATION	info_intf;
+	UCHAR	intf_num, altsetting;
 
 	info_intf = &urb_seli->Interface;
 
-	dsc_intf = find_dsc_intf_by_handle(dsc_conf, info_intf->InterfaceHandle);
+	intf_num = TO_INTF_NUM(info_intf->InterfaceHandle);
+	altsetting = TO_INTF_ALTSETTING(info_intf->InterfaceHandle);
+	dsc_intf = dsc_find_intf(dsc_conf, intf_num, altsetting);
 	if (dsc_intf == NULL) {
-		DBGW(DBG_URB, "non-existent interface: handle: %d", (int)(UINT_PTR)info_intf->InterfaceHandle);
+		DBGW(DBG_URB, "non-existent interface: intf_num: %hhu %hhu\n", intf_num, altsetting);
 		return STATUS_INVALID_PARAMETER;
 	}
 	return setup_intf(info_intf, dsc_conf, speed);
