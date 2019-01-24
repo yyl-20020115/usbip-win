@@ -37,14 +37,13 @@ show_pipe(unsigned int num, PUSBD_PIPE_INFORMATION pipe)
 void
 set_pipe(PUSBD_PIPE_INFORMATION pipe, PUSB_ENDPOINT_DESCRIPTOR ep_desc, unsigned char speed)
 {
-	USHORT	mult;
 	pipe->MaximumPacketSize = ep_desc->wMaxPacketSize;
 	pipe->EndpointAddress = ep_desc->bEndpointAddress;
 	pipe->Interval = ep_desc->bInterval;
 	pipe->PipeType = ep_desc->bmAttributes & USB_ENDPOINT_TYPE_MASK;
 	/* From usb_submit_urb in linux */
 	if (pipe->PipeType == USB_ENDPOINT_TYPE_ISOCHRONOUS && speed == USB_SPEED_HIGH) {
-		mult = 1 + ((pipe->MaximumPacketSize >> 11) & 0x03);
+		USHORT	mult = 1 + ((pipe->MaximumPacketSize >> 11) & 0x03);
 		pipe->MaximumPacketSize &= 0x7ff;
 		pipe->MaximumPacketSize *= mult;
 	}
@@ -116,12 +115,18 @@ select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed)
 {
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
 	PUSBD_INTERFACE_INFORMATION	info_intf;
+	/*
+	 * The end position of _URB_SELECT_CONFIGURATION, with which
+	 * valid count of info_intf can be detected.
+	 */
+	PVOID	end_urb_selc;
 	unsigned int	i;
 
-	/* it has no means */
+	/* assign meaningless value, handle value is not used */
 	urb_selc->ConfigurationHandle = (USBD_CONFIGURATION_HANDLE)0x12345678;
 
 	dsc_conf = urb_selc->ConfigurationDescriptor;
+	end_urb_selc = (PUCHAR)urb_selc + urb_selc->Hdr.Length;
 	info_intf = &urb_selc->Interface;
 	for (i = 0; i < urb_selc->ConfigurationDescriptor->bNumInterfaces; i++) {
 		NTSTATUS	status;
@@ -131,6 +136,9 @@ select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed)
 
 		info_intf->InterfaceHandle = TO_INTF_HANDLE(info_intf->InterfaceNumber, info_intf->AlternateSetting);
 		info_intf = NEXT_USBD_INTERFACE_INFO(info_intf);
+		/* urb_selc may have less info_intf than bNumInterfaces in conf desc */
+		if ((PVOID)info_intf >= end_urb_selc)
+			break;
 	}
 
 	/* it seems we must return now */
