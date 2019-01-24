@@ -31,7 +31,7 @@
     <ClCompile Include="vhci_power.c" />
     <ClCompile Include="vhci_proto.c" />
     <ClCompile Include="usbreq.c" />
-    <ClCompile Include="wmi.c" />
+    <ClCompile Include="vhci_wmi.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\usbip_vhci_api.h" />
