@@ -1,7 +1,7 @@
 #pragma once
 
 #include "basetype.h"
-#include "device.h"
+#include "vhci_dev.h"
 
 #define SET_NEW_PNP_STATE(_Data_, _state_) \
         (_Data_)->common.PreviousPnPState =  (_Data_)->common.DevicePnPState;\
@@ -11,4 +11,4 @@
         (_Data_)->common.DevicePnPState =   (_Data_)->common.PreviousPnPState;
 
 PAGEABLE NTSTATUS
-bus_unplug_dev(int addr, PFDO_DEVICE_DATA DeviceData);
+vhci_unplug_dev(int addr, pusbip_vhub_dev_t vhub);

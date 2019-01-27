@@ -4,7 +4,7 @@
 #include "usbreq.h"
 
 extern struct urb_req *
-find_pending_urbr(PPDO_DEVICE_DATA pdodata);
+find_pending_urbr(pusbip_vpdo_dev_t vpdo);
 
 extern void
 set_cmd_submit_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid,
@@ -60,7 +60,7 @@ store_urb_reset_dev(PIRP irp, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, 0, 0, 0, 0);
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, 0, 0, 0, 0);
 
 	build_setup_packet(csp, 0, BMREQUEST_CLASS, BMREQUEST_TO_OTHER, USB_REQUEST_SET_FEATURE);
 	csp->wLength = 0;
@@ -99,7 +99,7 @@ store_urb_get_dev_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, USBIP_DIR_IN, 0,
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, USBIP_DIR_IN, 0,
 				    USBD_SHORT_TRANSFER_OK, urb_desc->TransferBufferLength);
 	build_setup_packet(csp, USBIP_DIR_IN, BMREQUEST_STANDARD, BMREQUEST_TO_DEVICE, USB_REQUEST_GET_DESCRIPTOR);
 
@@ -140,7 +140,7 @@ store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, USBIP_DIR_IN, 0,
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, USBIP_DIR_IN, 0,
 				    USBD_SHORT_TRANSFER_OK, urb_desc->TransferBufferLength);
 	build_setup_packet(csp, USBIP_DIR_IN, BMREQUEST_STANDARD, BMREQUEST_TO_INTERFACE, USB_REQUEST_GET_DESCRIPTOR);
 
@@ -153,7 +153,7 @@ store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_class_vendor_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
+store_urb_class_vendor_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vc = &urb->UrbControlVendorClassRequest;
 	PVOID	dst;
@@ -164,7 +164,7 @@ store_urb_class_vendor_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 
 	RtlCopyMemory(dst, urb_vc->TransferBuffer, urb_vc->TransferBufferLength);
 	irp->IoStatus.Information = urb_vc->TransferBufferLength;
-	pdodata->len_sent_partial = 0;
+	vpdo->len_sent_partial = 0;
 
 	return STATUS_SUCCESS;
 }
@@ -222,7 +222,7 @@ store_urb_class_vendor(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, in, 0,
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, in, 0,
 				    urb_vc->TransferFlags | USBD_SHORT_TRANSFER_OK, urb_vc->TransferBufferLength);
 	build_setup_packet(csp, (unsigned char)in, type, recip, urb_vc->Request);
 	//FIXME what is the usage of RequestTypeReservedBits?
@@ -239,7 +239,7 @@ store_urb_class_vendor(PIRP irp, PURB urb, struct urb_req *urbr)
 			irp->IoStatus.Information += urb_vc->TransferBufferLength;
 		}
 		else {
-			urbr->pdodata->len_sent_partial = sizeof(struct usbip_header);
+			urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
 		}
 	}
 	return  STATUS_SUCCESS;
@@ -258,7 +258,7 @@ store_urb_select_config(PIRP irp, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, 0, 0, 0, 0);
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_DEVICE, USB_REQUEST_SET_CONFIGURATION);
 	csp->wLength = 0;
 	csp->wValue.W = 1;
@@ -282,7 +282,7 @@ store_urb_select_interface(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, 0, 0, 0, 0);
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_INTERFACE, USB_REQUEST_SET_INTERFACE);
 	csp->wLength = 0;
 	csp->wValue.W = urb_si->Interface.AlternateSetting;
@@ -293,7 +293,7 @@ store_urb_select_interface(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_bulk_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
+store_urb_bulk_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
 	PVOID	dst, src;
@@ -307,7 +307,7 @@ store_urb_bulk_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 		return STATUS_INSUFFICIENT_RESOURCES;
 	RtlCopyMemory(dst, src, urb_bi->TransferBufferLength);
 	irp->IoStatus.Information = urb_bi->TransferBufferLength;
-	pdodata->len_sent_partial = 0;
+	vpdo->len_sent_partial = 0;
 
 	return STATUS_SUCCESS;
 }
@@ -334,7 +334,7 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urbr)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid, in, urb_bi->PipeHandle,
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, in, urb_bi->PipeHandle,
 				    urb_bi->TransferFlags, urb_bi->TransferBufferLength);
 	RtlZeroMemory(hdr->u.cmd_submit.setup, 8);
 
@@ -349,7 +349,7 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urbr)
 			RtlCopyMemory(hdr + 1, buf, urb_bi->TransferBufferLength);
 		}
 		else {
-			urbr->pdodata->len_sent_partial = sizeof(struct usbip_header);
+			urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
 		}
 	}
 	return STATUS_SUCCESS;
@@ -389,7 +389,7 @@ copy_iso_data(PVOID dst, struct _URB_ISOCH_TRANSFER *urb_iso)
 }
 
 static NTSTATUS
-store_urb_iso_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
+store_urb_iso_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_ISOCH_TRANSFER	*urb_iso = &urb->UrbIsochronousTransfer;
 	ULONG	len_iso = urb_iso->TransferBufferLength + urb_iso->NumberOfPackets * sizeof(struct usbip_iso_packet_descriptor);
@@ -401,7 +401,7 @@ store_urb_iso_partial(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 
 	copy_iso_data(dst, urb_iso);
 	irp->IoStatus.Information = len_iso;
-	pdodata->len_sent_partial = 0;
+	vpdo->len_sent_partial = 0;
 
 	return STATUS_SUCCESS;
 }
@@ -425,7 +425,7 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urbr)
 		return STATUS_BUFFER_TOO_SMALL;
 	}
 
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->pdodata->devid,
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid,
 				    in, urb_iso->PipeHandle, urb_iso->TransferFlags | USBD_SHORT_TRANSFER_OK,
 				    urb_iso->TransferBufferLength);
 	hdr->u.cmd_submit.start_frame = urb_iso->StartFrame;
@@ -441,7 +441,7 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urbr)
 			irp->IoStatus.Information += len_iso;
 		}
 		else {
-			urbr->pdodata->len_sent_partial = sizeof(struct usbip_header);
+			urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
 		}
 	}
 
@@ -524,10 +524,10 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 
 	switch (code_func) {
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
-		status = store_urb_bulk_partial(urbr->pdodata, irp, urb);
+		status = store_urb_bulk_partial(urbr->vpdo, irp, urb);
 		break;
 	case URB_FUNCTION_ISOCH_TRANSFER:
-		status = store_urb_iso_partial(urbr->pdodata, irp, urb);
+		status = store_urb_iso_partial(urbr->vpdo, irp, urb);
 		break;
 	case URB_FUNCTION_CLASS_DEVICE:
 	case URB_FUNCTION_CLASS_INTERFACE:
@@ -536,7 +536,7 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 	case URB_FUNCTION_VENDOR_DEVICE:
 	case URB_FUNCTION_VENDOR_INTERFACE:
 	case URB_FUNCTION_VENDOR_ENDPOINT:
-		status = store_urb_class_vendor_partial(urbr->pdodata, irp, urb);
+		status = store_urb_class_vendor_partial(urbr->vpdo, irp, urb);
 		break;
 	default:
 		irp->IoStatus.Information = 0;
@@ -577,45 +577,45 @@ store_urbr(PIRP irp, struct urb_req *urbr)
 }
 
 static NTSTATUS
-process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
+process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 {
 	struct urb_req	*urbr;
 	KIRQL	oldirql;
 	NTSTATUS status;
 
-	KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
-	if (pdodata->pending_read_irp) {
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
+	if (vpdo->pending_read_irp) {
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
-	if (pdodata->urbr_sent_partial != NULL) {
-		urbr = pdodata->urbr_sent_partial;
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	if (vpdo->urbr_sent_partial != NULL) {
+		urbr = vpdo->urbr_sent_partial;
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 		status = store_urbr_partial(read_irp, urbr);
 
-		KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
-		pdodata->len_sent_partial = 0;
+		KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
+		vpdo->len_sent_partial = 0;
 	}
 	else {
-		urbr = find_pending_urbr(pdodata);
+		urbr = find_pending_urbr(vpdo);
 		if (urbr == NULL) {
 			IoMarkIrpPending(read_irp);
-			pdodata->pending_read_irp = read_irp;
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			vpdo->pending_read_irp = read_irp;
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 			return STATUS_PENDING;
 		}
-		pdodata->urbr_sent_partial = urbr;
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+		vpdo->urbr_sent_partial = urbr;
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 		status = store_urbr(read_irp, urbr);
 
-		KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
+		KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 	}
 
 	if (status != STATUS_SUCCESS) {
 		RemoveEntryList(&urbr->list_all);
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 		IoSetCancelRoutine(urbr->irp, NULL);
 		urbr->irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
@@ -623,62 +623,60 @@ process_read_irp(PPDO_DEVICE_DATA pdodata, PIRP read_irp)
 		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 	}
 	else {
-		if (pdodata->len_sent_partial == 0) {
-			InsertTailList(&pdodata->head_urbr_sent, &urbr->list_state);
-			pdodata->urbr_sent_partial = NULL;
+		if (vpdo->len_sent_partial == 0) {
+			InsertTailList(&vpdo->head_urbr_sent, &urbr->list_state);
+			vpdo->urbr_sent_partial = NULL;
 		}
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 	}
 	return status;
 }
 
 PAGEABLE NTSTATUS
-Bus_Read(__in PDEVICE_OBJECT DeviceObject, __in PIRP irp)
+vhci_read(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	PFDO_DEVICE_DATA	fdoData;
-	PPDO_DEVICE_DATA	pdodata;
-	PCOMMON_DEVICE_DATA     commonData;
+	pusbip_vhub_dev_t	vhub;
+	pusbip_vpdo_dev_t	vpdo;
+	pdev_common_t		devcom;
 	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS		status;
 
 	PAGED_CODE();
 
-	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+	devcom = (pdev_common_t)devobj->DeviceExtension;
 
-	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Enter\n");
+	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Enter\n");
 
-	if (!commonData->IsFDO) {
-		DBGE(DBG_READ, "read for fdo is not allowed\n");
+	if (!devcom->is_vhub) {
+		DBGE(DBG_READ, "read for vhub is not allowed\n");
 
 		irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	fdoData = (PFDO_DEVICE_DATA)DeviceObject->DeviceExtension;
+	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
 
-	Bus_IncIoCount(fdoData);
+	inc_io_vhub(vhub);
 
-	//
 	// Check to see whether the bus is removed
-	//
-	if (fdoData->common.DevicePnPState == Deleted) {
+	if (vhub->common.DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
 	irpstack = IoGetCurrentIrpStackLocation(irp);
-	pdodata = irpstack->FileObject->FsContext;
-	if (pdodata == NULL || !pdodata->Present)
+	vpdo = irpstack->FileObject->FsContext;
+	if (vpdo == NULL || !vpdo->Present)
 		status = STATUS_INVALID_DEVICE_REQUEST;
 	else
-		status = process_read_irp(pdodata, irp);
+		status = process_read_irp(vpdo, irp);
 
 END:
-	DBGI(DBG_GENERAL | DBG_READ, "Bus_Read: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Leave: %s\n", dbg_ntstatus(status));
 	if (status != STATUS_PENDING) {
 		irp->IoStatus.Status = status;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 	}
-	Bus_DecIoCount(fdoData);
+	dec_io_vhub(vhub);
 	return status;
 }

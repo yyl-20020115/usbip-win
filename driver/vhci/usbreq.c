@@ -34,62 +34,62 @@ build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type
 }
 
 struct urb_req *
-find_sent_urbr(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr)
+find_sent_urbr(pusbip_vpdo_dev_t vpdo, struct usbip_header *hdr)
 {
 	KIRQL		oldirql;
 	PLIST_ENTRY	le;
 
-	KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
-	for (le = pdodata->head_urbr_sent.Flink; le != &pdodata->head_urbr_sent; le = le->Flink) {
+	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
+	for (le = vpdo->head_urbr_sent.Flink; le != &vpdo->head_urbr_sent; le = le->Flink) {
 		struct urb_req	*urbr;
 		urbr = CONTAINING_RECORD(le, struct urb_req, list_state);
 		if (urbr->seq_num == hdr->base.seqnum) {
 			RemoveEntryList(le);
 			RemoveEntryList(&urbr->list_all);
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 			return urbr;
 		}
 	}
-	KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 	return NULL;
 }
 
 struct urb_req *
-find_pending_urbr(PPDO_DEVICE_DATA pdodata)
+find_pending_urbr(pusbip_vpdo_dev_t vpdo)
 {
 	struct urb_req	*urbr;
 
-	if (IsListEmpty(&pdodata->head_urbr_pending))
+	if (IsListEmpty(&vpdo->head_urbr_pending))
 		return NULL;
 
-	urbr = CONTAINING_RECORD(pdodata->head_urbr_pending.Flink, struct urb_req, list_state);
-	urbr->seq_num = ++(pdodata->seq_num);
+	urbr = CONTAINING_RECORD(vpdo->head_urbr_pending.Flink, struct urb_req, list_state);
+	urbr->seq_num = ++(vpdo->seq_num);
 	RemoveEntryList(&urbr->list_state);
 	InitializeListHead(&urbr->list_state);
 	return urbr;
 }
 
 static void
-remove_cancelled_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
+remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 {
 	KIRQL	oldirql = irp->CancelIrql;
 	PLIST_ENTRY	le;
 
-	KeAcquireSpinLockAtDpcLevel(&pdodata->lock_urbr);
+	KeAcquireSpinLockAtDpcLevel(&vpdo->lock_urbr);
 
-	for (le = pdodata->head_urbr.Flink; le != &pdodata->head_urbr; le = le->Flink) {
+	for (le = vpdo->head_urbr.Flink; le != &vpdo->head_urbr; le = le->Flink) {
 		struct urb_req	*urbr;
 
 		urbr = CONTAINING_RECORD(le, struct urb_req, list_all);
 		if (urbr->irp == irp) {
 			RemoveEntryList(le);
 			RemoveEntryList(&urbr->list_state);
-			if (pdodata->urbr_sent_partial == urbr) {
-				pdodata->urbr_sent_partial = NULL;
-				pdodata->len_sent_partial = 0;
+			if (vpdo->urbr_sent_partial == urbr) {
+				vpdo->urbr_sent_partial = NULL;
+				vpdo->len_sent_partial = 0;
 			}
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 			DBGI(DBG_GENERAL, "urb cancelled: %s\n", dbg_urbr(urbr));
 			ExFreeToNPagedLookasideList(&g_lookaside, urbr);
@@ -97,20 +97,20 @@ remove_cancelled_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		}
 	}
 
-	KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 	DBGW(DBG_GENERAL, "no matching urbr\n");
 }
 
 static void
-cancel_urbr(PDEVICE_OBJECT pdo, PIRP irp)
+cancel_urbr(PDEVICE_OBJECT devobj, PIRP irp)
 {
-	PPDO_DEVICE_DATA	pdodata;
+	pusbip_vpdo_dev_t	vpdo;
 
-	pdodata = (PPDO_DEVICE_DATA)pdo->DeviceExtension;
+	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
 	DBGI(DBG_GENERAL, "irp will be cancelled: %p\n", irp);
 
-	remove_cancelled_urbr(pdodata, irp);
+	remove_cancelled_urbr(vpdo, irp);
 
 	irp->IoStatus.Status = STATUS_CANCELLED;
 	IoCompleteRequest(irp, IO_NO_INCREMENT);
@@ -118,7 +118,7 @@ cancel_urbr(PDEVICE_OBJECT pdo, PIRP irp)
 }
 
 static struct urb_req *
-create_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
+create_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 {
 	struct urb_req	*urbr;
 
@@ -128,13 +128,13 @@ create_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		return NULL;
 	}
 	RtlZeroMemory(urbr, sizeof(*urbr));
-	urbr->pdodata = pdodata;
+	urbr->vpdo = vpdo;
 	urbr->irp = irp;
 	return urbr;
 }
 
 static BOOLEAN
-insert_pending_or_sent_urbr(PPDO_DEVICE_DATA pdodata, struct urb_req *urbr, BOOLEAN is_pending)
+insert_pending_or_sent_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr, BOOLEAN is_pending)
 {
 	PIRP	irp = urbr->irp;
 
@@ -146,74 +146,74 @@ insert_pending_or_sent_urbr(PPDO_DEVICE_DATA pdodata, struct urb_req *urbr, BOOL
 	else {
 		IoMarkIrpPending(irp);
 		if (is_pending)
-			InsertTailList(&pdodata->head_urbr_pending, &urbr->list_state);
+			InsertTailList(&vpdo->head_urbr_pending, &urbr->list_state);
 		else
-			InsertTailList(&pdodata->head_urbr_sent, &urbr->list_state);
+			InsertTailList(&vpdo->head_urbr_sent, &urbr->list_state);
 	}
 	return TRUE;
 }
 
 NTSTATUS
-submit_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp)
+submit_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 {
 	struct urb_req	*urbr;
 	KIRQL	oldirql;
 	PIRP	read_irp;
 	NTSTATUS	status = STATUS_PENDING;
 
-	if ((urbr = create_urbr(pdodata, irp)) == NULL)
+	if ((urbr = create_urbr(vpdo, irp)) == NULL)
 		return STATUS_INSUFFICIENT_RESOURCES;
 
-	KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
+	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 
-	if (pdodata->urbr_sent_partial || pdodata->pending_read_irp == NULL) {
-		if (!insert_pending_or_sent_urbr(pdodata, urbr, TRUE)) {
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	if (vpdo->urbr_sent_partial || vpdo->pending_read_irp == NULL) {
+		if (!insert_pending_or_sent_urbr(vpdo, urbr, TRUE)) {
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 			ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 			DBGI(DBG_URB, "submit_urbr: urb cancelled\n");
 			return STATUS_CANCELLED;
 		}
-		InsertTailList(&pdodata->head_urbr, &urbr->list_all);
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+		InsertTailList(&vpdo->head_urbr, &urbr->list_all);
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 		DBGI(DBG_URB, "submit_urbr: urb pending\n");
 		return STATUS_PENDING;
 	}
 
-	read_irp = pdodata->pending_read_irp;
-	pdodata->urbr_sent_partial = urbr;
+	read_irp = vpdo->pending_read_irp;
+	vpdo->urbr_sent_partial = urbr;
 
-	urbr->seq_num = ++(pdodata->seq_num);
+	urbr->seq_num = ++(vpdo->seq_num);
 
-	KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 	status = store_urbr(read_irp, urbr);
 
-	KeAcquireSpinLock(&pdodata->lock_urbr, &oldirql);
+	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 
 	if (status == STATUS_SUCCESS) {
-		if (pdodata->len_sent_partial == 0) {
-			pdodata->urbr_sent_partial = NULL;
-			if (!insert_pending_or_sent_urbr(pdodata, urbr, FALSE))
+		if (vpdo->len_sent_partial == 0) {
+			vpdo->urbr_sent_partial = NULL;
+			if (!insert_pending_or_sent_urbr(vpdo, urbr, FALSE))
 				status = STATUS_CANCELLED;
 		}
 
 		if (status == STATUS_SUCCESS) {
-			InsertTailList(&pdodata->head_urbr, &urbr->list_all);
-			pdodata->pending_read_irp = NULL;
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			InsertTailList(&vpdo->head_urbr, &urbr->list_all);
+			vpdo->pending_read_irp = NULL;
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 			read_irp->IoStatus.Status = STATUS_SUCCESS;
 			IoCompleteRequest(read_irp, IO_NO_INCREMENT);
 			status = STATUS_PENDING;
 		}
 		else {
-			KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 			ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 		}
 	}
 	else {
-		pdodata->urbr_sent_partial = NULL;
-		KeReleaseSpinLock(&pdodata->lock_urbr, oldirql);
+		vpdo->urbr_sent_partial = NULL;
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 		status = STATUS_INVALID_PARAMETER;

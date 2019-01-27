@@ -6,21 +6,21 @@
 #include "usbip_vhci_api.h"
 
 extern NTSTATUS
-submit_urbr(PPDO_DEVICE_DATA pdodata, PIRP irp);
+submit_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp);
 
 extern PAGEABLE NTSTATUS
-bus_plugin_dev(ioctl_usbip_vhci_plugin *plugin, PFDO_DEVICE_DATA dev_data, PFILE_OBJECT fo);
+vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo);
 
 extern PAGEABLE NTSTATUS
-bus_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, PFDO_DEVICE_DATA dev_data, ULONG *info);
+vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t vhub, ULONG *info);
 
 extern PAGEABLE NTSTATUS
-Bus_EjectDevice(PUSBIP_VHCI_EJECT_HARDWARE Eject, PFDO_DEVICE_DATA FdoData);
+vhci_eject_device(PUSBIP_VHCI_EJECT_HARDWARE Eject, pusbip_vhub_dev_t vhub);
 
 static NTSTATUS
-process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
+process_urb_reset_pipe(pusbip_vpdo_dev_t vpdo)
 {
-	UNREFERENCED_PARAMETER(pdodata);
+	UNREFERENCED_PARAMETER(vpdo);
 
 	////TODO need to check
 	DBGI(DBG_IOCTL, "reset_pipe:\n");
@@ -28,11 +28,11 @@ process_urb_reset_pipe(PPDO_DEVICE_DATA pdodata)
 }
 
 static NTSTATUS
-process_urb_abort_pipe(PPDO_DEVICE_DATA pdodata, PURB urb)
+process_urb_abort_pipe(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_PIPE_REQUEST	*urb_pipe = &urb->UrbPipeRequest;
 
-	UNREFERENCED_PARAMETER(pdodata);
+	UNREFERENCED_PARAMETER(vpdo);
 
 	////TODO need to check
 	DBGI(DBG_IOCTL, "abort_pipe: %x\n", urb_pipe->PipeHandle);
@@ -40,17 +40,17 @@ process_urb_abort_pipe(PPDO_DEVICE_DATA pdodata, PURB urb)
 }
 
 static NTSTATUS
-process_urb_get_frame(PPDO_DEVICE_DATA pdodata, PURB urb)
+process_urb_get_frame(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_GET_CURRENT_FRAME_NUMBER	*urb_get = &urb->UrbGetCurrentFrameNumber;
-	UNREFERENCED_PARAMETER(pdodata);
+	UNREFERENCED_PARAMETER(vpdo);
 
 	urb_get->FrameNumber = 0;
 	return STATUS_SUCCESS;
 }
 
 static NTSTATUS
-process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
+process_irp_urb_req(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	if (urb == NULL) {
 		DBGE(DBG_IOCTL, "process_irp_urb_req: null urb\n");
@@ -61,11 +61,11 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_RESET_PIPE:
-		return process_urb_reset_pipe(pdodata);
+		return process_urb_reset_pipe(vpdo);
 	case URB_FUNCTION_ABORT_PIPE:
-		return process_urb_abort_pipe(pdodata, urb);
+		return process_urb_abort_pipe(vpdo, urb);
 	case URB_FUNCTION_GET_CURRENT_FRAME_NUMBER:
-		return process_urb_get_frame(pdodata, urb);
+		return process_urb_get_frame(vpdo, urb);
 	case URB_FUNCTION_SELECT_CONFIGURATION:
 	case URB_FUNCTION_ISOCH_TRANSFER:
 	case URB_FUNCTION_CLASS_DEVICE:
@@ -80,7 +80,7 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
 	case URB_FUNCTION_SELECT_INTERFACE:
-		return submit_urbr(pdodata, irp);
+		return submit_urbr(vpdo, irp);
 	default:
 		DBGW(DBG_IOCTL, "process_irp_urb_req: unhandled function: %s: len: %d\n",
 			dbg_urbfunc(urb->UrbHeader.Function), urb->UrbHeader.Length);
@@ -89,33 +89,33 @@ process_irp_urb_req(PPDO_DEVICE_DATA pdodata, PIRP irp, PURB urb)
 }
 
 PAGEABLE NTSTATUS
-Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION      irpStack;
 	NTSTATUS		status;
-	PPDO_DEVICE_DATA	pdoData;
-	PCOMMON_DEVICE_DATA	commonData;
+	pusbip_vpdo_dev_t	vpdo;
+	pdev_common_t		devcom;
 	ULONG			ioctl_code;
 
-	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+	devcom = (pdev_common_t)devobj->DeviceExtension;
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Enter\n");
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_internal_ioctl: Enter\n");
 
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
 
 	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 
-	if (commonData->IsFDO) {
-		DBGW(DBG_IOCTL, "internal ioctl for fdo is not allowed\n");
+	if (devcom->is_vhub) {
+		DBGW(DBG_IOCTL, "internal ioctl for vhub is not allowed\n");
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	pdoData = (PPDO_DEVICE_DATA)DeviceObject->DeviceExtension;
+	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
 
-	if (!pdoData->Present) {
+	if (!vpdo->Present) {
 		DBGW(DBG_IOCTL, "device is not connected\n");
 		Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -124,14 +124,14 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 
 	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
-		status = process_irp_urb_req(pdoData, Irp, (PURB)irpStack->Parameters.Others.Argument1);
+		status = process_irp_urb_req(vpdo, Irp, (PURB)irpStack->Parameters.Others.Argument1);
 		break;
 	case IOCTL_INTERNAL_USB_GET_PORT_STATUS:
 		status = STATUS_SUCCESS;
 		*(unsigned long *)irpStack->Parameters.Others.Argument1 = USBD_PORT_ENABLED | USBD_PORT_CONNECTED;
 		break;
 	case IOCTL_INTERNAL_USB_RESET_PORT:
-		status = submit_urbr(pdoData, Irp);
+		status = submit_urbr(vpdo, Irp);
 		break;
 	default:
 		DBGE(DBG_IOCTL, "unhandled internal ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
@@ -145,52 +145,47 @@ Bus_Internal_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	}
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Internal_Ioctl: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_internal_ioctl: Leave: %s\n", dbg_ntstatus(status));
 	return status;
 }
 
 PAGEABLE NTSTATUS
-Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	irpStack;
 	NTSTATUS			status;
 	ULONG				inlen, outlen;
 	ULONG				info = 0;
-	PFDO_DEVICE_DATA	fdoData;
+	pusbip_vhub_dev_t		vhub;
+	pdev_common_t			devcom;
 	PVOID				buffer;
-	PCOMMON_DEVICE_DATA	commonData;
 	ULONG				ioctl_code;
 
 	PAGED_CODE();
 
-	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+	devcom = (pdev_common_t)devobj->DeviceExtension;
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Ioctl: Enter\n");
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Enter\n");
 
-	//
-	// We only allow create/close requests for the FDO.
-	// That is the bus itself.
-	//
-	if (!commonData->IsFDO) {
-		DBGE(DBG_IOCTL, "ioctl for fdo is not allowed\n");
+	// We only allow create/close requests for the vhub.
+	if (!devcom->is_vhub) {
+		DBGE(DBG_IOCTL, "ioctl for vhub is not allowed\n");
 
 		Irp->IoStatus.Status = status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return status;
 	}
 
-	fdoData = (PFDO_DEVICE_DATA)DeviceObject->DeviceExtension;
+	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
 
 	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
 	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 
-	Bus_IncIoCount(fdoData);
+	inc_io_vhub(vhub);
 
-	//
 	// Check to see whether the bus is removed
-	//
-	if (fdoData->common.DevicePnPState == Deleted) {
+	if (vhub->common.DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
@@ -204,22 +199,22 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 	switch (ioctl_code) {
 	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
 		if (sizeof(ioctl_usbip_vhci_plugin) == inlen) {
-			status = bus_plugin_dev((ioctl_usbip_vhci_plugin *)buffer, fdoData, irpStack->FileObject);
+			status = vhci_plugin_dev((ioctl_usbip_vhci_plugin *)buffer, vhub, irpStack->FileObject);
 		}
 		break;
 	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
 		if (sizeof(ioctl_usbip_vhci_get_ports_status) == outlen) {
-			status = bus_get_ports_status((ioctl_usbip_vhci_get_ports_status *)buffer, fdoData, &info);
+			status = vhci_get_ports_status((ioctl_usbip_vhci_get_ports_status *)buffer, vhub, &info);
 		}
 		break;
 	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
 		if (sizeof(ioctl_usbip_vhci_unplug) == inlen) {
-			status = bus_unplug_dev(((ioctl_usbip_vhci_unplug *)buffer)->addr, fdoData);
+			status = vhci_unplug_dev(((ioctl_usbip_vhci_unplug *)buffer)->addr, vhub);
 		}
 		break;
 	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
 		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen) {
-			status = Bus_EjectDevice((PUSBIP_VHCI_EJECT_HARDWARE)buffer, fdoData);
+			status = vhci_eject_device((PUSBIP_VHCI_EJECT_HARDWARE)buffer, vhub);
 		}
 		break;
 	default:
@@ -231,9 +226,9 @@ Bus_IoCtl(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
 END:
 	Irp->IoStatus.Status = status;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	Bus_DecIoCount(fdoData);
+	dec_io_vhub(vhub);
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "Bus_Ioctl: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Leave: %s\n", dbg_ntstatus(status));
 
 	return status;
 }

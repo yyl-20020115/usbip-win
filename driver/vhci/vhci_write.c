@@ -5,7 +5,7 @@
 #include "usbd_helper.h"
 
 extern struct urb_req *
-find_sent_urbr(PPDO_DEVICE_DATA pdodata, struct usbip_header *hdr);
+find_sent_urbr(pusbip_vpdo_dev_t vpdo, struct usbip_header *hdr);
 
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
@@ -65,7 +65,7 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 }
 
 static NTSTATUS
-post_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
+post_select_config(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
 	USHORT	len;
@@ -79,24 +79,24 @@ post_select_config(PPDO_DEVICE_DATA pdodata, PURB urb)
 	}
 
 	RtlCopyMemory(dsc_conf, urb_selc->ConfigurationDescriptor, len);
-	if (pdodata->dsc_conf)
-		ExFreePoolWithTag(pdodata->dsc_conf, USBIP_VHCI_POOL_TAG);
-	pdodata->dsc_conf = dsc_conf;
+	if (vpdo->dsc_conf)
+		ExFreePoolWithTag(vpdo->dsc_conf, USBIP_VHCI_POOL_TAG);
+	vpdo->dsc_conf = dsc_conf;
 
-	return select_config(urb_selc, pdodata->speed);
+	return select_config(urb_selc, vpdo->speed);
 }
 
 static NTSTATUS
-post_select_interface(PPDO_DEVICE_DATA pdodata, PURB urb)
+post_select_interface(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
-	if (pdodata->dsc_conf == NULL) {
+	if (vpdo->dsc_conf == NULL) {
 		DBGW(DBG_WRITE, "post_select_interface: empty configuration descriptor\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	return select_interface(urb_seli, pdodata->dsc_conf, pdodata->speed);
+	return select_interface(urb_seli, vpdo->dsc_conf, vpdo->speed);
 }
 
 static NTSTATUS
@@ -229,7 +229,7 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 }
 
 static NTSTATUS
-process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *hdr)
+process_urb_res_submit(pusbip_vpdo_dev_t vpdo, PURB urb, struct usbip_header *hdr)
 {
 	NTSTATUS	status;
 
@@ -244,10 +244,10 @@ process_urb_res_submit(PPDO_DEVICE_DATA pdodata, PURB urb, struct usbip_header *
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {
 		case URB_FUNCTION_SELECT_CONFIGURATION:
-			status = post_select_config(pdodata, urb);
+			status = post_select_config(vpdo, urb);
 			break;
 		case URB_FUNCTION_SELECT_INTERFACE:
-			status = post_select_interface(pdodata, urb);
+			status = post_select_interface(vpdo, urb);
 			break;
 		default:
 			break;
@@ -269,7 +269,7 @@ process_urb_res(struct urb_req *urbr, struct usbip_header *hdr)
 
 	switch (ioctl_code) {
 	case IOCTL_INTERNAL_USB_SUBMIT_URB:
-		return process_urb_res_submit(urbr->pdodata, irpstack->Parameters.Others.Argument1, hdr);
+		return process_urb_res_submit(urbr->vpdo, irpstack->Parameters.Others.Argument1, hdr);
 	case IOCTL_INTERNAL_USB_RESET_PORT:
 		return STATUS_SUCCESS;
 	default:
@@ -294,7 +294,7 @@ get_usbip_hdr_from_write_irp(PIRP irp)
 }
 
 static NTSTATUS
-process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
+process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
 {
 	struct usbip_header	*hdr;
 	struct urb_req	*urbr;
@@ -307,7 +307,7 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	urbr = find_sent_urbr(pdodata, hdr);
+	urbr = find_sent_urbr(vpdo, hdr);
 	if (urbr == NULL) {
 		// Might have been cancelled before, so return STATUS_SUCCESS
 		DBGE(DBG_WRITE, "no urbr: seqnum: %d\n", hdr->base.seqnum);
@@ -334,49 +334,49 @@ process_write_irp(PPDO_DEVICE_DATA pdodata, PIRP irp)
 }
 
 PAGEABLE NTSTATUS
-Bus_Write(__in PDEVICE_OBJECT DeviceObject, __in PIRP Irp)
+vhci_write(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
+	pusbip_vhub_dev_t	vhub;
+	pusbip_vpdo_dev_t	vpdo;
+	pdev_common_t		devcom;
 	PIO_STACK_LOCATION	stackirp;
-	PFDO_DEVICE_DATA	fdoData;
-	PCOMMON_DEVICE_DATA	commonData;
-	PPDO_DEVICE_DATA	pdodata;
 	NTSTATUS		status;
 
 	PAGED_CODE();
 
-	commonData = (PCOMMON_DEVICE_DATA)DeviceObject->DeviceExtension;
+	devcom = (pdev_common_t)devobj->DeviceExtension;
 
-	DBGI(DBG_GENERAL | DBG_WRITE, "Bus_Write: Enter\n");
+	DBGI(DBG_GENERAL | DBG_WRITE, "vhci_write: Enter\n");
 
-	if (!commonData->IsFDO) {
-		DBGE(DBG_WRITE, "write for fdo is not allowed\n");
+	if (!devcom->is_vhub) {
+		DBGE(DBG_WRITE, "write for vhub is not allowed\n");
 
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	fdoData = (PFDO_DEVICE_DATA)DeviceObject->DeviceExtension;
+	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
 
-	Bus_IncIoCount(fdoData);
+	inc_io_vhub(vhub);
 
-	if (fdoData->common.DevicePnPState == Deleted) {
+	if (vhub->common.DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
 	stackirp = IoGetCurrentIrpStackLocation(Irp);
-	pdodata = stackirp->FileObject->FsContext;
-	if (pdodata == NULL || !pdodata->Present) {
+	vpdo = stackirp->FileObject->FsContext;
+	if (vpdo == NULL || !vpdo->Present) {
 		status = STATUS_INVALID_DEVICE_REQUEST;
 		goto END;
 	}
 	Irp->IoStatus.Information = 0;
-	status = process_write_irp(pdodata, Irp);
+	status = process_write_irp(vpdo, Irp);
 END:
-	DBGI(DBG_WRITE, "Bus_Write: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_WRITE, "vhci_write: Leave: %s\n", dbg_ntstatus(status));
 	Irp->IoStatus.Status = status;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	Bus_DecIoCount(fdoData);
+	dec_io_vhub(vhub);
 
 	return status;
 }

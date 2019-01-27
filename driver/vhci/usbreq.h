@@ -5,7 +5,7 @@
 
 #include "usb_cspkt.h"
 
-#include "device.h"
+#include "vhci_dev.h"
 
 #define PIPE2DIRECT(handle)	(((INT_PTR)(handle) & 0x80) ? USBIP_DIR_IN : USBIP_DIR_OUT)
 #define PIPE2ADDR(handle)	((unsigned char)((INT_PTR)(handle) & 0x7f))
@@ -13,7 +13,7 @@
 #define PIPE2INTERVAL(handle)	((unsigned char)(((INT_PTR)(handle) & 0xff00) >> 8))
 
 struct urb_req {
-	PPDO_DEVICE_DATA	pdodata;
+	pusbip_vpdo_dev_t	vpdo;
 	PIRP	irp;
 	KEVENT	*event;
 	unsigned long	seq_num;

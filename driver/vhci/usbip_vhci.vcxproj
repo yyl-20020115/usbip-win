@@ -23,7 +23,7 @@
     <ClCompile Include="vhci_dbg.c" />
     <ClCompile Include="vhci_devconf.c" />
     <ClCompile Include="vhci_ioctl.c" />
-    <ClCompile Include="vhci_pdo.c" />
+    <ClCompile Include="vhci_vpdo.c" />
     <ClCompile Include="vhci_read.c" />
     <ClCompile Include="vhci_write.c" />
     <ClCompile Include="vhci_plugin.c" />
@@ -39,7 +39,7 @@
     <ClInclude Include="basetype.h" />
     <ClInclude Include="vhci.h" />
     <ClInclude Include="vhci_dbg.h" />
-    <ClInclude Include="device.h" />
+    <ClInclude Include="vhci_dev.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="vhci_devconf.h" />
     <ClInclude Include="vhci_pnp.h" />

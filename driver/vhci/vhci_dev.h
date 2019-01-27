@@ -5,11 +5,11 @@
 
 #include "vhci_devconf.h"
 
-//
-// These are the states a PDO or FDO transition upon
+#define DEVOBJ_FROM_VPDO(vpdo)	((vpdo)->common.Self)
+
+// These are the states a vpdo or vhub transition upon
 // receiving a specific PnP Irp. Refer to the PnP Device States
 // diagram in DDK documentation for better understanding.
-//
 typedef enum _DEVICE_PNP_STATE {
 	NotStarted = 0,         // Not started yet
 	Started,                // Device has received the START_DEVICE IRP
@@ -21,25 +21,20 @@ typedef enum _DEVICE_PNP_STATE {
 	UnKnown                 // Unknown state
 } DEVICE_PNP_STATE;
 
-//
 // Structure for reporting data to WMI
-//
 typedef struct _USBIP_BUS_WMI_STD_DATA
 {
 	// The error Count
 	UINT32   ErrorCount;
 } USBIP_BUS_WMI_STD_DATA, *PUSBIP_BUS_WMI_STD_DATA;
 
-//
-// A common header for the device extensions of the PDOs and FDO
-//
-typedef struct _COMMON_DEVICE_DATA
-{
+// A common header for the device extensions of the vhub and vpdo
+typedef struct {
 	// A back pointer to the device object for which this is the extension
 	PDEVICE_OBJECT	Self;
 
-	// This flag helps distinguish between PDO and FDO
-	BOOLEAN		IsFDO;
+	// This flag helps distinguish between vhub and vpdo
+	BOOLEAN		is_vhub;
 
 	// We track the state of the device with every PnP Irp
 	// that affects the device through these two variables.
@@ -51,36 +46,74 @@ typedef struct _COMMON_DEVICE_DATA
 
 	// Stores current device power state
 	DEVICE_POWER_STATE	DevicePowerState;
-} COMMON_DEVICE_DATA, *PCOMMON_DEVICE_DATA;
+} dev_common_t, *pdev_common_t;
 
 struct urb_req;
 
-//
-// The device extension for the PDOs.
-// That's of the USBIP device which this bus driver enumerates.
-//
-typedef struct _PDO_DEVICE_DATA
+// The device extension of the vhub.  From whence vpdo's are born.
+typedef struct
 {
-	COMMON_DEVICE_DATA	common;
+	dev_common_t	common;
 
-	// A back pointer to the bus
-	PDEVICE_OBJECT	ParentFdo;
+	PDEVICE_OBJECT	UnderlyingPDO;
+
+	// The underlying bus PDO and the actual device object to which vhub is attached
+	PDEVICE_OBJECT	NextLowerDriver;
+
+	// List of vpdo's created so far
+	LIST_ENTRY	head_vpdo;
+
+	// the number of current vpdo's
+	ULONG		n_vpdos;
+
+	// A synchronization for access to the device extension.
+	FAST_MUTEX		Mutex;
+
+	// The number of IRPs sent from the bus to the underlying device object
+	LONG		OutstandingIO; // Biased to 1
+
+				       // On remove device plug & play request we must wait until all outstanding
+				       // requests have been completed before we can actually delete the device
+				       // object. This event is when the Outstanding IO count goes to zero
+	KEVENT		RemoveEvent;
+
+	// This event is set when the Outstanding IO count goes to 1.
+	KEVENT		StopEvent;
+
+	// The name returned from IoRegisterDeviceInterface,
+	// which is used as a handle for IoSetDeviceInterfaceState.
+	UNICODE_STRING	InterfaceName;
+
+	// WMI Information
+	WMILIB_CONTEXT	WmiLibInfo;
+
+	USBIP_BUS_WMI_STD_DATA	StdUSBIPBusData;
+} usbip_vhub_dev_t, *pusbip_vhub_dev_t;
+
+// The device extension for the vpdo.
+// That's of the USBIP device which this bus driver enumerates.
+typedef struct
+{
+	dev_common_t	common;
+
+	// A back reference to vhub
+	pusbip_vhub_dev_t	vhub;
 
 	// An array of (zero terminated wide character strings).
 	// The array itself also null terminated
 	USHORT	vendor, product, revision;
 	UCHAR	usbclass, subclass, protocol, inum;
 
-	// Unique serail number of the device on the bus
-	ULONG SerialNo;
+	// Unique serial number of the device on the bus
+	ULONG		SerialNo;
 
-	// Link point to hold all the PDOs for a single bus together
-	LIST_ENTRY  Link;
+	// Link point to hold all the vpdos for a single bus together
+	LIST_ENTRY	Link;
 
 	//
-	// Present is set to TRUE when the PDO is exposed via PlugIn IOCTL,
+	// Present is set to TRUE when the vpdo is exposed via PlugIn IOCTL,
 	// and set to FALSE when a UnPlug IOCTL is received.
-	// We will delete the PDO in IRP_MN_REMOVE only after we have reported
+	// We will delete the vpdo in IRP_MN_REMOVE only after we have reported
 	// to the Plug and Play manager that it's missing.
 	//
 	BOOLEAN		Present;
@@ -128,53 +161,7 @@ typedef struct _PDO_DEVICE_DATA
 	// The spin lock that protects access to  the queue
 
 	//KSPIN_LOCK	PendingQueueLock;
-} PDO_DEVICE_DATA, *PPDO_DEVICE_DATA;
+} usbip_vpdo_dev_t, *pusbip_vpdo_dev_t;
 
-//
-// The device extension of the bus itself.  From whence the PDO's are born.
-//
-typedef struct _FDO_DEVICE_DATA
-{
-	COMMON_DEVICE_DATA	common;
-
-	PDEVICE_OBJECT	UnderlyingPDO;
-
-	// The underlying bus PDO and the actual device object to which our
-	// FDO is attached
-	PDEVICE_OBJECT	NextLowerDriver;
-
-	// List of PDOs created so far
-	LIST_ENTRY		ListOfPDOs;
-
-	// The PDOs currently enumerated.
-	ULONG			NumPDOs;
-
-	// A synchronization for access to the device extension.
-	FAST_MUTEX		Mutex;
-
-	// The number of IRPs sent from the bus to the underlying device object
-	LONG		OutstandingIO; // Biased to 1
-
-	// On remove device plug & play request we must wait until all outstanding
-	// requests have been completed before we can actually delete the device
-	// object. This event is when the Outstanding IO count goes to zero
-	KEVENT		RemoveEvent;
-
-	// This event is set when the Outstanding IO count goes to 1.
-	KEVENT		StopEvent;
-
-	// The name returned from IoRegisterDeviceInterface,
-	// which is used as a handle for IoSetDeviceInterfaceState.
-	UNICODE_STRING	InterfaceName;
-
-	// WMI Information
-	WMILIB_CONTEXT	WmiLibInfo;
-
-	USBIP_BUS_WMI_STD_DATA	StdUSBIPBusData;
-} FDO_DEVICE_DATA, *PFDO_DEVICE_DATA;
-
-void
-Bus_IncIoCount(__in PFDO_DEVICE_DATA Data);
-
-void
-Bus_DecIoCount(__in PFDO_DEVICE_DATA Data);
+void inc_io_vhub(__in pusbip_vhub_dev_t vhub);
+void dec_io_vhub(__in pusbip_vhub_dev_t vhub);
