@@ -767,6 +767,10 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		status = vhci_QueryInterface_vpdo(vpdo, Irp);
 		break;
 	case IRP_MN_DEVICE_ENUMERATED:
+	//
+	// This request notifies bus drivers that a device object exists and
+	// that it has been fully enumerated by the plug and play manager.
+	//
 		status = STATUS_SUCCESS;
 		break;
 	case IRP_MN_QUERY_LEGACY_BUS_INFORMATION:
