@@ -134,7 +134,7 @@ vhci_cleanup(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 		vpdo->fo = NULL;
 		irpstack->FileObject->FsContext = NULL;
 		if (vpdo->Present)
-			vhci_unplug_dev(vpdo->SerialNo, vhub);
+			vhci_unplug_dev(vpdo->port, vhub);
 	}
 	status = STATUS_SUCCESS;
 	irp->IoStatus.Information = 0;

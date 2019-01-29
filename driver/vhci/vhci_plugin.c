@@ -22,23 +22,23 @@ vhci_init_vpdo(pusbip_vpdo_dev_t vpdo);
 PAGEABLE NTSTATUS
 vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo)
 {
-	PDEVICE_OBJECT      devobj;
-	pusbip_vpdo_dev_t    vpdo, devpdo_old;
-	NTSTATUS            status;
-	PLIST_ENTRY         entry;
+	PDEVICE_OBJECT		devobj;
+	pusbip_vpdo_dev_t	vpdo, devpdo_old;
+	PLIST_ENTRY	entry;
+	NTSTATUS	status;
 
 	PAGED_CODE();
 
-	DBGI(DBG_PNP, "Exposing vpdo: addr: %d, vendor:product: %04x:%04x\n", plugin->addr, plugin->vendor, plugin->product);
+	DBGI(DBG_IOCTL, "Plugin vpdo: port: %hhd, vendor:product: %04hx:%04hx\n", plugin->port, plugin->vendor, plugin->product);
 
-	if (plugin->addr <= 0)
+	if (plugin->port <= 0)
 		return STATUS_INVALID_PARAMETER;
 
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
 		vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-		if ((ULONG)plugin->addr == vpdo->SerialNo &&
+		if ((ULONG)plugin->port == vpdo->port &&
 			vpdo->common.DevicePnPState != SurpriseRemovePending) {
 			ExReleaseFastMutex(&vhub->Mutex);
 			return STATUS_INVALID_PARAMETER;
@@ -84,7 +84,7 @@ vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_O
 		IoDeleteDevice(devobj);
 		return STATUS_INVALID_PARAMETER;
 	}
-	vpdo->SerialNo = plugin->addr;
+	vpdo->port = plugin->port;
 	vpdo->fo = fo;
 	vpdo->devid = plugin->devid;
 	vpdo->speed = plugin->speed;

@@ -56,20 +56,20 @@ DEFINE_GUID(USBIP_NOTIFY_DEVICE_ARRIVAL_EVENT,
 
 typedef struct _ioctl_usbip_vhci_plugin
 {
-	unsigned int devid;
-	/* 4 bytes */
-	unsigned short vendor;
-	unsigned short product;
-	/* 8 bytes */
-	unsigned short version;
-	unsigned char speed;
-	unsigned char inum;
-	/* 12 bytes */
-	unsigned char class;
-	unsigned char subclass;
-	unsigned char protocol;
-	signed char addr;  /* then it can not be bigger then 127 */
-	/* 16 bytes */
+	unsigned int	devid;
+
+	unsigned short	vendor;
+	unsigned short	product;
+
+	unsigned short	version;
+	unsigned char	speed;
+	unsigned char	inum;
+
+	unsigned char	class;
+	unsigned char	subclass;
+	unsigned char	protocol;
+
+	signed char	port;
 } ioctl_usbip_vhci_plugin;
 
 typedef struct _ioctl_usbip_vhci_get_ports_status
@@ -93,7 +93,7 @@ typedef struct _USBIP_VHCI_EJECT_HARDWARE
 	// sizeof (struct _EJECT_HARDWARE)
 	ULONG	Size;
 
-	// Serial number of the device to be ejected
-	ULONG	SerialNo;
+	// port number of the device to be ejected
+	ULONG	port;
 	ULONG	Reserved[2];
 } USBIP_VHCI_EJECT_HARDWARE, *PUSBIP_VHCI_EJECT_HARDWARE;

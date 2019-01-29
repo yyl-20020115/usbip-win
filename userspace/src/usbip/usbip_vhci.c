@@ -2,6 +2,7 @@
 
 #include "usbip_common.h"
 #include "usbip_windows.h"
+#include "usbip_wudev.h"
 
 #include <stdlib.h>
 
@@ -101,22 +102,22 @@ usbip_vhci_get_free_port(HANDLE hdev)
 }
 
 int
-usbip_vhci_attach_device(HANDLE hdev, int port, struct usbip_usb_device *udev)
+usbip_vhci_attach_device(HANDLE hdev, int port, usbip_wudev_t *wudev)
 {
 	ioctl_usbip_vhci_plugin  plugin;
 	unsigned long	unused;
 
-	plugin.devid  = ((udev->busnum << 16) | udev->devnum);
-	plugin.vendor = udev->idVendor;
-	plugin.product = udev->idProduct;
-	plugin.version = udev->bcdDevice;
-	plugin.speed = udev->speed;
-	plugin.inum = udev->bNumInterfaces;
-	plugin.class = udev->bDeviceClass;
-	plugin.subclass = udev->bDeviceSubClass;
-	plugin.protocol = udev->bDeviceProtocol;
+	plugin.devid = wudev->devid;
+	plugin.vendor = wudev->idVendor;
+	plugin.product = wudev->idProduct;
+	plugin.version = wudev->bcdDevice;
+	plugin.speed = wudev->speed;
+	plugin.inum = wudev->bNumInterfaces;
+	plugin.class = wudev->bDeviceClass;
+	plugin.subclass = wudev->bDeviceSubClass;
+	plugin.protocol = wudev->bDeviceProtocol;
 
-	plugin.addr = port;
+	plugin.port = port;
 
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_PLUGIN_HARDWARE,
 		&plugin, sizeof(plugin), NULL, 0, &unused, NULL))

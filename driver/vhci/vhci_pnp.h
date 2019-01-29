@@ -11,4 +11,4 @@
         (_Data_)->common.DevicePnPState =   (_Data_)->common.PreviousPnPState;
 
 PAGEABLE NTSTATUS
-vhci_unplug_dev(int addr, pusbip_vhub_dev_t vhub);
+vhci_unplug_dev(ULONG port, pusbip_vhub_dev_t vhub);
