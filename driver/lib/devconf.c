@@ -5,17 +5,16 @@
 PUSB_INTERFACE_DESCRIPTOR
 dsc_find_intf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR intf_num, USHORT alt_setting)
 {
-	PVOID	start = dsc_conf;
+	return USBD_ParseConfigurationDescriptorEx(dsc_conf, dsc_conf, intf_num, alt_setting, -1, -1, -1);
+}
 
-	while (TRUE) {
-		PUSB_INTERFACE_DESCRIPTOR	dsc_intf = (PUSB_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, start, USB_INTERFACE_DESCRIPTOR_TYPE);
-		if (dsc_intf == NULL)
-			break;
-		if (dsc_intf->bInterfaceNumber == intf_num && dsc_intf->bAlternateSetting == alt_setting)
-			return dsc_intf;
-		start = NEXT_DESC(dsc_intf);
-	}
-	return NULL;
+PUSB_ENDPOINT_DESCRIPTOR
+dsc_next_ep(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PVOID start)
+{
+	PUSB_COMMON_DESCRIPTOR	dsc = (PUSB_COMMON_DESCRIPTOR)start;
+	if (dsc->bDescriptorType == USB_ENDPOINT_DESCRIPTOR_TYPE)
+		dsc = NEXT_DESC(dsc);
+	return (PUSB_ENDPOINT_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, dsc, USB_ENDPOINT_DESCRIPTOR_TYPE);
 }
 
 ULONG
