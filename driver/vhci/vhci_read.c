@@ -10,6 +10,9 @@ extern void
 set_cmd_submit_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid,
 	unsigned int direct, USBD_PIPE_HANDLE pipe, unsigned int flags, unsigned int len);
 
+void
+set_cmd_unlink_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid, unsigned long seqnum_unlink);
+
 static struct usbip_header *
 get_usbip_hdr_from_read_irp(PIRP irp)
 {
@@ -548,6 +551,21 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 	return status;
 }
 
+static NTSTATUS
+store_cancelled_urbr(PIRP irp, struct urb_req *urbr)
+{
+	struct usbip_header	*hdr;
+
+	hdr = get_usbip_hdr_from_read_irp(irp);
+	if (hdr == NULL)
+		return STATUS_INVALID_PARAMETER;
+
+	set_cmd_unlink_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, urbr->seq_num_unlink);
+
+	irp->IoStatus.Information = sizeof(struct usbip_header);
+	return STATUS_SUCCESS;
+}
+
 NTSTATUS
 store_urbr(PIRP irp, struct urb_req *urbr)
 {
@@ -556,6 +574,10 @@ store_urbr(PIRP irp, struct urb_req *urbr)
 	NTSTATUS	status;
 
 	DBGI(DBG_READ, "store_urbr: urbr: %s\n", dbg_urbr(urbr));
+
+	if (urbr->irp == NULL) {
+		return store_cancelled_urbr(irp, urbr);
+	}
 
 	irpstack = IoGetCurrentIrpStackLocation(urbr->irp);
 	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
@@ -617,9 +639,11 @@ process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 		RemoveEntryList(&urbr->list_all);
 		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
-		IoSetCancelRoutine(urbr->irp, NULL);
-		urbr->irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
-		IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
+		if (urbr->irp != NULL) {
+			IoSetCancelRoutine(urbr->irp, NULL);
+			urbr->irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+			IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
+		}
 		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 	}
 	else {

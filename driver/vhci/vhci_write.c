@@ -142,6 +142,9 @@ store_urb_vendor_or_class(PURB urb, struct usbip_header *hdr)
 			urb_vendor_class->TransferBufferLength = hdr->u.ret_submit.actual_length;
 		return status;
 	}
+	else {
+		urb_vendor_class->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	}
 	return STATUS_SUCCESS;
 }
 
@@ -262,6 +265,9 @@ process_urb_res(struct urb_req *urbr, struct usbip_header *hdr)
 	PIO_STACK_LOCATION	irpstack;
 	ULONG	ioctl_code;
 
+	if (urbr->irp == NULL)
+		return STATUS_SUCCESS;
+
 	irpstack = IoGetCurrentIrpStackLocation(urbr->irp);
 	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
 
@@ -316,18 +322,19 @@ process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
 
 	status = process_urb_res(urbr, hdr);
 
-	IoSetCancelRoutine(urbr->irp, NULL);
-	urbr->irp->IoStatus.Status = status;
+	if (urbr->irp != NULL) {
+		IoSetCancelRoutine(urbr->irp, NULL);
+		urbr->irp->IoStatus.Status = status;
 
-	/* it seems windows client usb driver will think
-	 * IoCompleteRequest is running at DISPATCH_LEVEL
-	 * so without this it will change IRQL sometimes,
-	 * and introduce to a dead of my userspace program
-	 */
-	KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-	IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
-	KeLowerIrql(oldirql);
-
+		/* it seems windows client usb driver will think
+		 * IoCompleteRequest is running at DISPATCH_LEVEL
+		 * so without this it will change IRQL sometimes,
+		 * and introduce to a dead of my userspace program
+		 */
+		KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+		IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
+		KeLowerIrql(oldirql);
+	}
 	ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 
 	return STATUS_SUCCESS;

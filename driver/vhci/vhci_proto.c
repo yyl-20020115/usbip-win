@@ -35,3 +35,14 @@ set_cmd_submit_usbip_header(struct usbip_header *h, unsigned long seqnum, unsign
 	h->u.cmd_submit.number_of_packets = 0;
 	h->u.cmd_submit.interval = PIPE2INTERVAL(pipe);
 }
+
+void
+set_cmd_unlink_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid, unsigned long seqnum_unlink)
+{
+	h->base.command = USBIP_CMD_UNLINK;
+	h->base.seqnum = seqnum;
+	h->base.devid = devid;
+	h->base.direction = USBIP_DIR_OUT;
+	h->base.ep = 0;
+	h->u.cmd_unlink.seqnum = seqnum_unlink;
+}
