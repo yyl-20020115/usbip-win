@@ -41,13 +41,13 @@ get_read_irp_data(PIRP irp, ULONG length)
 	return (PVOID)irp->AssociatedIrp.SystemBuffer;
 }
 
-static int
-get_read_irp_length(PIRP irp)
+static ULONG
+get_read_payload_length(PIRP irp)
 {
 	PIO_STACK_LOCATION	irpstack;
 
 	irpstack = IoGetCurrentIrpStackLocation(irp);
-	return irpstack->Parameters.Read.Length;
+	return irpstack->Parameters.Read.Length - sizeof(struct usbip_header);
 }
 
 static NTSTATUS
@@ -236,8 +236,7 @@ store_urb_class_vendor(PIRP irp, PURB urb, struct urb_req *urbr)
 	irp->IoStatus.Information = sizeof(struct usbip_header);
 
 	if (!in) {
-		ULONG	len = (ULONG)(get_read_irp_length(irp) - sizeof(struct usbip_header));
-		if (len >= urb_vc->TransferBufferLength) {
+		if (get_read_payload_length(irp) >= urb_vc->TransferBufferLength) {
 			RtlCopyMemory(hdr + 1, urb_vc->TransferBuffer, urb_vc->TransferBufferLength);
 			irp->IoStatus.Information += urb_vc->TransferBufferLength;
 		}
@@ -344,8 +343,7 @@ store_urb_bulk(PIRP irp, PURB urb, struct urb_req *urbr)
 	irp->IoStatus.Information = sizeof(struct usbip_header);
 
 	if (!in) {
-		ULONG	len = (ULONG)(get_read_irp_length(irp) - sizeof(struct usbip_header));
-		if (len >= urb_bi->TransferBufferLength) {
+		if (get_read_payload_length(irp) >= urb_bi->TransferBufferLength) {
 			PVOID	buf = get_buf(urb_bi->TransferBuffer, urb_bi->TransferBufferMDL);
 			if (buf == NULL)
 				return STATUS_INSUFFICIENT_RESOURCES;
@@ -369,9 +367,14 @@ copy_iso_data(PVOID dst, struct _URB_ISOCH_TRANSFER *urb_iso)
 	if (buf == NULL)
 		return STATUS_INSUFFICIENT_RESOURCES;
 
-	RtlCopyMemory(dst, buf, urb_iso->TransferBufferLength);
+	if (PIPE2DIRECT(urb_iso->PipeHandle)) {
+		iso_desc = (struct usbip_iso_packet_descriptor *)dst;
+	}
+	else {
+		RtlCopyMemory(dst, buf, urb_iso->TransferBufferLength);
+		iso_desc = (struct usbip_iso_packet_descriptor *)((char *)dst + urb_iso->TransferBufferLength);
+	}
 
-	iso_desc = (struct usbip_iso_packet_descriptor *)((char *)dst + urb_iso->TransferBufferLength);
 	offset = 0;
 	for (i = 0; i < urb_iso->NumberOfPackets; i++) {
 		if (urb_iso->IsoPacket[i].Offset < offset) {
@@ -391,20 +394,34 @@ copy_iso_data(PVOID dst, struct _URB_ISOCH_TRANSFER *urb_iso)
 	return STATUS_SUCCESS;
 }
 
+static ULONG
+get_iso_payload_len(struct _URB_ISOCH_TRANSFER *urb_iso)
+{
+	ULONG	len_iso;
+
+	len_iso = urb_iso->NumberOfPackets * sizeof(struct usbip_iso_packet_descriptor);
+	if (!PIPE2DIRECT(urb_iso->PipeHandle)) {
+		len_iso += urb_iso->TransferBufferLength;
+	}
+	return len_iso;
+}
+
 static NTSTATUS
 store_urb_iso_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_ISOCH_TRANSFER	*urb_iso = &urb->UrbIsochronousTransfer;
-	ULONG	len_iso = urb_iso->TransferBufferLength + urb_iso->NumberOfPackets * sizeof(struct usbip_iso_packet_descriptor);
+	ULONG	len_iso;
 	PVOID	dst;
+
+	len_iso = get_iso_payload_len(urb_iso);
 
 	dst = get_read_irp_data(irp, len_iso);
 	if (dst == NULL)
 		return STATUS_BUFFER_TOO_SMALL;
 
 	copy_iso_data(dst, urb_iso);
-	irp->IoStatus.Information = len_iso;
 	vpdo->len_sent_partial = 0;
+	irp->IoStatus.Information = len_iso;
 
 	return STATUS_SUCCESS;
 }
@@ -436,16 +453,12 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	irp->IoStatus.Information = sizeof(struct usbip_header);
 
-	if (!in) {
-		ULONG	len_irp = (ULONG)(get_read_irp_length(irp) - sizeof(struct usbip_header));
-		ULONG	len_iso = urb_iso->TransferBufferLength + urb_iso->NumberOfPackets * sizeof(struct usbip_iso_packet_descriptor);
-		if (len_irp >= len_iso) {
-			copy_iso_data(hdr + 1, urb_iso);
-			irp->IoStatus.Information += len_iso;
-		}
-		else {
-			urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
-		}
+	if (get_read_payload_length(irp) >= get_iso_payload_len(urb_iso)) {
+		copy_iso_data(hdr + 1, urb_iso);
+		irp->IoStatus.Information += get_iso_payload_len(urb_iso);
+	}
+	else {
+		urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
 	}
 
 	return STATUS_SUCCESS;
@@ -464,14 +477,14 @@ store_urbr_submit(PIRP irp, struct urb_req *urbr)
 	irpstack = IoGetCurrentIrpStackLocation(urbr->irp);
 	urb = irpstack->Parameters.Others.Argument1;
 	if (urb == NULL) {
-		DBGE(DBG_READ, "process_urb_req_submit: null urb\n");
+		DBGE(DBG_READ, "store_urbr_submit: null urb\n");
 
 		irp->IoStatus.Information = 0;
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
 	code_func = urb->UrbHeader.Function;
-	DBGI(DBG_READ, "process_urb_req_submit: urbr: %s, func:%s\n", dbg_urbr(urbr), dbg_urbfunc(code_func));
+	DBGI(DBG_READ, "store_urbr_submit: urbr: %s, func:%s\n", dbg_urbr(urbr), dbg_urbfunc(code_func));
 
 	switch (code_func) {
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
