@@ -49,9 +49,18 @@ static NTSTATUS
 setup_endpoints(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PUSB_INTERFACE_DESCRIPTOR dsc_intf, UCHAR speed)
 {
 	PVOID	start = dsc_intf;
+	ULONG	n_pipes_setup;
 	unsigned int	i;
 
-	for (i = 0; i < intf->NumberOfPipes; i++) {
+	n_pipes_setup = (intf->Length - sizeof(USBD_INTERFACE_INFORMATION)) / sizeof(USBD_PIPE_INFORMATION) + 1;
+	if (n_pipes_setup < intf->NumberOfPipes) {
+		DBGW(DBG_URB, "insufficient interface information size: %u < %u\n", n_pipes_setup, intf->NumberOfPipes);
+	}
+	else {
+		n_pipes_setup = intf->NumberOfPipes;
+	}
+
+	for (i = 0; i < n_pipes_setup; i++) {
 		PUSB_ENDPOINT_DESCRIPTOR	dsc_ep;
 
 		dsc_ep = dsc_next_ep(dsc_conf, start);
@@ -61,8 +70,9 @@ setup_endpoints(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR 
 		}
 
 		set_pipe(&intf->Pipes[i], dsc_ep, speed);
-		DBGI(DBG_IOCTL, "ep setup: %s\n", dbg_pipe(&intf->Pipes[i]));
+		DBGI(DBG_IOCTL, "ep setup[%u]: %s\n", i, dbg_pipe(&intf->Pipes[i]));
 		start = dsc_ep;
+
 	}
 	return TRUE;
 }
@@ -83,22 +93,12 @@ setup_intf(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR dsc_c
 		DBGW(DBG_IOCTL, "no interface desc\n");
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
-	if (dsc_intf->bNumEndpoints != intf->NumberOfPipes) {
-		DBGW(DBG_IOCTL, "numbers of pipes are not same:(%d,%d)\n", dsc_intf->bNumEndpoints, intf->NumberOfPipes);
-		return STATUS_INVALID_DEVICE_REQUEST;
-	}
-
-	if (intf->NumberOfPipes > 0) {
-		if (sizeof(USBD_INTERFACE_INFORMATION) + (intf->NumberOfPipes - 1) * sizeof(USBD_PIPE_INFORMATION) > intf->Length) {
-			DBGE(DBG_URB, "insufficient interface information size\n");
-			return STATUS_INVALID_PARAMETER;
-		}
-	}
 
 	intf->Class = dsc_intf->bInterfaceClass;
 	intf->SubClass = dsc_intf->bInterfaceSubClass;
 	intf->Protocol = dsc_intf->bInterfaceProtocol;
 	intf->InterfaceHandle = TO_INTF_HANDLE(intf->InterfaceNumber, intf->AlternateSetting);
+	intf->NumberOfPipes = dsc_intf->bNumEndpoints;
 
 	if (!setup_endpoints(intf, dsc_conf, dsc_intf, speed))
 		return STATUS_INVALID_DEVICE_REQUEST;
