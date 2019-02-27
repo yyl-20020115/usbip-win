@@ -335,7 +335,7 @@ process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
 		IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
 		KeLowerIrql(oldirql);
 	}
-	ExFreeToNPagedLookasideList(&g_lookaside, urbr);
+	free_urbr(urbr);
 
 	return STATUS_SUCCESS;
 }

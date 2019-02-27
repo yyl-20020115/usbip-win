@@ -21,6 +21,8 @@ struct urb_req {
 	LIST_ENTRY	list_state;
 };
 
+#define RemoveEntryListInit(le)	do { RemoveEntryList(le); InitializeListHead(le); } while (0)
+
 extern void
 build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type, unsigned char recip, unsigned char request);
 
@@ -29,3 +31,5 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr);
 
 extern struct urb_req *
 create_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp, unsigned long seq_num_unlink);
+extern void
+free_urbr(struct urb_req *urbr);

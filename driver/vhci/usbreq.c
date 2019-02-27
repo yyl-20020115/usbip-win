@@ -44,8 +44,8 @@ find_sent_urbr(pusbip_vpdo_dev_t vpdo, struct usbip_header *hdr)
 		struct urb_req	*urbr;
 		urbr = CONTAINING_RECORD(le, struct urb_req, list_state);
 		if (urbr->seq_num == hdr->base.seqnum) {
-			RemoveEntryList(le);
-			RemoveEntryList(&urbr->list_all);
+			RemoveEntryListInit(&urbr->list_all);
+			RemoveEntryListInit(&urbr->list_state);
 			KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 			return urbr;
 		}
@@ -65,8 +65,7 @@ find_pending_urbr(pusbip_vpdo_dev_t vpdo)
 
 	urbr = CONTAINING_RECORD(vpdo->head_urbr_pending.Flink, struct urb_req, list_state);
 	urbr->seq_num = ++(vpdo->seq_num);
-	RemoveEntryList(&urbr->list_state);
-	InitializeListHead(&urbr->list_state);
+	RemoveEntryListInit(&urbr->list_state);
 	return urbr;
 }
 
@@ -96,7 +95,7 @@ submit_urbr_unlink(pusbip_vpdo_dev_t vpdo, unsigned long seq_num_unlink)
 		NTSTATUS	status = submit_urbr(vpdo, urbr_unlink);
 		if (NT_ERROR(status)) {
 			DBGI(DBG_GENERAL, "failed to submit unlink urb: %s\n", dbg_urbr(urbr_unlink));
-			ExFreeToNPagedLookasideList(&g_lookaside, urbr_unlink);
+			free_urbr(urbr_unlink);
 		}
 	}
 }
@@ -111,8 +110,8 @@ remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 
 	urbr = find_urbr_with_irp(vpdo, irp);
 	if (urbr != NULL) {
-		RemoveEntryList(&urbr->list_state);
-		RemoveEntryList(&urbr->list_all);
+		RemoveEntryListInit(&urbr->list_state);
+		RemoveEntryListInit(&urbr->list_all);
 		if (vpdo->urbr_sent_partial == urbr) {
 			vpdo->urbr_sent_partial = NULL;
 			vpdo->len_sent_partial = 0;
@@ -128,7 +127,7 @@ remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 		submit_urbr_unlink(vpdo, urbr->seq_num);
 
 		DBGI(DBG_GENERAL, "cancelled urb destroyed: %s\n", dbg_urbr(urbr));
-		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
+		free_urbr(urbr);
 	}
 }
 
@@ -161,7 +160,17 @@ create_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp, unsigned long seq_num_unlink)
 	urbr->vpdo = vpdo;
 	urbr->irp = irp;
 	urbr->seq_num_unlink = seq_num_unlink;
+	InitializeListHead(&urbr->list_all);
+	InitializeListHead(&urbr->list_state);
 	return urbr;
+}
+
+void
+free_urbr(struct urb_req *urbr)
+{
+	ASSERT(IsListEmpty(&urbr->list_all));
+	ASSERT(IsListEmpty(&urbr->list_state));
+	ExFreeToNPagedLookasideList(&g_lookaside, urbr);
 }
 
 NTSTATUS

@@ -649,7 +649,7 @@ process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 	}
 
 	if (status != STATUS_SUCCESS) {
-		RemoveEntryList(&urbr->list_all);
+		RemoveEntryListInit(&urbr->list_all);
 		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 		if (urbr->irp != NULL) {
@@ -657,7 +657,7 @@ process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 			urbr->irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
 			IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
 		}
-		ExFreeToNPagedLookasideList(&g_lookaside, urbr);
+		free_urbr(urbr);
 	}
 	else {
 		if (vpdo->len_sent_partial == 0) {
