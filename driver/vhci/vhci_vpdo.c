@@ -8,6 +8,11 @@
 #include "vhci_pnp.h"
 #include "usbip_proto.h"
 
+// IRP_MN_DEVICE_ENUMERATED is included by default since Windows 7.
+#if WINVER<0x0701
+#define IRP_MN_DEVICE_ENUMERATED 0x19
+#endif
+
 #define USBIP_DEVICE_DESC	L"USB Device Over IP"
 #define USBIP_DEVICE_LOCINFO	L"on USB/IP VHCI"
 
@@ -767,6 +772,10 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		status = vhci_QueryInterface_vpdo(vpdo, Irp);
 		break;
 	case IRP_MN_DEVICE_ENUMERATED:
+	//
+	// This request notifies bus drivers that a device object exists and
+	// that it has been fully enumerated by the plug and play manager.
+	//
 		status = STATUS_SUCCESS;
 		break;
 	case IRP_MN_QUERY_LEGACY_BUS_INFORMATION:
