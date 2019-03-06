@@ -112,7 +112,7 @@ get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pgui
 		return NULL;
 	}
 
-	pdev_interface_detail->cbSize = sizeof(PSP_DEVICE_INTERFACE_DETAIL_DATA);
+	pdev_interface_detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
 
 	// Try to get device details.
 	if (!SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data,
