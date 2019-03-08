@@ -1,36 +1,43 @@
 # USB/IP for Windows
 
-- This project aims to support both a usbip server and a client on windows platform.
+- This project aims to support both a USBIP server and a client on Windows platform.
+
 
 ## Build
+
+### Notes
+- Build is tested on Windows 10 x64 and the projects are configured for this target by default.
+- x86/x64 platforms should be supported. However, we don't have an x86 setup for testing at the moment.
+- For Windows 7 users, change usbip\_stub and usbip\_vhci projects' Target OS version to Windows 7.
+  - Right-click on the project > Properties > Driver Settings > Target OS version > Windows 7
 
 ### Build Tools
 - Visual Studio 2017 Community
 - Windows SDK 10.0.17134
 - Windows Driver Kit 10.0.17134
-- Build is tested on Win10
 
 ### Build Process
 - Open usbip_win.sln
-- Set certificate driver signing for usbip\_stub, usbip\_vhci project
-  - Use driver/usbip\_test.pfx for testing usbip-win
-- Build solution
-- x86/x64 platforms are supported
+- Set certificate driver signing for usbip\_stub and usbip\_vhci projects.
+  - Right-click on the project > Properties > Driver Signing > Test Certificate
+  - Browse to driver/usbip\_test.pfx
+- Build solution or desired project.
+
 - All output files are created under {Debug,Release}/{x64,x86} folder
 
 ## Install
 
 ### Usbip server
 
-- Prepare a linux machine as a usbip client
+- Prepare a linux machine as a USBIP client
   - tested on Ubuntu 16.04
   - Kernel 4.15.0-29 (usbip kernel module crash was observed on some other version)
   - \# modprobe vhci-hcd
-  
+
 - Install USBIP test certificate
   - Install driver/usbip\_test.pfx(password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" and "Trusted Publishers"
-    on local machine(not current user)
+    on local machine (not current user)
 - Enable test signing
   - bcdedit.exe /set TESTSIGNING ON
   - reboot the system to apply
@@ -63,7 +70,7 @@
 - Attach usbip device on linux machine
   - \# usbip attach -r &lt;usbip server ip&gt; -p 1-59
 
-### Usbip client
+### USBIP client
 
 - Prepare a linux machine as a usbip server
   - tested on Ubuntu 16.04(Kernerl 4.15.0-29)
