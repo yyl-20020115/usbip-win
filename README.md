@@ -1,6 +1,6 @@
 # USB/IP for Windows
 
-- This project aims to support both a USBIP server and a client on Windows platform.
+- This project aims to support both a USB/IP server and a client on Windows platform.
 
 
 ## Build
@@ -27,15 +27,15 @@
 
 ## Install
 
-### Usbip server
+### Windows USB/IP server
 
-- Prepare a linux machine as a USBIP client
-  - tested on Ubuntu 16.04
-  - Kernel 4.15.0-29 (usbip kernel module crash was observed on some other version)
+- Prepare a linux machine as a USB/IP client
+  - Tested on Ubuntu 16.04
+  - Kernel 4.15.0-29 (USB/IP kernel module crash was observed on some other version)
   - \# modprobe vhci-hcd
 
-- Install USBIP test certificate
-  - Install driver/usbip\_test.pfx(password: usbip)
+- Install USB/IP test certificate
+  - Install driver/usbip\_test.pfx (password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" and "Trusted Publishers"
     on local machine (not current user)
 - Enable test signing
@@ -45,49 +45,51 @@
   - You can find usbip.exe, usbipd.exe, usbip\_stub.sys in output folder.
   - userspace/usb.ids
   - driver/stub/usbip\_stub.inx
-- Find usb device id
+- Find USB device id
   - You can get device id from usbip listing
-    - &lt;target dir&gt;\usbip.exe list -l
+    - usbip.exe list -l
   - Bus id is always 1. So output from usbip.exe listing is shown as:
 
 <pre><code>
-    C:\work\usbip.exe list -l
+    usbip.exe list -l
       - busid 1-59 (045e:00cb)
         Microsoft Corp. : Basic Optical Mouse v2.0 (045e:00cb)
       - busid 1-30 (80ee:0021)
         VirtualBox : USB Tablet (80ee:0021)
 </code></pre>
 
-- Bind usb device to usbip stub
+- Bind USB device to usbip stub
   - This command replaces an existing function driver with usbip stub driver
-  - Should be executed with an administrator privilege
-  - usbip bind -b 1-59
-  - usbip\_stub.inx, usbip\_stub.sys files should be exist in the same folder with usbip.exe
+	- This should be executed using administrator privilege
+	- usbip\_stub.inx and usbip\_stub.sys files should be in the same folder as usbip.exe
+  - usbip.exe bind -b 1-59
 - Run usbipd.exe
   - usbipd.exe -d -4
-  - TCP port 3240 should be allowed by firewall
+	- TCP port 3240 should be allowed by firewall
 
-- Attach usbip device on linux machine
+- Attach USB/IP device on linux machine
   - \# usbip attach -r &lt;usbip server ip&gt; -p 1-59
 
-### USBIP client
+### Windows USB/IP client
 
-- Prepare a linux machine as a usbip server
+- Prepare a linux machine as a USB/IP server
   - tested on Ubuntu 16.04(Kernerl 4.15.0-29)
   - \# modprobe usbip-host
 
-- Run usbipd on a usbip server(Linux)
+- Run usbipd on a USB/IP server(Linux)
   - \# usbipd -4 -d
 
-- Install USBIP test certificate
+- Install USB/IP test certificate
   - Install driver/usbip\_test.pfx(password: usbip)
   - Certificate should be installed into "Trusted Root Certification Authority" on local machine(not current user)
 - Enable test signing
+  - bcdedit.exe /set TESTSIGNING ON
+  - reboot the system to apply
 - Copy usbip.exe, usbip\_vhci.sys, usbip\_vhci.inf, usbip\_vhci.cer, usbip\_vhci.cat into a folder in target machine
   - You can find usbip.exe, usbip\_vhci.sys, usbip\_vhci.cer, usbip\_vhci.inf in output folder.
   - usbip\_vhci.cat can be found from usbip\_vhci subfolder of output folder
-- Install USBIP vhci driver
-  - Start a device manager
+- Install USB/IP vhci driver
+  - Start Device manager
   - Choose "Add Legacy Hardware" from the "Action" menu.
   - Select 'Install the hardware that I manually select from the list'.
   - Click 'Next'.
@@ -95,7 +97,7 @@
   - Click on the 'USB/IP VHCI, and then click Next.
   - Click Finish at 'Completing the Add/Remove Hardware Wizard.'
 - Attach a remote USB device
-  - C:\usbip.exe attach -r &lt;usbip server ip&gt; -b 2-2
+  - usbip.exe attach -r &lt;usbip server ip&gt; -b 2-2
 
 <hr>
 <sub>This project was supported by Basic Science Research Program through the National Research Foundation of Korea(NRF) funded by the Ministry of Education(2016R1A6A3A11930295).</sub>
