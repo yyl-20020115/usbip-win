@@ -2,6 +2,7 @@
 
 #include "usbip_proto.h"
 #include "usbreq.h"
+#include "usbd_helper.h"
 
 extern struct urb_req *
 find_pending_urbr(pusbip_vpdo_dev_t vpdo);
@@ -69,6 +70,36 @@ store_urb_reset_dev(PIRP irp, struct urb_req *urbr)
 	csp->wLength = 0;
 	csp->wValue.LowByte = 4; // Reset
 	csp->wIndex.W = 0;
+
+	irp->IoStatus.Information = sizeof(struct usbip_header);
+
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_reset_pipe(PIRP irp, PURB urb, struct urb_req *urbr)
+{
+	struct _URB_PIPE_REQUEST	*urb_rp = &urb->UrbPipeRequest;
+	struct usbip_header	*hdr;
+	int	in, type;
+
+	hdr = get_usbip_hdr_from_read_irp(irp);
+	if (hdr == NULL) {
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+
+	in = PIPE2DIRECT(urb_rp->PipeHandle);
+	type = PIPE2TYPE(urb_rp->PipeHandle);
+	if (type != USB_ENDPOINT_TYPE_BULK && type != USB_ENDPOINT_TYPE_INTERRUPT) {
+		DBGE(DBG_READ, "Error, not a bulk pipe\n");
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, in, urb_rp->PipeHandle, 0, 0);
+	RtlZeroMemory(hdr->u.cmd_submit.setup, 8);
+
+	usb_cspkt_t *csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
+	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_ENDPOINT, USB_REQUEST_RESET_PIPE);
 
 	irp->IoStatus.Information = sizeof(struct usbip_header);
 
@@ -248,8 +279,9 @@ store_urb_class_vendor(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_select_config(PIRP irp, struct urb_req *urbr)
+store_urb_select_config(PIRP irp, PURB urb, struct urb_req *urbr)
 {
+	struct _URB_SELECT_CONFIGURATION	*urb_sc = &urb->UrbSelectConfiguration;
 	struct usbip_header	*hdr;
 	usb_cspkt_t	*csp;
 
@@ -263,7 +295,7 @@ store_urb_select_config(PIRP irp, struct urb_req *urbr)
 	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_DEVICE, USB_REQUEST_SET_CONFIGURATION);
 	csp->wLength = 0;
-	csp->wValue.W = 1;
+	csp->wValue.W = urb_sc->ConfigurationDescriptor->bConfigurationValue;
 	csp->wIndex.W = 0;
 
 	irp->IoStatus.Information = sizeof(struct usbip_header);
@@ -509,10 +541,13 @@ store_urbr_submit(PIRP irp, struct urb_req *urbr)
 		status = store_urb_class_vendor(irp, urb, urbr);
 		break;
 	case URB_FUNCTION_SELECT_CONFIGURATION:
-		status = store_urb_select_config(irp, urbr);
+		status = store_urb_select_config(irp, urb, urbr);
 		break;
 	case URB_FUNCTION_SELECT_INTERFACE:
 		status = store_urb_select_interface(irp, urb, urbr);
+		break;
+	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
+		status = store_urb_reset_pipe(irp, urb, urbr);
 		break;
 	default:
 		irp->IoStatus.Information = 0;

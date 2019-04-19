@@ -219,6 +219,9 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 	case URB_FUNCTION_SELECT_INTERFACE:
 		status = STATUS_SUCCESS;
 		break;
+	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
+		status = STATUS_SUCCESS;
+		break;
 	default:
 		DBGE(DBG_WRITE, "not supported func: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
 		status = STATUS_INVALID_PARAMETER;
@@ -241,6 +244,9 @@ process_urb_res_submit(pusbip_vpdo_dev_t vpdo, PURB urb, struct usbip_header *hd
 
 	if (hdr->u.ret_submit.status != 0) {
 		urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
+		if (urb->UrbHeader.Function == URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER) {
+			urb->UrbBulkOrInterruptTransfer.TransferBufferLength = hdr->u.ret_submit.actual_length;
+		}
 		return STATUS_UNSUCCESSFUL;
 	}
 	status = store_urb_data(urb, hdr);

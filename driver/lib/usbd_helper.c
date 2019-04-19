@@ -15,7 +15,7 @@ to_usbd_status(int usbip_status)
 		return USBD_STATUS_SUCCESS;
 		/* I guess it */
 	case -EPIPE:
-		return USBD_STATUS_ENDPOINT_HALTED;
+		return USBD_STATUS_STALL_PID;
 	case -EOVERFLOW:
 		return USBD_STATUS_DATA_OVERRUN;
 	case -EREMOTEIO:

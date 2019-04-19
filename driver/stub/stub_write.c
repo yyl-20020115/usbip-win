@@ -329,6 +329,28 @@ process_data_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 	}
 }
 
+static void
+process_reset_pipe(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
+{
+	PUSBD_PIPE_INFORMATION	info_pipe;
+	UCHAR	epaddr;
+
+	epaddr = get_epaddr_from_hdr(hdr);
+	info_pipe = get_info_pipe(devstub->devconf, epaddr);
+	if (info_pipe == NULL) {
+		DBGW(DBG_READWRITE, "reset_pipe: non-existent pipe: %hhx\n", epaddr);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
+		return;
+	}
+
+	DBGI(DBG_READWRITE, "reset pipe: pipeHandle = %p\n", info_pipe->PipeHandle);
+
+	if (NT_SUCCESS(reset_pipe(devstub, info_pipe->PipeHandle)))
+		reply_stub_req_data(devstub, hdr->base.seqnum, NULL, 0, FALSE);
+	else
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -8);
+}
+
 static NTSTATUS
 process_cmd_submit(usbip_stub_dev_t *devstub, PIRP irp, struct usbip_header *hdr)
 {
@@ -338,7 +360,13 @@ process_cmd_submit(usbip_stub_dev_t *devstub, PIRP irp, struct usbip_header *hdr
 		process_control_transfer(devstub, hdr);
 	}
 	else {
-		process_data_transfer(devstub, hdr);
+		usb_cspkt_t *csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
+		if (CSPKT_REQUEST_TYPE(csp) == BMREQUEST_STANDARD && CSPKT_RECIPIENT(csp) == BMREQUEST_TO_ENDPOINT && CSPKT_REQUEST(csp) == USB_REQUEST_RESET_PIPE) {
+			process_reset_pipe(devstub, hdr);
+		}
+		else {
+			process_data_transfer(devstub, hdr);
+		}
 	}
 
 	irpstack = IoGetCurrentIrpStackLocation(irp);

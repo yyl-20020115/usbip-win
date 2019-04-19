@@ -6,7 +6,7 @@
 #include "stub_usbd.h"
 #include "devconf.h"
 
-PUSB_CONFIGURATION_DESCRIPTOR get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR idx);
+PUSB_CONFIGURATION_DESCRIPTOR get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR bVal);
 
 #ifdef DBG
 
