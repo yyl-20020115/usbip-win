@@ -380,7 +380,6 @@ read_completion(DWORD errcode, DWORD nread, LPOVERLAPPED lpOverlapped)
 	devbuf_t	*rbuff;
 
 	rbuff = (devbuf_t *)lpOverlapped->hEvent;
-
 	if (errcode == 0) {
 		rbuff->offp += nread;
 		if (nread == 0)
@@ -401,7 +400,7 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 
 			bufnew = (char *)realloc(rbuff->bufp, rbuff->bufmaxp + nmore);
 			if (bufnew == NULL) {
-				err("failed to reallocate buffer: %s", rbuff->desc);
+				err("%s: failed to reallocate buffer: %s", __FUNCTION__, rbuff->desc);
 				return FALSE;
 			}
 			if (rbuff->bufp == rbuff->bufc)
@@ -414,7 +413,7 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 
 			bufnew = (char *)malloc(nreq + nexist);
 			if (bufnew == NULL) {
-				err("failed to allocate buffer: %s", rbuff->desc);
+				err("%s: failed to allocate buffer: %s", __FUNCTION__, rbuff->desc);
 				return FALSE;
 			}
 			if (nexist > 0) {
@@ -429,7 +428,11 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 	}
 
 	if (!ReadFileEx(rbuff->hdev, BUFCUR_P(rbuff), nreq, &rbuff->ovs[0], read_completion)) {
-		err("failed to read: err:%d", GetLastError());
+		DWORD error = GetLastError();
+		err("%s: failed to read: err: 0x%lx", __FUNCTION__, error);
+		if (error == ERROR_NETNAME_DELETED) {
+			err("%s: could the client have dropped the connection?", __FUNCTION__);
+		}
 		return FALSE;
 	}
 	rbuff->in_reading = TRUE;
@@ -463,7 +466,7 @@ write_devbuf(devbuf_t *wbuff, devbuf_t *rbuff)
 		rbuff->bufmaxc = rbuff->offhdr;
 	}
 	if (!WriteFileEx(wbuff->hdev, BUFCUR_C(rbuff), BUFREMAIN_C(rbuff), &wbuff->ovs[1], write_completion)) {
-		err("failed to write sock: err:%d\n", GetLastError());
+		err("%s: failed to write sock: err: 0x%lx", __FUNCTION__, GetLastError());
 		return FALSE;
 	}
 
@@ -567,11 +570,11 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 		swap_req_dst = TRUE;
 	}
 	if (!init_devbuf(&buff_src, desc_src, TRUE, swap_req_src, hdev_src)) {
-		err("failed to initialize %s buffer", desc_src);
+		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_src);
 		return;
 	}
 	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst)) {
-		err("failed to initialize %s buffer", desc_dst);
+		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_dst);
 		cleanup_devbuf(&buff_src);
 		return;
 	}
