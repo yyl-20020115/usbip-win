@@ -51,17 +51,17 @@ static int
 bind_device(const char *busid)
 {
 	unsigned char	devno;
-	int	ret;
+	int	rc;
 
 	devno = get_devno_from_busid(busid);
 
-	ret = traverse_usbdevs(walker_bind, TRUE, (void *)&devno);
-	if (ret == -100) {
-		info("bind device on busid %s: complete", busid);
-		return 0;
+	rc = traverse_usbdevs(walker_bind, TRUE, (void *)&devno);
+	if (rc != -100) {
+		err("%s: error binding device on busid %s: err: %d", __FUNCTION__, busid, rc);
+		return -1;
 	}
-	err("failed to bind device");
-	return 1;
+	info("%s: bind device on busid %s: complete", __FUNCTION__, busid);
+	return 0;
 }
 
 int usbip_bind(int argc, char *argv[])

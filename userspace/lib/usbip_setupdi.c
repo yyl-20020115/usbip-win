@@ -20,21 +20,21 @@ get_dev_property(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD prop)
 		case ERROR_INSUFFICIENT_BUFFER:
 			break;
 		default:
-			err("get_dev_property: failed to get device property: err: %x", err);
+			err("%s: failed to get device property: err: %x", __FUNCTION__, err);
 			return NULL;
 		}
 	}
 	else {
-		err("get_dev_property: unexpected case");
+		err("%s: unexpected case", __FUNCTION__);
 		return NULL;
 	}
 	value = malloc(length);
 	if (value == NULL) {
-		err("get_dev_property: out of memory");
+		err("%s: out of memory", __FUNCTION__);
 		return NULL;
 	}
 	if (!SetupDiGetDeviceRegistryProperty(dev_info, pdev_info_data, prop, NULL, (PBYTE)value, length, &length)) {
-		err("get_dev_property: failed to get device property: err: %x", GetLastError());
+		err("%s: failed to get device property: err: %x", __FUNCTION__, GetLastError());
 		free(value);
 		return NULL;
 	}
@@ -62,21 +62,21 @@ get_id_inst(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 	if (!SetupDiGetDeviceInstanceId(dev_info, pdev_info_data, NULL, 0, &length)) {
 		DWORD	err = GetLastError();
 		if (err != ERROR_INSUFFICIENT_BUFFER) {
-			err("get_id_inst: failed to get instance id: err: %x", err);
+			err("%s: get_id_inst: failed to get instance id: err: 0x%lx", __FUNCTION__, err);
 			return NULL;
 		}
 	}
 	else {
-		err("get_id_inst: unexpected case");
+		err("%s: get_id_inst: unexpected case", __FUNCTION__);
 		return NULL;
 	}
 	id_inst = (char *)malloc(length);
 	if (id_inst == NULL) {
-		err("get_id_inst: out of memory");
+		err("%s: get_id_inst: out of memory", __FUNCTION__);
 		return NULL;
 	}
 	if (!SetupDiGetDeviceInstanceId(dev_info, pdev_info_data, id_inst, length, NULL)) {
-		err("failed to get instance id\n");
+		err("%s: failed to get instance id", __FUNCTION__);
 		free(id_inst);
 		return NULL;
 	}
@@ -95,20 +95,20 @@ get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pgui
 	if (!SetupDiEnumDeviceInterfaces(dev_info, pdev_info_data, pguid, 0, &dev_interface_data)) {
 		DWORD	err = GetLastError();
 		if (err != ERROR_NO_MORE_ITEMS)
-			err("SetupDiEnumDeviceInterfaces failed: err: 0x%lx", err);
+			err("%s: SetupDiEnumDeviceInterfaces failed: err: 0x%lx", __FUNCTION__, err);
 		return NULL;
 	}
 	SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data, NULL, 0, &len, NULL);
 	err = GetLastError();
 	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", err);
+		err("%s: SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", __FUNCTION__, err);
 		return NULL;
 	}
 
 	// Allocate the required memory and set the cbSize.
 	pdev_interface_detail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(len);
 	if (pdev_interface_detail == NULL) {
-		err("can't malloc %lu size memory", len);
+		err("%s: can't malloc %lu size memory", __FUNCTION__, len);
 		return NULL;
 	}
 
@@ -118,7 +118,7 @@ get_intf_detail(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, LPCGUID pgui
 	if (!SetupDiGetDeviceInterfaceDetail(dev_info, &dev_interface_data,
 		pdev_interface_detail, len, &len, NULL)) {
 		// Errors.
-		err("SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", GetLastError());
+		err("%s: SetupDiGetDeviceInterfaceDetail failed: err: 0x%lx", __FUNCTION__, GetLastError());
 		free(pdev_interface_detail);
 		return NULL;
 	}
@@ -140,12 +140,12 @@ set_device_state(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD state
 	prop_params.HwProfile = 0;
 
 	if (!SetupDiSetClassInstallParams(dev_info, pdev_info_data, (SP_CLASSINSTALL_HEADER *)&prop_params, sizeof(SP_PROPCHANGE_PARAMS))) {
-		err("failed to set class install parameters\n");
+		err("%s: failed to set class install parameters\n", __FUNCTION__);
 		return FALSE;
 	}
 
 	if (!SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, dev_info, pdev_info_data)) {
-		err("failed to call class installer\n");
+		err("%s: failed to call class installer\n", __FUNCTION__);
 		return FALSE;
 	}
 
@@ -155,10 +155,14 @@ set_device_state(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, DWORD state
 BOOL
 restart_device(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 {
-	if (!set_device_state(dev_info, pdev_info_data, DICS_DISABLE))
+	if (!set_device_state(dev_info, pdev_info_data, DICS_DISABLE)) {
+		err("%s: set_device_state DICS_DISABLE failed", __FUNCTION__);
 		return FALSE;
-	if (!set_device_state(dev_info, pdev_info_data, DICS_ENABLE))
+	}
+	if (!set_device_state(dev_info, pdev_info_data, DICS_ENABLE)) {
+		err("%s: set_device_state DICS_ENABLE failed", __FUNCTION__);
 		return FALSE;
+	}
 	return TRUE;
 }
 
@@ -205,7 +209,7 @@ traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
 		flags |= DIGCF_PRESENT;
 	dev_info = SetupDiGetClassDevs(NULL, "USB", NULL, flags);
 	if (dev_info == INVALID_HANDLE_VALUE) {
-		err("SetupDiGetClassDevs failed: 0x%lx\n", GetLastError());
+		err("%s: SetupDiGetClassDevs failed: 0x%lx\n", __FUNCTION__, GetLastError());
 		return -1;
 	}
 
@@ -215,11 +219,12 @@ traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
 		char	*id_inst;
 		devno_t	devno;
 
-		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data)) {
+		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data))
+		{
 			DWORD	err = GetLastError();
 
 			if (err != ERROR_NO_MORE_ITEMS) {
-				err("failed to get device information: err: %d\n", err);
+				err("%s: SetupDiEnumDeviceInfo failed to get device information: err: 0x%lx\n", __FUNCTION__, err);
 			}
 			break;
 		}
@@ -249,7 +254,7 @@ traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 
 	dev_info = SetupDiGetClassDevs(pguid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
 	if (dev_info == INVALID_HANDLE_VALUE) {
-		err("SetupDiGetClassDevs failed: 0x%lx\n", GetLastError());
+		err("%s: SetupDiGetClassDevs failed: 0x%lx\n", __FUNCTION__, GetLastError());
 		return -1;
 	}
 
@@ -259,7 +264,7 @@ traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 			DWORD	err = GetLastError();
 
 			if (err != ERROR_NO_MORE_ITEMS) {
-				err("failed to get device information: err: %d\n", err);
+				err("%s: failed to get device information: err: %d\n", __FUNCTION__, err);
 			}
 			break;
 		}

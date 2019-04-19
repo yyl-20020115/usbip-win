@@ -55,16 +55,16 @@ add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 	usbdev_t	*usbdevs, *usbdev;
 
 	if (usbdev_list->n_usbdevs == 255) {
-		err("add_usbdev: exceed maximum usb devices");
+		err("%s: exceed maximum usb devices", __FUNCTION__);
 		return;
 	}
 	if (!get_usbdev_info(id_hw, &vendor, &product)) {
-		err("add_usbdev: invalid hw id: %s", id_hw);
+		err("%s: invalid hw id: %s", __FUNCTION__, id_hw);
 		return;
 	}
 	usbdevs = (usbdev_t *)realloc(usbdev_list->usbdevs, sizeof(usbdev_t) * (usbdev_list->n_usbdevs + 1));
 	if (usbdevs == NULL) {
-		err("add_usbdev: out of memory");
+		err("%s: out of memory", __FUNCTION__);
 		return;
 	}
 	usbdev_list->n_usbdevs++;
@@ -113,7 +113,7 @@ walker_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 
 	id_hw = get_id_hw(dev_info, pdev_info_data);
 	if (id_hw == NULL) {
-		err("failed to get hw id\n");
+		err("%s: failed to get hw id\n", __FUNCTION__);
 		return 0;
 	}
 

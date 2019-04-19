@@ -15,16 +15,17 @@ recv_pdu(SOCKET connfd, BOOL *pneed_close_sockfd)
 
 	ret = usbip_net_recv_op_common(connfd, &code);
 	if (ret < 0) {
-		dbg("could not receive opcode: %#0x", code);
+		dbg("%s: could not receive opcode: %#0x", __FUNCTION__, code);
 		return;
 	}
 
-	info("received request: %#0x", code);
 	switch (code) {
 	case OP_REQ_DEVLIST:
+		info("%s: received request: %#0x - list devices", __FUNCTION__, code);
 		ret = recv_request_devlist(connfd);
 		break;
 	case OP_REQ_IMPORT:
+		info("%s: received request: %#0x - attach device", __FUNCTION__, code);
 		ret = recv_request_import(connfd);
 		if (ret == 0)
 			*pneed_close_sockfd = FALSE;
@@ -32,14 +33,14 @@ recv_pdu(SOCKET connfd, BOOL *pneed_close_sockfd)
 	case OP_REQ_DEVINFO:
 	case OP_REQ_CRYPKEY:
 	default:
-		err("received an unknown opcode: %#0x", code);
+		err("%s: received an unknown opcode: %#0x", __FUNCTION__, code);
 		break;
 	}
 
 	if (ret == 0)
-		info("request %#0x: complete", code);
+		info("%s: request %#0x: complete", __FUNCTION__, code);
 	else
-		info("request %#0x: failed", code);
+		info("%s: request %#0x: failed", __FUNCTION__, code);
 }
 
 static SOCKET

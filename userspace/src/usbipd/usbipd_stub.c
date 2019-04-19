@@ -48,11 +48,16 @@ static char *
 get_device_path(const char *id_inst)
 {
 	devpath_ctx_t	devpath_ctx;
+	int rc;
 
 	devpath_ctx.id_inst = id_inst;
-	if (traverse_intfdevs(walker_devpath, &GUID_DEVINTERFACE_STUB_USBIP, &devpath_ctx) == -100)
-		return devpath_ctx.devpath;
-	return NULL;
+	rc = traverse_intfdevs(walker_devpath, &GUID_DEVINTERFACE_STUB_USBIP, &devpath_ctx);
+	if (rc != -100) {
+		err("%s: traverse_intfdevs failed, returned: %d", __FUNCTION__, rc);
+		return NULL;
+	}
+
+	return devpath_ctx.devpath;
 }
 
 static BOOL
@@ -103,10 +108,15 @@ get_devpath_from_devno(devno_t devno)
 {
 	get_id_inst_ctx_t	ctx;
 	char	*devpath;
+	int rc;
 
 	ctx.devno = devno;
-	if (traverse_usbdevs(walker_get_id_inst, TRUE, &ctx) != -100)
+	rc = traverse_usbdevs(walker_get_id_inst, TRUE, &ctx);
+	if (rc != -100) {
+		err("%s: traverse_usbdevs failed. traverse_usbdevs returned %d.", __FUNCTION__, rc);
 		return NULL;
+	}
+
 	devpath = get_device_path(ctx.id_inst);
 	free(ctx.id_inst);
 
@@ -121,7 +131,7 @@ build_udev(devno_t devno, struct usbip_usb_device *pudev)
 
 	devpath = get_devpath_from_devno(devno);
 	if (devpath == NULL) {
-		err("build_udev: invalid devno: %hhu", devno);
+		err("%s: invalid devno: %hhu. devpath returned %s", __FUNCTION__, devno, devpath);
 		return FALSE;
 	}
 
@@ -154,7 +164,7 @@ open_stub_dev(devno_t devno)
 
 	devpath = get_devpath_from_devno(devno);
 	if (devpath == NULL) {
-		err("open_stub_dev: invalid devno: %hhu", devno);
+		err("%s: invalid devno: %hhu", __FUNCTION__, devno);
 		return INVALID_HANDLE_VALUE;
 	}
 
@@ -162,11 +172,12 @@ open_stub_dev(devno_t devno)
 	free(devpath);
 
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("open_stub_dev: cannot open");
+		err("%s: cannot open device: %s", __FUNCTION__, devpath);
 		return INVALID_HANDLE_VALUE;
 	}
+
 	if (!DeviceIoControl(hdev, IOCTL_USBIP_STUB_EXPORT, NULL, 0, NULL, 0, &len, NULL)) {
-		err("open_stub_dev: failed to export");
+		err("%s: DeviceIoControl failed: err: 0x%lx", __FUNCTION__, GetLastError());
 		CloseHandle(hdev);
 		return INVALID_HANDLE_VALUE;
 	}

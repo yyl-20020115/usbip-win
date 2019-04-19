@@ -44,11 +44,11 @@ walker_edev_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t dev
 
 	edev = (edev_t *)malloc(sizeof(edev_t));
 	if (edev == NULL) {
-		err("walker_edev: out of memory");
+		err("%s: out of memory", __FUNCTION__);
 		return 0;
 	}
 	if (!build_udev(devno, &edev->udev)) {
-		err("walker_edev: cannot build usbip dev");
+		err("%s: cannot build usbip dev", __FUNCTION__);
 		free(edev);
 		return 0;
 	}
