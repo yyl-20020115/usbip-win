@@ -6,8 +6,8 @@
 #include "usbip_vhci_api.h"
 #include "usbip_proto.h"
 
-#define NEXT_USBD_INTERFACE_INFO(info_intf)	(USBD_INTERFACE_INFORMATION *)((PUINT8)(info_intf + 1) + \
-		((info_intf)->NumberOfPipes - 1) * sizeof(USBD_PIPE_INFORMATION))
+#define NEXT_USBD_INTERFACE_INFO(info_intf)	(USBD_INTERFACE_INFORMATION *)((PUINT8)(info_intf + 1) - \
+	(1 * sizeof(USBD_PIPE_INFORMATION)) + (info_intf->NumberOfPipes * sizeof(USBD_PIPE_INFORMATION)));
 
 #define MAKE_PIPE(ep, type, interval) ((USBD_PIPE_HANDLE)((ep) | ((interval) << 8) | ((type) << 16)))
 #define TO_INTF_HANDLE(intf_num, altsetting)	((USBD_INTERFACE_HANDLE)((intf_num << 8) + altsetting))
