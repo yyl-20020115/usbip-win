@@ -19,13 +19,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdlib.h>
+
 #include "usbip_windows.h"
 
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip.h"
-
-#include <stdlib.h>
 
 static int usbip_help(int argc, char *argv[]);
 static int usbip_version(int argc, char *argv[]);
@@ -50,47 +50,55 @@ struct command {
 
 static const struct command cmds[] = {
 	{
-		"help",
-		usbip_help,
-		NULL,
-		NULL
+		.name  = "help",
+		.fn    = usbip_help,
+		.help  = NULL,
+		.usage = NULL
 	},
 	{
-		"version",
-		usbip_version,
-		NULL,
-		NULL
+		.name  = "version",
+		.fn    = usbip_version,
+		.help  = NULL,
+		.usage = NULL
 	},
 	{
-		"attach",
-		usbip_attach,
-		"Attach a remote USB device",
-		usbip_attach_usage
+		.name  = "attach",
+		.fn    = usbip_attach,
+		.help  = "Attach a remote USB device",
+		.usage = usbip_attach_usage
 	},
 	{
-		"detach",
-		usbip_detach,
-		"Detach a remote USB device",
-		usbip_detach_usage
+		.name  = "detach",
+		.fn    = usbip_detach,
+		.help  = "Detach a remote USB device",
+		.usage = usbip_detach_usage
 	},
 	{
-		"list",
-		usbip_list,
-		"List exportable or local USB devices",
-		usbip_list_usage
+		.name  = "list",
+		.fn    = usbip_list,
+		.help  = "List exportable or local USB devices",
+		.usage = usbip_list_usage
 	},
 	{
-		"bind",
-		usbip_bind,
-		"Bind device to usbip stub",
-		usbip_bind_usage
+		.name  = "bind",
+		.fn    = usbip_bind,
+		.help  = "Bind device to usbip stub driver",
+		.usage = usbip_bind_usage
 	},
 	{
-		"unbind",
-		usbip_unbind,
-		"Unbind device from usbip stub",
-		usbip_unbind_usage
+		.name  = "unbind",
+		.fn    = usbip_unbind,
+		.help  = "Unbind device from usbip stub driver",
+		.usage = usbip_unbind_usage
 	},
+#if 0 /* Not implemented yet */
+	{
+		.name  = "port",
+		.fn    = usbip_port_show,
+		.help  = "Show imported USB devices",
+		.usage = NULL
+	},
+#endif
 	{ NULL, NULL, NULL, NULL }
 };
 
@@ -137,9 +145,9 @@ static int run_command(const struct command *cmd, int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 	static const struct option opts[] = {
-		{ "debug", no_argument, NULL, 'd' },
+		{ "debug",    no_argument,       NULL, 'd' },
 		{ "tcp-port", required_argument, NULL, 't' },
-		{ NULL, 0, NULL, 0 }
+		{ NULL,       0,                 NULL,  0 }
 	};
 
 	char *cmd;
