@@ -19,6 +19,9 @@
 
 /* FIXME: how to sync with drivers/usbip_common.h ? */
 enum usbip_device_status{
+	/* dev status unknown. */
+	DEV_ST_UNKNOWN = 0x00,
+
 	/* sdev is available. */
 	SDEV_ST_AVAILABLE = 0x01,
 	/* sdev is now used. */
