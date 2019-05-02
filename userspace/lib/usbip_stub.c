@@ -204,7 +204,7 @@ walker_attach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 	if (devno == *pdevno) {
 		if (!apply_stub_fdo(dev_info, pdev_info_data))
 			return -2;
-		return -100;
+		return -1;
 	}
 	return 0;
 }
@@ -215,7 +215,7 @@ attach_stub_driver(devno_t devno)
 	int	ret;
 
 	ret = traverse_usbdevs(walker_attach, FALSE, &devno);
-	if (ret == -100)
+	if (ret == -1)
 		return TRUE;
 	return FALSE;
 }
@@ -228,7 +228,7 @@ walker_detach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 	if (devno == *pdevno) {
 		if (!rollback_driver(dev_info, pdev_info_data))
 			return -2;
-		return -100;
+		return -1;
 	}
 	return 0;
 }
@@ -239,7 +239,7 @@ detach_stub_driver(devno_t devno)
 	int	ret;
 
 	ret = traverse_usbdevs(walker_detach, FALSE, &devno);
-	if (ret == -100)
+	if (ret == -1)
 		return TRUE;
 	return FALSE;
 }

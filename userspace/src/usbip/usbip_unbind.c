@@ -40,7 +40,7 @@ walker_unbind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 		/* gotcha */
 		if (detach_stub_driver(devno)) {
 			restart_device(dev_info, pdev_info_data);
-			return -100;
+			return -1;
 		}
 	}
 	return 0;
@@ -54,7 +54,7 @@ static int unbind_device(char *busid)
 	devno = get_devno_from_busid(busid);
 
 	ret = traverse_usbdevs(walker_unbind, TRUE, (void *)&devno);
-	if (ret == -100) {
+	if (ret == -1) {
 		info("unbind device on busid %s: complete", busid);
 		return 0;
 	}
