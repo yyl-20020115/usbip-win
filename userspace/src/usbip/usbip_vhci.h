@@ -1,3 +1,6 @@
+#ifndef __VHCI_DRIVER_H
+#define __VHCI_DRIVER_H
+
 #pragma
 
 #include "usbip_wudev.h"
@@ -7,3 +10,5 @@ void usbip_vhci_driver_close(HANDLE hdev);
 int usbip_vhci_get_free_port(HANDLE hdev);
 int usbip_vhci_attach_device(HANDLE hdev, int port, usbip_wudev_t *wudev);
 int usbip_vhci_detach_device(HANDLE hdev, int port);
+
+#endif /* __VHCI_DRIVER_H */
