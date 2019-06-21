@@ -12,9 +12,9 @@
   - Right-click on the project > Properties > Driver Settings > Target OS version > Windows 7
 
 ### Build Tools
-- Visual Studio 2017 Community
-- Windows SDK 10.0.17134
-- Windows Driver Kit 10.0.17134
+- Visual Studio 2019 Community
+- Windows SDK 10.0.18362.0
+- Windows Driver Kit Windows 10, version 1903
 
 ### Build Process
 - Open usbip_win.sln
