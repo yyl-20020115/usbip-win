@@ -257,9 +257,21 @@ record_outq_seqnum(unsigned long seqnum)
 	int	i;
 
 	for (i = 0; i < OUT_Q_LEN; i++) {
+		int	found_empty_slot;
+
+		/* record_outq_seqnum can be called multiple times.
+		 * seqnum should be checked if it was already marked.
+		 */
+		if (out_q_seqnum_array[i] == seqnum)
+			return TRUE;
 		if (out_q_seqnum_array[i])
 			continue;
-		out_q_seqnum_array[i] = seqnum;
+		found_empty_slot = i;
+		for (; i < OUT_Q_LEN; i++) {
+			if (out_q_seqnum_array[i] == seqnum)
+				return TRUE;
+		}
+		out_q_seqnum_array[found_empty_slot] = seqnum;
 		return TRUE;
 	}
 	return FALSE;
