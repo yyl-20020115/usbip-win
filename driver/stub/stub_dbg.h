@@ -3,10 +3,10 @@
 #define DRVPREFIX	"usbip_stub"
 #include "dbgcommon.h"
 #include "dbgcode.h"
+#include "stub_dev.h"
 
 #ifdef DBG
 
-#include "stub_dev.h"
 #include "stub_devconf.h"
 
 #define DBG_GENERAL	0x00000001

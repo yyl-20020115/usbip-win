@@ -1,5 +1,6 @@
 #include "stub_driver.h"
 #include "stub_dbg.h"
+#include "stub_dev.h"
 
 NTSTATUS
 complete_irp(IRP *irp, NTSTATUS status, ULONG info)

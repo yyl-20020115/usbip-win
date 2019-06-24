@@ -1,8 +1,8 @@
 #include "dbgcode.h"
 
-#include <ntstrsafe.h>
-
 #ifdef DBG
+
+#include <ntstrsafe.h>
 
 static namecode_t namecodes_ntstatus[] = {
 	K_V(STATUS_SUCCESS)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "stub_dev.h"
+#include "usbip_proto.h"
 
 typedef struct stub_res {
 	PIRP	irp;

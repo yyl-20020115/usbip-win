@@ -1,7 +1,5 @@
 #include "vhci.h"
 
-#include <usbdlib.h>
-
 #include "vhci_devconf.h"
 #include "usbip_vhci_api.h"
 #include "usbip_proto.h"
