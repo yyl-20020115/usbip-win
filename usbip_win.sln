@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27428.2043
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29025.244
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip_vhci", "driver\vhci\usbip_vhci.vcxproj", "{F35A874E-E790-44B5-9C14-749C8854A0C4}"
 EndProject
@@ -12,8 +12,6 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbipd", "userspace\src\usbipd\usbipd.vcxproj", "{0C5C92AA-37F0-4521-86EA-76F32B43E7B4}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "usbip_stub", "driver\stub\usbip_stub.vcxproj", "{08230AFF-8015-437B-9DF1-AF8D0112DF59}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stubctl", "userspace\src\stubctl\stubctl.vcxproj", "{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libdrv", "driver\lib\libdrv.vcxproj", "{27AB4325-4980-4634-9818-AE6BD61DE532}"
 EndProject
@@ -73,14 +71,6 @@ Global
 		{08230AFF-8015-437B-9DF1-AF8D0112DF59}.Release|x86.ActiveCfg = Release|Win32
 		{08230AFF-8015-437B-9DF1-AF8D0112DF59}.Release|x86.Build.0 = Release|Win32
 		{08230AFF-8015-437B-9DF1-AF8D0112DF59}.Release|x86.Deploy.0 = Release|Win32
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Debug|x64.ActiveCfg = Debug|x64
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Debug|x64.Build.0 = Debug|x64
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Debug|x86.ActiveCfg = Debug|Win32
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Debug|x86.Build.0 = Debug|Win32
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Release|x64.ActiveCfg = Release|x64
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Release|x64.Build.0 = Release|x64
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Release|x86.ActiveCfg = Release|Win32
-		{184FB594-E18D-4B2E-AA9C-2F2A7D65ADA5}.Release|x86.Build.0 = Release|Win32
 		{27AB4325-4980-4634-9818-AE6BD61DE532}.Debug|x64.ActiveCfg = Debug|x64
 		{27AB4325-4980-4634-9818-AE6BD61DE532}.Debug|x64.Build.0 = Debug|x64
 		{27AB4325-4980-4634-9818-AE6BD61DE532}.Debug|x64.Deploy.0 = Debug|x64
