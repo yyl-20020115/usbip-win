@@ -88,6 +88,8 @@ process_get_devinfo(usbip_stub_dev_t *devstub, IRP *irp)
 static NTSTATUS
 process_export(usbip_stub_dev_t *devstub, IRP *irp)
 {
+	UNREFERENCED_PARAMETER(devstub);
+
 	DBGI(DBG_IOCTL, "exporting: %s\n", dbg_devstub(devstub));
 
 	irp->IoStatus.Status = STATUS_SUCCESS;

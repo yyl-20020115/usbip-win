@@ -12,7 +12,7 @@ in the public domain.
 
 /*LINTLIBRARY*/
 
-extern unsigned int strlen();
+extern unsigned __int64 strlen();
 extern int strcmp();
 extern char *strchr();
 extern int write();

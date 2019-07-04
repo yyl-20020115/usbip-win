@@ -180,6 +180,9 @@ vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG Gui
 	ULONG		size = 0;
 	NTSTATUS	status;
 
+	UNREFERENCED_PARAMETER(InstanceIndex);
+	UNREFERENCED_PARAMETER(InstanceCount);
+
 	PAGED_CODE();
 
 	// Only ever registers 1 instance per guid

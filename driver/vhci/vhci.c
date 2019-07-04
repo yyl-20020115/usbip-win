@@ -40,6 +40,8 @@ PAGEABLE DRIVER_ADD_DEVICE vhci_add_device;
 static PAGEABLE VOID
 vhci_driverUnload(__in PDRIVER_OBJECT drvobj)
 {
+	UNREFERENCED_PARAMETER(drvobj);
+
 	PAGED_CODE();
 
 	DBGI(DBG_GENERAL, "Unload\n");
