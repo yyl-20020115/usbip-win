@@ -35,10 +35,12 @@ typedef struct {
 
 	KSPIN_LOCK	lock_stub_res;
 	PIRP		irp_stub_read;
-	/* save an ongoing stub result which has sent only a usbip header */
-	struct stub_res	*sres_pending;
-	LIST_ENTRY	stub_res_head_done;
-	LIST_ENTRY	stub_res_head_pending;
+	/* save an ongoing stub result which has been sent partially */
+	struct stub_res	*sres_ongoing;
+	ULONG		len_sent_partial;
+
+	LIST_ENTRY	sres_head_done;
+	LIST_ENTRY	sres_head_pending;
 } usbip_stub_dev_t;
 
 void init_dev_removal_lock(usbip_stub_dev_t *devstub);

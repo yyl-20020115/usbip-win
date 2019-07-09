@@ -237,7 +237,7 @@ process_bulk_intr_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION inf
 		data = (PVOID)(hdr + 1);
 	}
 
-	status = submit_bulk_intr_transfer(devstub, info_pipe->PipeHandle, hdr->base.seqnum, data, &datalen, is_in);
+	status = submit_bulk_intr_transfer(devstub, info_pipe->PipeHandle, hdr->base.seqnum, data, datalen, is_in);
 	if (NT_ERROR(status)) {
 		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
 		if (is_in)
