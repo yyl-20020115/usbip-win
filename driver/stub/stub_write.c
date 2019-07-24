@@ -141,7 +141,7 @@ process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_csp
 }
 
 static void
-process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_header *hdr)
+process_class_vendor_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_header *hdr, BOOLEAN vendorreq)
 {
 	PVOID	data;
 	ULONG	datalen;
@@ -160,16 +160,16 @@ process_class_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct usbip_
 
 	switch (csp->bmRequestType.Recipient) {
 	case BMREQUEST_TO_DEVICE:
-		cmd = URB_FUNCTION_CLASS_DEVICE;
+		cmd = vendorreq ? URB_FUNCTION_VENDOR_DEVICE : URB_FUNCTION_CLASS_DEVICE;
 		break;
 	case BMREQUEST_TO_INTERFACE:
-		cmd = URB_FUNCTION_CLASS_INTERFACE;
+		cmd = vendorreq ? URB_FUNCTION_VENDOR_INTERFACE : URB_FUNCTION_CLASS_INTERFACE;
 		break;
 	case BMREQUEST_TO_ENDPOINT:
-		cmd = URB_FUNCTION_CLASS_ENDPOINT;
+		cmd = vendorreq ? URB_FUNCTION_VENDOR_ENDPOINT : URB_FUNCTION_CLASS_ENDPOINT;
 		break;
 	default:
-		cmd = URB_FUNCTION_CLASS_OTHER;
+		cmd = vendorreq ? URB_FUNCTION_VENDOR_OTHER : URB_FUNCTION_CLASS_OTHER;
 		break;
 	}
 
@@ -202,10 +202,10 @@ process_control_transfer(usbip_stub_dev_t *devstub, struct usbip_header *hdr)
 		process_standard_request(devstub, hdr->base.seqnum, csp);
 		break;
 	case BMREQUEST_CLASS:
-		process_class_request(devstub, csp, hdr);
+		process_class_vendor_request(devstub, csp, hdr, FALSE);
 		break;
 	case BMREQUEST_VENDOR:
-		DBGE(DBG_READWRITE, "not supported:", dbg_cspkt_reqtype(reqType));
+		process_class_vendor_request(devstub, csp, hdr, TRUE);
 		break;
 	default:
 		DBGE(DBG_READWRITE, "invalid request type:", dbg_cspkt_reqtype(reqType));
