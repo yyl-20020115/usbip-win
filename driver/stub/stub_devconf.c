@@ -6,8 +6,6 @@
 #include "stub_usbd.h"
 #include "devconf.h"
 
-PUSB_CONFIGURATION_DESCRIPTOR get_usb_dsc_conf(usbip_stub_dev_t *devstub, UCHAR bVal);
-
 #ifdef DBG
 
 const char *
@@ -56,18 +54,15 @@ dup_info_intf(PUSBD_INTERFACE_INFORMATION info_intf)
 static BOOLEAN
 build_infos_intf(devconf_t *devconf, PUSBD_INTERFACE_INFORMATION infos_intf)
 {
-	PUSBD_INTERFACE_INFORMATION	info_intf;
 	unsigned	i;
 
-	info_intf = infos_intf;
 	for (i = 0; i < devconf->bNumInterfaces; i++) {
-		PUSBD_INTERFACE_INFORMATION	info_intf_copied = dup_info_intf(info_intf);
+		PUSBD_INTERFACE_INFORMATION	info_intf_copied = dup_info_intf(&infos_intf[i]);
 		if (info_intf_copied == NULL) {
 			DBGE(DBG_GENERAL, "build_infos_intf: out of memory\n");
 			return FALSE;
 		}
 		devconf->infos_intf[i] = info_intf_copied;
-		info_intf = (PUSBD_INTERFACE_INFORMATION)((PUCHAR)info_intf + INFO_INTF_SIZE(info_intf));
 	}
 	return TRUE;
 }
