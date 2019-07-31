@@ -15,7 +15,7 @@ typedef struct {
 	PUSBD_INTERFACE_INFORMATION	infos_intf[1];
 } devconf_t;
 
-devconf_t *create_devconf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_INFORMATION infos_intf);
+devconf_t *create_devconf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, USBD_CONFIGURATION_HANDLE hconf, PUSBD_INTERFACE_LIST_ENTRY pintf_list);
 void free_devconf(devconf_t *devconf);
 void update_devconf(devconf_t *devconf, PUSBD_INTERFACE_INFORMATION info_intf);
 
