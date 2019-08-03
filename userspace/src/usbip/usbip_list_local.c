@@ -16,11 +16,19 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <guiddef.h>
+
 #include "usbip_common.h"
 #include "usbip_network.h"
 
 #include "usbip_windows.h"
 #include "usbip_setupdi.h"
+
+/*
+* Define USB Bus Devices (hubs and host controllers) so we can skip them easily
+* {36FC9E60-C465-11CF-8056-444553540000}
+*/
+const GUID GUID_HUBS_HC = {0x36FC9E60, 0xC465, 0x11CF, {0x80, 0x56, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
 
 typedef struct {
 	unsigned short	vendor, product;
@@ -117,7 +125,22 @@ walker_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 		return 0;
 	}
 
-	add_usbdev(usbdev_list, id_hw, devno);
+	/* Try to add device only if not determined as HUB or Host Controller */
+	if (!IsEqualGUID(&pdev_info_data->ClassGuid, &GUID_HUBS_HC)) {
+		dbg("Found GUID {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n",
+				pdev_info_data->ClassGuid.Data1,
+				pdev_info_data->ClassGuid.Data2,
+				pdev_info_data->ClassGuid.Data3,
+				pdev_info_data->ClassGuid.Data4[0],
+				pdev_info_data->ClassGuid.Data4[1],
+				pdev_info_data->ClassGuid.Data4[2],
+				pdev_info_data->ClassGuid.Data4[3],
+				pdev_info_data->ClassGuid.Data4[4],
+				pdev_info_data->ClassGuid.Data4[5],
+				pdev_info_data->ClassGuid.Data4[6],
+				pdev_info_data->ClassGuid.Data4[7]);
+		add_usbdev(usbdev_list, id_hw, devno);
+	}
 	free(id_hw);
 	return 0;
 }
