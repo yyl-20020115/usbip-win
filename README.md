@@ -73,7 +73,7 @@
 	- TCP port 3240 should be allowed by firewall
 
 - Attach USB/IP device on linux machine
-  - \# usbip attach -r &lt;usbip server ip&gt; -p 1-59
+  - \# usbip attach -r &lt;usbip server ip&gt; -b 1-59
 
 ### Windows USB/IP client
 
