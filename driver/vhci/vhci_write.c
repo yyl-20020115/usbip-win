@@ -71,6 +71,12 @@ post_select_config(pusbip_vpdo_dev_t vpdo, PURB urb)
 	USHORT	len;
 	struct _URB_SELECT_CONFIGURATION	*urb_selc = &urb->UrbSelectConfiguration;
 
+	// If ConfigurationDescriptor is NULL, the device will be set to an unconfigured state.
+	if (urb_selc->ConfigurationDescriptor == NULL) {
+		DBGE(DBG_WRITE, "post_select_config: unconfigured state\n");
+		return STATUS_SUCCESS;
+	}
+
 	len = urb_selc->ConfigurationDescriptor->wTotalLength;
 	dsc_conf = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
 	if (dsc_conf == NULL) {
