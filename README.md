@@ -15,8 +15,8 @@
 - Visual Studio 2019 Community(v142)
   - Build with VS 2017(v141) is also possible if platform toolset in setting is configured to v141
 - Windows SDK 10.0.18362.0(recommended)
-  - VS 2019(v142): requires &gt;= 10.0.17xxx
-  - VS 2017(v141): requires &gt;= 10.0.18xxx
+  - VS 2019(v142): requires &gt;= 10.0.18xxx
+  - VS 2017(v141): requires &gt;= 10.0.17xxx
 - Windows Driver Kit Windows 10, version 1903 (10.0.18362)
   - WDK 10.0.17134(1803), 10.0.17763(1809), 10.0.18346 are also tested
 
