@@ -96,13 +96,17 @@ usbip.exe list -l
   - `usbip_vhci.cat` can be found from `usbip_vhci` subfolder of output folder.
   - `usbip_vhci.cer` can be found in [0.0.1 release](https://github.com/cezanne/usbip-win/releases/tag/0.0.1) page.
 - Install USB/IP VHCI driver
-  - Start Device manager
-  - Choose "Add Legacy Hardware" from the "Action" menu.
-  - Select "Install the hardware that I manually select from the list".
-  - Click "Next".
-  - Click "Have Disk", click "Browse", choose the copied folder, and click "OK".
-  - Click on the "USB/IP VHCI", and then click "Next".
-  - Click Finish at "Completing the Add/Remove Hardware Wizard".
+  - Command line install
+    - Run PowerShell as an Administrator
+    - call `> usbip.exe install`
+  - Manual install
+    - Start Device manager
+    - Choose "Add Legacy Hardware" from the "Action" menu.
+    - Select "Install the hardware that I manually select from the list".
+    - Click "Next".
+    - Click "Have Disk", click "Browse", choose the copied folder, and click "OK".
+    - Click on the "USB/IP VHCI", and then click "Next".
+    - Click Finish at "Completing the Add/Remove Hardware Wizard".
 - Attach a remote USB device
   - `> usbip.exe attach -r <usbip server ip> -b 2-2`
 
