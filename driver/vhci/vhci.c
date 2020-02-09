@@ -199,6 +199,7 @@ DriverEntry(__in PDRIVER_OBJECT drvobj, __in PUNICODE_STRING RegistryPath)
 	Globals.RegistryPath.Buffer = ExAllocatePoolWithTag(PagedPool, Globals.RegistryPath.MaximumLength, USBIP_VHCI_POOL_TAG);
 
 	if (!Globals.RegistryPath.Buffer) {
+		ExDeleteNPagedLookasideList(&g_lookaside);
 		return STATUS_INSUFFICIENT_RESOURCES;
 	}
 
