@@ -253,8 +253,10 @@ process_urb_res_submit(pusbip_vpdo_dev_t vpdo, PURB urb, struct usbip_header *hd
 		if (urb->UrbHeader.Function == URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER) {
 			urb->UrbBulkOrInterruptTransfer.TransferBufferLength = hdr->u.ret_submit.actual_length;
 		}
+		DBGW(DBG_WRITE, "%s: wrong status: %s\n", dbg_urbfunc(urb->UrbHeader.Function), dbg_usbd_status(urb->UrbHeader.Status));
 		return STATUS_UNSUCCESSFUL;
 	}
+
 	status = store_urb_data(urb, hdr);
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {

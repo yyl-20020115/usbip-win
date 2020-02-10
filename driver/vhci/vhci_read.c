@@ -576,7 +576,7 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 	USHORT		code_func;
 	NTSTATUS	status;
 
-	DBGI(DBG_READ, "store_urbr_partial: urbr: %s\n", dbg_urbr(urbr));
+	DBGI(DBG_READ, "store_urbr_partial: Enter: urbr: %s\n", dbg_urbr(urbr));
 
 	irpstack = IoGetCurrentIrpStackLocation(urbr->irp);
 	urb = irpstack->Parameters.Others.Argument1;
@@ -604,6 +604,7 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 		status = STATUS_INVALID_PARAMETER;
 		break;
 	}
+	DBGI(DBG_READ, "store_urbr_partial: Leave: %s\n", dbg_ntstatus(status));
 
 	return status;
 }
@@ -612,6 +613,8 @@ static NTSTATUS
 store_cancelled_urbr(PIRP irp, struct urb_req *urbr)
 {
 	struct usbip_header	*hdr;
+
+	DBGI(DBG_READ, "store_cancelled_urbr: Enter\n");
 
 	hdr = get_usbip_hdr_from_read_irp(irp);
 	if (hdr == NULL)
@@ -661,6 +664,8 @@ process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 	struct urb_req	*urbr;
 	KIRQL	oldirql;
 	NTSTATUS status;
+
+	DBGI(DBG_GENERAL | DBG_READ, "process_read_irp: Enter\n");
 
 	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 	if (vpdo->pending_read_irp) {
