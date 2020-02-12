@@ -27,7 +27,8 @@
 static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
 	"    -r, --remote=<host>    The machine with exported USB devices\n"
-	"    -b, --busid=<busid>    Busid of the device on <host>\n";
+	"    -b, --busid=<busid>    Busid of the device on <host>\n"
+	"    -i, --instid=<instid>  (Optional) Serial number to use as instance ID\n";
 
 void usbip_attach_usage(void)
 {
@@ -35,7 +36,7 @@ void usbip_attach_usage(void)
 }
 
 static int
-import_device(SOCKET sockfd, usbip_wudev_t *wudev, HANDLE *phdev)
+import_device(SOCKET sockfd, usbip_wudev_t *wudev, const char *instid, HANDLE *phdev)
 {
 	HANDLE hdev;
 	int rc;
@@ -56,7 +57,7 @@ import_device(SOCKET sockfd, usbip_wudev_t *wudev, HANDLE *phdev)
 
 	dbg("got free port %d", port);
 
-	rc = usbip_vhci_attach_device(hdev, port, wudev);
+	rc = usbip_vhci_attach_device(hdev, port, instid, wudev);
 
 	if (rc < 0) {
 		err("import device");
@@ -69,7 +70,7 @@ import_device(SOCKET sockfd, usbip_wudev_t *wudev, HANDLE *phdev)
 	return port;
 }
 
-static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev)
+static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char *instid)
 {
 	int rc;
 	struct op_import_request request;
@@ -121,11 +122,11 @@ static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev)
 	get_wudev(sockfd, &wuDev, &reply.udev);
 
 	/* import a device */
-	return import_device(sockfd, &wuDev, phdev);
+	return import_device(sockfd, &wuDev, instid, phdev);
 }
 
 static int
-attach_device(const char *host, const char *busid)
+attach_device(const char *host, const char *busid, const char *instid)
 {
 	SOCKET	sockfd;
 	int	rhport;
@@ -137,7 +138,7 @@ attach_device(const char *host, const char *busid)
 		return 1;
 	}
 
-	rhport = query_import_device(sockfd, busid, &hdev);
+	rhport = query_import_device(sockfd, busid, &hdev, instid);
 	if (rhport < 0) {
 		err("query");
 		return 1;
@@ -159,15 +160,17 @@ int usbip_attach(int argc, char *argv[])
 	static const struct option opts[] = {
 		{ "remote", required_argument, NULL, 'r' },
 		{ "busid", required_argument, NULL, 'b' },
+		{ "instid", optional_argument, NULL, 'i' },
 		{ NULL, 0, NULL, 0 }
 	};
 	char *host = NULL;
 	char *busid = NULL;
+	char *instid = NULL;
 	int opt;
 	int ret = -1;
 
 	for (;;) {
-		opt = getopt_long(argc, argv, "r:b:", opts, NULL);
+		opt = getopt_long(argc, argv, "r:b:i:", opts, NULL);
 
 		if (opt == -1)
 			break;
@@ -179,6 +182,9 @@ int usbip_attach(int argc, char *argv[])
 		case 'b':
 			busid = optarg;
 			break;
+		case 'i':
+			instid = optarg;
+			break;
 		default:
 			goto err_out;
 		}
@@ -187,7 +193,7 @@ int usbip_attach(int argc, char *argv[])
 	if (!host || !busid)
 		goto err_out;
 
-	ret = attach_device(host, busid);
+	ret = attach_device(host, busid, instid);
 	goto out;
 
 err_out:

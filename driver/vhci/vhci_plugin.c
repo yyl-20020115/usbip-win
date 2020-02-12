@@ -77,6 +77,13 @@ vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_O
 	vpdo->subclass = plugin->subclass;
 	vpdo->protocol = plugin->protocol;
 	vpdo->inum = plugin->inum;
+	if (plugin->winstid[0] != L'\0') {
+		vpdo->winstid = ExAllocatePoolWithTag(PagedPool, (MAX_VHCI_INSTANCE_ID + 1) * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+		if (vpdo->winstid != NULL)
+			RtlStringCchCopyW(vpdo->winstid, MAX_VHCI_INSTANCE_ID + 1, plugin->winstid);
+	}
+	else
+		vpdo->winstid = NULL;
 
 	devpdo_old = (pusbip_vpdo_dev_t)InterlockedCompareExchangePointer(&(fo->FsContext), vpdo, 0);
 	if (devpdo_old) {
