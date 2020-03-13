@@ -529,7 +529,7 @@ GetUSBDIVersion(IN PVOID context, IN OUT PUSBD_VERSION_INFORMATION inf, IN OUT P
 	DBGI(DBG_GENERAL, "GetUSBDIVersion called\n");
 
 	*HcdCapabilities = 0;
-	inf->USBDI_Version=0x500; /* Windows XP */
+	inf->USBDI_Version=0x600; /* Windows 8 */
 	inf->Supported_USB_Version=0x200; /* USB 2.0 */
 }
 
