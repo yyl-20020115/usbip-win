@@ -194,6 +194,7 @@ store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 	csp->wLength = (unsigned short)urb_desc->TransferBufferLength;
 	csp->wValue.HiByte = urb_desc->DescriptorType;
 	csp->wValue.LowByte = urb_desc->Index;
+	csp->wIndex.W = urb_desc->LanguageId;
 
 	irp->IoStatus.Information = sizeof(struct usbip_header);
 	return STATUS_SUCCESS;
