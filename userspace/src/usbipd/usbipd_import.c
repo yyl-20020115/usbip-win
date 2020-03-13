@@ -10,7 +10,7 @@ typedef struct {
 	SOCKET	sockfd;
 } forwarder_ctx_t;
 
-static VOID
+static VOID CALLBACK
 forwarder_stub(PTP_CALLBACK_INSTANCE inst, PVOID ctx, PTP_WORK work)
 {
 	forwarder_ctx_t	*pctx = (forwarder_ctx_t *)ctx;

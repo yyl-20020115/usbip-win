@@ -12,12 +12,11 @@ in the public domain.
 
 /*LINTLIBRARY*/
 
-extern unsigned __int64 strlen();
-extern int strcmp();
-extern char *strchr();
+#include <string.h>
+
 extern int write();
 
-#define NULL	0
+//#define NULL	0
 #define EOF	(-1)
 #define ERR(s, c)	if(opterr){\
 	char errbuf[2];\
@@ -45,7 +44,7 @@ char	**argv, *opts;
 		if(optind >= argc ||
 		   argv[optind][0] != '-' || argv[optind][1] == '\0')
 			return(EOF);
-		else if(strcmp(argv[optind], "--") == NULL) {
+		else if(strcmp(argv[optind], "--") == 0) {
 			optind++;
 			return(EOF);
 		}
