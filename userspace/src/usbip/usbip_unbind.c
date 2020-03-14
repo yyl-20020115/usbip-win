@@ -40,8 +40,9 @@ walker_unbind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 		/* gotcha */
 		if (detach_stub_driver(devno)) {
 			restart_device(dev_info, pdev_info_data);
-			return -1;
+			return 1;
 		}
+		return -2;
 	}
 	return 0;
 }
@@ -54,11 +55,17 @@ static int unbind_device(char *busid)
 	devno = get_devno_from_busid(busid);
 
 	ret = traverse_usbdevs(walker_unbind, TRUE, (void *)&devno);
-	if (ret == -1) {
+	switch (ret) {
+	case 0:
+		err("no such device on busid %s", busid);
+		return 1;
+	case 1:
 		info("unbind device on busid %s: complete", busid);
 		return 0;
+	default:
+		err("failed to unbind device");
+		return 1;
 	}
-	err("failed to unbind device");
 	return 1;
 }
 

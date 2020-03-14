@@ -193,7 +193,11 @@ rollback_driver(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 {
 	BOOL	needReboot;
 
-	return DiRollbackDriver(dev_info, pdev_info_data, NULL, ROLLBACK_FLAG_NO_UI, &needReboot);
+	if (!DiRollbackDriver(dev_info, pdev_info_data, NULL, ROLLBACK_FLAG_NO_UI, &needReboot)) {
+		err("failed to rollback driver: %lx", GetLastError());
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static int
@@ -228,7 +232,7 @@ walker_detach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 	if (devno == *pdevno) {
 		if (!rollback_driver(dev_info, pdev_info_data))
 			return -2;
-		return -1;
+		return 1;
 	}
 	return 0;
 }
@@ -239,7 +243,7 @@ detach_stub_driver(devno_t devno)
 	int	ret;
 
 	ret = traverse_usbdevs(walker_detach, FALSE, &devno);
-	if (ret == -1)
+	if (ret == 1)
 		return TRUE;
 	return FALSE;
 }
