@@ -114,6 +114,7 @@ process_irp_urb_req(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 	case URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER:
 	case URB_FUNCTION_SELECT_INTERFACE:
 	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
+	case URB_FUNCTION_CONTROL_TRANSFER_EX:
 		return submit_urbr_irp(vpdo, irp);
 	default:
 		DBGW(DBG_IOCTL, "process_irp_urb_req: unhandled function: %s: len: %d\n",

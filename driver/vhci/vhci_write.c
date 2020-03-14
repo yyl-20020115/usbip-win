@@ -136,6 +136,19 @@ store_urb_control(PURB urb, struct usbip_header *hdr)
 }
 
 static NTSTATUS
+store_urb_control_transfer_ex(PURB urb, struct usbip_header* hdr)
+{
+	struct _URB_CONTROL_TRANSFER_EX	*urb_desc = &urb->UrbControlTransferEx;
+	NTSTATUS	status;
+
+	status = copy_to_transfer_buffer(urb_desc->TransferBuffer, urb_desc->TransferBufferMDL,
+		urb_desc->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+	if (status == STATUS_SUCCESS)
+		urb_desc->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	return status;
+}
+
+static NTSTATUS
 store_urb_vendor_or_class(PURB urb, struct usbip_header *hdr)
 {
 	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urb->UrbControlVendorClassRequest;
@@ -227,6 +240,9 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 		break;
 	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
 		status = STATUS_SUCCESS;
+		break;
+	case URB_FUNCTION_CONTROL_TRANSFER_EX:
+		status = store_urb_control_transfer_ex(urb, hdr);
 		break;
 	default:
 		DBGE(DBG_WRITE, "not supported func: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
