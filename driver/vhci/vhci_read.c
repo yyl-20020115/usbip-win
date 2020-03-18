@@ -743,7 +743,6 @@ on_pending_irp_read_cancelled(PDEVICE_OBJECT devobj, PIRP irp_read)
 	DBGI(DBG_READ, "pending irp read cancelled");
 
 	KIRQL	oldirql;
-	PIO_STACK_LOCATION	irpstack;
 	pusbip_vpdo_dev_t	vpdo;
 
 	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
