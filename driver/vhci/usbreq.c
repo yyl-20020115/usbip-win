@@ -248,12 +248,20 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 		}
 
 		InsertTailList(&vpdo->head_urbr, &urbr->list_all);
+
+		read_irp = vpdo->pending_read_irp;
 		vpdo->pending_read_irp = NULL;
 		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
-		read_irp->IoStatus.Status = STATUS_SUCCESS;
-		IoCompleteRequest(read_irp, IO_NO_INCREMENT);
-		status = STATUS_PENDING;
+		if (read_irp) {
+			read_irp->IoStatus.Status = STATUS_SUCCESS;
+			IoCompleteRequest(read_irp, IO_NO_INCREMENT);
+			status = STATUS_PENDING;
+		}
+		else {
+			DBGI(DBG_URB, "submit_urbr: read irp was cancelled\n");
+			status = STATUS_INVALID_PARAMETER;
+		}
 	}
 	else {
 		vpdo->urbr_sent_partial = NULL;
