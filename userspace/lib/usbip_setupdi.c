@@ -280,6 +280,12 @@ traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 static BOOL
 is_valid_usb_dev(const char *id_hw)
 {
+	/*
+	 * A valid USB hardware identifer(stub or vhci accepts) has one of following patterns:
+	 * - USB\VID_0000&PID_0000&REV_0000
+	 * - USB\VID_0000&PID_0000 (Is it needed?)
+	 * Hardware ids of multi-interface device are not valid such as USB\VID_0000&PID_0000&MI_00.
+	 */
 	if (id_hw == NULL)
 		return FALSE;
 	if (strncmp(id_hw, "USB\\", 4) != 0)
@@ -291,6 +297,14 @@ is_valid_usb_dev(const char *id_hw)
 	if (strncmp(id_hw + 12, "&PID_", 5) != 0)
 		return FALSE;
 	if (strlen(id_hw + 17) < 4)
+		return FALSE;
+	if (id_hw[21] == '\0')
+		return TRUE;
+	if (strncmp(id_hw + 21, "&REV_", 5) != 0)
+		return FALSE;
+	if (strlen(id_hw + 26) < 4)
+		return FALSE;
+	if (id_hw[30] != '\0')
 		return FALSE;
 	return TRUE;
 }
