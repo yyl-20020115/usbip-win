@@ -101,6 +101,32 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *cs
 }
 
 static void
+process_clear_feature(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
+{
+	PUSBD_PIPE_INFORMATION	info_pipe;
+
+	DBGI(DBG_READWRITE, "clear_feature: %s\n", dbg_cspkt_recipient(CSPKT_RECIPIENT(csp)));
+
+	switch (CSPKT_RECIPIENT(csp)) {
+	case BMREQUEST_TO_ENDPOINT:
+		info_pipe = get_info_pipe(devstub->devconf, (UCHAR)csp->wIndex.W);
+		if (info_pipe) {
+			reset_pipe(devstub, info_pipe->PipeHandle);
+			reply_stub_req_hdr(devstub, USBIP_RET_SUBMIT, seqnum);
+		}
+		else {
+			DBGE(DBG_READWRITE, "clear_feature: no such ep\n");
+			reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
+		}
+		break;
+	default:
+		DBGE(DBG_READWRITE, "clear_feature: not supported: %s\n", dbg_cspkt_recipient(CSPKT_RECIPIENT(csp)));
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
+		break;
+	}
+}
+
+static void
 process_select_conf(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *csp)
 {
 	if (select_usb_conf(devstub, csp->wValue.W))
@@ -128,6 +154,9 @@ process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_csp
 	case USB_REQUEST_GET_DESCRIPTOR:
 		process_get_desc(devstub, seqnum, csp);
 		break;
+	case USB_REQUEST_CLEAR_FEATURE:
+		process_clear_feature(devstub, seqnum, csp);
+		break;
 	case USB_REQUEST_SET_CONFIGURATION:
 		process_select_conf(devstub, seqnum, csp);
 		break;
@@ -135,7 +164,7 @@ process_standard_request(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_csp
 		process_select_intf(devstub, seqnum, csp);
 		break;
 	default:
-		DBGE(DBG_READWRITE, "not supported standard request\n");
+		DBGE(DBG_READWRITE, "not supported standard request: %s\n", dbg_cspkt_reqtype(CSPKT_REQUEST_TYPE(csp)));
 		break;
 	}
 }
