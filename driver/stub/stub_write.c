@@ -180,12 +180,22 @@ process_class_vendor_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct
 	BOOLEAN	is_in, res;
 
 	datalen = hdr->u.cmd_submit.transfer_buffer_length;
+	is_in = hdr->base.direction ? TRUE : FALSE;
 	if (datalen == 0)
 		data = NULL;
-	else
-		data = (PVOID)(hdr + 1);
-
-	is_in = csp->bmRequestType.Dir ? TRUE : FALSE;
+	else {
+		if (is_in) {
+			data = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)datalen, USBIP_STUB_POOL_TAG);
+			if (data == NULL) {
+				DBGE(DBG_GENERAL, "process_class_vendor_request: out of memory\n");
+				reply_stub_req_err(devstub, USBIP_RET_SUBMIT, hdr->base.seqnum, -1);
+				return;
+			}
+		}
+		else {
+			data = (PVOID)(hdr + 1);
+		}
+	}
 
 	switch (csp->bmRequestType.Recipient) {
 	case BMREQUEST_TO_DEVICE:
@@ -206,13 +216,19 @@ process_class_vendor_request(usbip_stub_dev_t *devstub, usb_cspkt_t *csp, struct
 	seqnum = hdr->base.seqnum;
 	res = submit_class_vendor_req(devstub, is_in, cmd, reservedBits, csp->bRequest, csp->wValue.W, csp->wIndex.W, data, &datalen);
 	if (res) {
-		if (is_in)
+		if (is_in) {
 			reply_stub_req_data(devstub, seqnum, data, datalen, TRUE);
+			if (data != NULL)
+				ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+		}
 		else
 			reply_stub_req_hdr(devstub, USBIP_RET_SUBMIT, seqnum);
 	}
-	else
+	else {
 		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
+		if (is_in && data != NULL)
+			ExFreePoolWithTag(data, USBIP_STUB_POOL_TAG);
+	}
 }
 
 static void
