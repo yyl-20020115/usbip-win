@@ -305,6 +305,8 @@ process_iso_transfer(usbip_stub_dev_t *devstub, PUSBD_PIPE_INFORMATION info_pipe
 
 	is_in = hdr->base.direction ? TRUE : FALSE;
 	usbd_flags = to_usbd_flags(hdr->u.cmd_submit.transfer_flags);
+	if (is_in)
+		usbd_flags |= USBD_TRANSFER_DIRECTION_IN;
 	n_pkts = hdr->u.cmd_submit.number_of_packets;
 	iso_descs_len = sizeof(struct usbip_iso_packet_descriptor) * n_pkts;
 
