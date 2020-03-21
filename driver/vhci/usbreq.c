@@ -69,22 +69,6 @@ find_pending_urbr(pusbip_vpdo_dev_t vpdo)
 	return urbr;
 }
 
-static struct urb_req *
-find_urbr_with_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
-{
-	PLIST_ENTRY	le;
-
-	for (le = vpdo->head_urbr.Flink; le != &vpdo->head_urbr; le = le->Flink) {
-		struct urb_req	*urbr;
-
-		urbr = CONTAINING_RECORD(le, struct urb_req, list_all);
-		if (urbr->irp == irp)
-			return urbr;
-	}
-
-	return NULL;
-}
-
 static void
 submit_urbr_unlink(pusbip_vpdo_dev_t vpdo, unsigned long seq_num_unlink)
 {
@@ -101,46 +85,43 @@ submit_urbr_unlink(pusbip_vpdo_dev_t vpdo, unsigned long seq_num_unlink)
 }
 
 static void
-remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
+remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 {
-	struct urb_req	*urbr;
 	KIRQL	oldirql;
 
 	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 
-	urbr = find_urbr_with_irp(vpdo, irp);
-	if (urbr != NULL) {
-		RemoveEntryListInit(&urbr->list_state);
-		RemoveEntryListInit(&urbr->list_all);
-		if (vpdo->urbr_sent_partial == urbr) {
-			vpdo->urbr_sent_partial = NULL;
-			vpdo->len_sent_partial = 0;
-		}
-	}
-	else {
-		DBGW(DBG_URB, "no matching urbr\n");
+	RemoveEntryListInit(&urbr->list_state);
+	RemoveEntryListInit(&urbr->list_all);
+	if (vpdo->urbr_sent_partial == urbr) {
+		vpdo->urbr_sent_partial = NULL;
+		vpdo->len_sent_partial = 0;
 	}
 
 	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
-	if (urbr != NULL) {
-		submit_urbr_unlink(vpdo, urbr->seq_num);
+	submit_urbr_unlink(vpdo, urbr->seq_num);
 
-		DBGI(DBG_GENERAL, "cancelled urb destroyed: %s\n", dbg_urbr(urbr));
-		free_urbr(urbr);
-	}
+	DBGI(DBG_GENERAL, "cancelled urb destroyed: %s\n", dbg_urbr(urbr));
+	free_urbr(urbr);
 }
 
 static void
 cancel_urbr(PDEVICE_OBJECT devobj, PIRP irp)
 {
+	UNREFERENCED_PARAMETER(devobj);
+
 	pusbip_vpdo_dev_t	vpdo;
+	struct urb_req	*urbr;
+
+	vpdo = (pusbip_vpdo_dev_t)irp->Tail.Overlay.DriverContext[0];
+	urbr = (struct urb_req *)irp->Tail.Overlay.DriverContext[1];
 
 	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
-	DBGI(DBG_GENERAL, "irp will be cancelled: %p\n", irp);
+	DBGI(DBG_GENERAL, "irp will be cancelled: %s\n", dbg_urbr(urbr));
 	IoReleaseCancelSpinLock(irp->CancelIrql);
 
-	remove_cancelled_urbr(vpdo, irp);
+	remove_cancelled_urbr(vpdo, urbr);
 
 	irp->IoStatus.Status = STATUS_CANCELLED;
 	irp->IoStatus.Information = 0;
@@ -160,6 +141,11 @@ create_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp, unsigned long seq_num_unlink)
 	RtlZeroMemory(urbr, sizeof(*urbr));
 	urbr->vpdo = vpdo;
 	urbr->irp = irp;
+	if (irp != NULL) {
+		irp->Tail.Overlay.DriverContext[0] = vpdo;
+		irp->Tail.Overlay.DriverContext[1] = urbr;
+	}
+
 	urbr->seq_num_unlink = seq_num_unlink;
 	InitializeListHead(&urbr->list_all);
 	InitializeListHead(&urbr->list_state);
