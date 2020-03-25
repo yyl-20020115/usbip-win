@@ -527,13 +527,13 @@ read_dev(devbuf_t *rbuff, BOOL swap_req_write)
 	}
 
 	if (rbuff->swap_req && iso_len > 0)
-		swap_iso_descs_endian(rbuff->bufp + sizeof(struct usbip_header) + xfer_len, hdr->u.ret_submit.number_of_packets);
+		swap_iso_descs_endian((char *)(hdr + 1) + xfer_len, hdr->u.ret_submit.number_of_packets);
 
 	DBG_USBIP_HEADER(hdr);
 
 	if (swap_req_write) {
 		if (iso_len > 0)
-			swap_iso_descs_endian(rbuff->bufp + sizeof(struct usbip_header) + xfer_len, hdr->u.ret_submit.number_of_packets);
+			swap_iso_descs_endian((char *)(hdr + 1) + xfer_len, hdr->u.ret_submit.number_of_packets);
 		swap_usbip_header_endian(hdr, FALSE);
 	}
 
