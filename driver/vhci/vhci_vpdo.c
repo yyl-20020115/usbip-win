@@ -545,13 +545,46 @@ InterfaceDereference(__in PVOID Context)
 	InterlockedDecrement(&((pusbip_vpdo_dev_t)Context)->InterfaceRefCount);
 }
 
+static NTSTATUS
+QueryControllerType(_In_opt_ PVOID Context,
+		    _Out_opt_ PULONG HcdiOptionFlags,
+		    _Out_opt_ PUSHORT PciVendorId,
+		    _Out_opt_ PUSHORT PciDeviceId,
+		    _Out_opt_ PUCHAR PciClass,
+		    _Out_opt_ PUCHAR PciSubClass,
+		    _Out_opt_ PUCHAR PciRevisionId,
+		    _Out_opt_ PUCHAR PciProgIf)
+{
+	UNREFERENCED_PARAMETER(Context);
+
+	if (HcdiOptionFlags != NULL)
+		*HcdiOptionFlags = 0;
+	if (PciVendorId != NULL)
+		*PciVendorId = 0x8086;
+	if (PciDeviceId != NULL)
+		*PciDeviceId = 0xa2af;
+	if (PciClass != NULL)
+		*PciClass = 0x0c;
+	if (PciSubClass != NULL)
+		*PciSubClass = 0x03;
+	if (PciRevisionId != NULL)
+		*PciRevisionId = 0;
+	if (PciProgIf != NULL)
+		*PciProgIf = 0;
+
+	return STATUS_SUCCESS;
+}
+
 static PAGEABLE NTSTATUS
 vhci_QueryInterface_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	irpStack;
 	GUID			*interfaceType;
-	USB_BUS_INTERFACE_USBDI_V1	*bus_intf;
-	unsigned int valid_size[2] = { sizeof(USB_BUS_INTERFACE_USBDI_V0), sizeof(USB_BUS_INTERFACE_USBDI_V1) };
+	USB_BUS_INTERFACE_USBDI_V3	*bus_intf;
+	unsigned int valid_size[4] = {
+		sizeof(USB_BUS_INTERFACE_USBDI_V0), sizeof(USB_BUS_INTERFACE_USBDI_V1),
+		sizeof(USB_BUS_INTERFACE_USBDI_V2), sizeof(USB_BUS_INTERFACE_USBDI_V3)
+	};
 	unsigned short	size, version;
 
 	PAGED_CODE();
@@ -566,19 +599,26 @@ vhci_QueryInterface_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 
 	size = irpStack->Parameters.QueryInterface.Size;
 	version = irpStack->Parameters.QueryInterface.Version;
-	if (version > USB_BUSIF_USBDI_VERSION_1) {
-		DBGW(DBG_GENERAL, "unsupported usbdi interface version now %d", version);
+	if (version > USB_BUSIF_USBDI_VERSION_3) {
+		DBGW(DBG_GENERAL, "unsupported usbdi interface version: %d", version);
 		return STATUS_INVALID_PARAMETER;
 	}
 	if (size < valid_size[version]) {
-		DBGW(DBG_GENERAL, "unsupported usbdi interface version now %d", version);
+		DBGW(DBG_GENERAL, "unsupported usbdi interface version: %d", version);
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	bus_intf = (USB_BUS_INTERFACE_USBDI_V1 *)irpStack->Parameters.QueryInterface.Interface;
+	bus_intf = (USB_BUS_INTERFACE_USBDI_V3 *)irpStack->Parameters.QueryInterface.Interface;
 	bus_intf->Size = (USHORT)valid_size[version];
 
 	switch (version) {
+	case USB_BUSIF_USBDI_VERSION_3:
+		bus_intf->QueryControllerType = QueryControllerType;
+		bus_intf->QueryBusTimeEx = NULL;
+		/* passthrough */
+	case USB_BUSIF_USBDI_VERSION_2:
+		bus_intf->EnumLogEntry = NULL;
+		/* passthrough */
 	case USB_BUSIF_USBDI_VERSION_1:
 		bus_intf->IsDeviceHighSpeed = IsDeviceHighSpeed;
 		/* passthrough */
@@ -787,9 +827,12 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 	//
 		status = STATUS_SUCCESS;
 		break;
+	case IRP_MN_QUERY_PNP_DEVICE_STATE:
+		Irp->IoStatus.Information = 0;
+		status = Irp->IoStatus.Status = STATUS_SUCCESS;
+		break;
 	case IRP_MN_QUERY_LEGACY_BUS_INFORMATION:
 	case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
-	case IRP_MN_QUERY_PNP_DEVICE_STATE:
 		/* not handled */
 		status = Irp->IoStatus.Status;
 		break;
