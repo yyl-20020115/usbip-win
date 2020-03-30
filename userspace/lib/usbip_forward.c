@@ -19,6 +19,8 @@ typedef struct _devbuf {
 	BOOL	invalid;
 	/* asynchronous read is in progress */
 	BOOL	in_reading;
+	/* asynchronous write is in progress */
+	BOOL	in_writing;
 	/* step 1: reading header, 2: reading data */
 	int	step_reading;
 	HANDLE	hdev;
@@ -28,7 +30,16 @@ typedef struct _devbuf {
 	DWORD	bufmaxp, bufmaxc;
 	struct _devbuf	*peer;
 	OVERLAPPED	ovs[2];
+	/* completion event for read or write */
+	HANDLE	hEvent;
 } devbuf_t;
+
+/*
+ * Two devbuf's are shared via hEvent, which indicates read or write completion.
+ * Such a global variable does not pose a severe limitation.
+ * Because userspace binaries(usbip.exe, usbipd.exe) have only a single usbip_forward().
+ */
+static HANDLE	hEvent;
 
 #ifdef DEBUG_PDU
 #undef USING_STDOUT
@@ -341,7 +352,7 @@ setup_rw_overlapped(devbuf_t *buff)
 }
 
 static BOOL
-init_devbuf(devbuf_t *buff, const char *desc, BOOL is_req, BOOL swap_req, HANDLE hdev)
+init_devbuf(devbuf_t *buff, const char *desc, BOOL is_req, BOOL swap_req, HANDLE hdev, HANDLE hEvent)
 {
 	buff->bufp = (char *)malloc(1024);
 	if (buff->bufp == NULL)
@@ -351,6 +362,7 @@ init_devbuf(devbuf_t *buff, const char *desc, BOOL is_req, BOOL swap_req, HANDLE
 	buff->is_req = is_req;
 	buff->swap_req = swap_req;
 	buff->in_reading = FALSE;
+	buff->in_writing = FALSE;
 	buff->invalid = FALSE;
 	buff->step_reading = 0;
 	buff->offhdr = 0;
@@ -359,6 +371,7 @@ init_devbuf(devbuf_t *buff, const char *desc, BOOL is_req, BOOL swap_req, HANDLE
 	buff->bufmaxp = 1024;
 	buff->bufmaxc = 0;
 	buff->hdev = hdev;
+	buff->hEvent = hEvent;
 	if (!setup_rw_overlapped(buff)) {
 		free(buff->bufp);
 		return FALSE;
@@ -386,6 +399,7 @@ read_completion(DWORD errcode, DWORD nread, LPOVERLAPPED lpOverlapped)
 			rbuff->invalid = TRUE;
 	}
 	rbuff->in_reading = FALSE;
+	SetEvent(rbuff->hEvent);
 }
 
 static BOOL
@@ -403,8 +417,6 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 				err("%s: failed to reallocate buffer: %s", __FUNCTION__, rbuff->desc);
 				return FALSE;
 			}
-			if (rbuff->bufp == rbuff->bufc)
-				rbuff->bufc = bufnew;
 			rbuff->bufp = bufnew;
 			rbuff->bufmaxp += nmore;
 		}
@@ -427,15 +439,17 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 		}
 	}
 
-	if (!ReadFileEx(rbuff->hdev, BUFCUR_P(rbuff), nreq, &rbuff->ovs[0], read_completion)) {
-		DWORD error = GetLastError();
-		err("%s: failed to read: err: 0x%lx", __FUNCTION__, error);
-		if (error == ERROR_NETNAME_DELETED) {
-			err("%s: could the client have dropped the connection?", __FUNCTION__);
+	if (!rbuff->in_reading) {
+		if (!ReadFileEx(rbuff->hdev, BUFCUR_P(rbuff), nreq, &rbuff->ovs[0], read_completion)) {
+			DWORD error = GetLastError();
+			err("%s: failed to read: err: 0x%lx", __FUNCTION__, error);
+			if (error == ERROR_NETNAME_DELETED) {
+				err("%s: could the client have dropped the connection?", __FUNCTION__);
+			}
+			return FALSE;
 		}
-		return FALSE;
+		rbuff->in_reading = TRUE;
 	}
-	rbuff->in_reading = TRUE;
 	return TRUE;
 }
 
@@ -444,9 +458,13 @@ write_completion(DWORD errcode, DWORD nwrite, LPOVERLAPPED lpOverlapped)
 {
 	devbuf_t	*wbuff, *rbuff;
 
+	wbuff = (devbuf_t*)lpOverlapped->hEvent;
+	wbuff->in_writing = FALSE;
+
+	SetEvent(wbuff->hEvent);
+
 	if (errcode != 0)
 		return;
-	wbuff = (devbuf_t *)lpOverlapped->hEvent;
 
 	if (nwrite == 0) {
 		wbuff->invalid = TRUE;
@@ -465,9 +483,12 @@ write_devbuf(devbuf_t *wbuff, devbuf_t *rbuff)
 		rbuff->offc = 0;
 		rbuff->bufmaxc = rbuff->offhdr;
 	}
-	if (!WriteFileEx(wbuff->hdev, BUFCUR_C(rbuff), BUFREMAIN_C(rbuff), &wbuff->ovs[1], write_completion)) {
-		err("%s: failed to write sock: err: 0x%lx", __FUNCTION__, GetLastError());
-		return FALSE;
+	if (!wbuff->in_writing && BUFREMAIN_C(rbuff) > 0) {
+		if (!WriteFileEx(wbuff->hdev, BUFCUR_C(rbuff), BUFREMAIN_C(rbuff), &wbuff->ovs[1], write_completion)) {
+			err("%s: failed to write sock: err: 0x%lx", __FUNCTION__, GetLastError());
+			return FALSE;
+		}
+		wbuff->in_writing = TRUE;
 	}
 
 	return TRUE;
@@ -529,13 +550,12 @@ read_write_dev(devbuf_t *rbuff, devbuf_t *wbuff)
 {
 	int	res;
 
-	if (rbuff->in_reading)
-		return TRUE;
-	if ((res = read_dev(rbuff, wbuff->swap_req)) < 0)
-		return FALSE;
-	if (res == 0)
-		return TRUE;
-
+	if (!rbuff->in_reading) {
+		if ((res = read_dev(rbuff, wbuff->swap_req)) < 0)
+			return FALSE;
+		if (res == 0)
+			return TRUE;
+	}
 	return write_devbuf(wbuff, rbuff);
 }
 
@@ -545,13 +565,14 @@ static void
 signalhandler(int signal)
 {
 	interrupted = TRUE;
+	SetEvent(hEvent);
 }
 
 void
 usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 {
 	devbuf_t	buff_src, buff_dst;
-	const char	*desc_src, *desc_dst;
+	const char* desc_src, * desc_dst;
 	BOOL	is_req_src;
 	BOOL	swap_req_src, swap_req_dst;
 
@@ -569,11 +590,20 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 		swap_req_src = FALSE;
 		swap_req_dst = TRUE;
 	}
-	if (!init_devbuf(&buff_src, desc_src, TRUE, swap_req_src, hdev_src)) {
+
+	hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (hEvent == NULL) {
+		err("failed to create event");
+		return;
+	}
+
+	if (!init_devbuf(&buff_src, desc_src, TRUE, swap_req_src, hdev_src, hEvent)) {
+		CloseHandle(hEvent);
 		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_src);
 		return;
 	}
-	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst)) {
+	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst, hEvent)) {
+		CloseHandle(hEvent);
 		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_dst);
 		cleanup_devbuf(&buff_src);
 		return;
@@ -592,26 +622,29 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 
 		if (buff_src.invalid || buff_dst.invalid)
 			break;
-		if (buff_src.in_reading && buff_dst.in_reading)
-			SleepEx(500, TRUE);
+		if (buff_src.in_reading && buff_dst.in_reading &&
+			(buff_src.in_writing || BUFREMAIN_C(&buff_dst) == 0) &&
+			(buff_dst.in_writing || BUFREMAIN_C(&buff_src) == 0)) {
+			WaitForSingleObjectEx(hEvent, INFINITE, TRUE);
+			ResetEvent(hEvent);
+		}
 	}
 
 	if (interrupted) {
 		info("CTRL-C received\n");
 	}
+	signal(SIGINT, SIG_DFL);
 
-	/* Cancel an uncompleted asynchronous read */
-	/* If there's no asynchronous read pending, CancelIo seems to be blocked. */
-	/* in_reading should be checked as cleared to guarantee that an IO completion routine has been called */
-	while (buff_src.in_reading) {
+	if (buff_src.in_reading)
 		CancelIoEx(hdev_src, &buff_src.ovs[0]);
-		SleepEx(500, TRUE);
-	}
-	while (buff_dst.in_reading) {
+	if (buff_dst.in_reading)
 		CancelIoEx(hdev_dst, &buff_dst.ovs[0]);
-		SleepEx(500, TRUE);
+
+	while (buff_src.in_reading || buff_dst.in_reading || buff_src.in_writing || buff_dst.in_writing) {
+		WaitForSingleObjectEx(hEvent, INFINITE, TRUE);
 	}
 
 	cleanup_devbuf(&buff_src);
 	cleanup_devbuf(&buff_dst);
+	CloseHandle(hEvent);
 }
