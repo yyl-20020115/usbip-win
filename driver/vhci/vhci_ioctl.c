@@ -60,6 +60,17 @@ vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
 }
 
 static NTSTATUS
+process_urb_get_status(PURB urb)
+{
+	struct _URB_CONTROL_GET_STATUS_REQUEST	*urb_get = &urb->UrbControlGetStatusRequest;
+	if (urb_get->TransferBuffer != NULL && urb_get->TransferBufferLength == 2) {
+		*(USHORT *)urb_get->TransferBuffer = 0;
+		return STATUS_SUCCESS;
+	}
+	return STATUS_INVALID_PARAMETER;
+}
+
+static NTSTATUS
 process_urb_get_frame(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_GET_CURRENT_FRAME_NUMBER	*urb_get = &urb->UrbGetCurrentFrameNumber;
@@ -95,6 +106,11 @@ process_irp_urb_req(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 	DBGI(DBG_IOCTL, "process_irp_urb_req: function: %s\n", dbg_urbfunc(urb->UrbHeader.Function));
 
 	switch (urb->UrbHeader.Function) {
+	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
+	case URB_FUNCTION_GET_STATUS_FROM_INTERFACE:
+	case URB_FUNCTION_GET_STATUS_FROM_ENDPOINT:
+	case URB_FUNCTION_GET_STATUS_FROM_OTHER:
+		return process_urb_get_status(urb);
 	case URB_FUNCTION_ABORT_PIPE:
 		return vhci_ioctl_abort_pipe(vpdo, urb->UrbPipeRequest.PipeHandle);
 	case URB_FUNCTION_GET_CURRENT_FRAME_NUMBER:
