@@ -92,9 +92,7 @@ usbip.exe list -l
   - `> bcdedit.exe /set TESTSIGNING ON`
   - reboot the system to apply
 - Copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_vhci.cer`, `usbip_vhci.cat` into a folder in target machine
-  - You can find `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.cer`, `usbip_vhci.inf` in output folder after build or on [release](https://github.com/cezanne/usbip-win/releases) page.
-  - `usbip_vhci.cat` can be found from `usbip_vhci` subfolder of output folder.
-  - `usbip_vhci.cer` can be found in [0.0.1 release](https://github.com/cezanne/usbip-win/releases/tag/0.0.1) page.
+  - You can find all files in output folder after build or on [release](https://github.com/cezanne/usbip-win/releases) page.
 - Install USB/IP VHCI driver
   - Command line install
     - Run PowerShell as an Administrator
