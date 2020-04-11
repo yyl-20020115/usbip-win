@@ -6,7 +6,7 @@ copy ..\usbip_vhci.sys
 copy ..\usbip_vhci.cer
 copy ..\usbip_vhci.inf
 inf2cat /driver:.\ /os:%2 /uselocaltime
-signtool sign usbip_vhci.cat
+signtool sign /f %3 /p usbip usbip_vhci.cat
 copy /y usbip_vhci.cat ..
 cd ..
 del /s /q vhci_cat
