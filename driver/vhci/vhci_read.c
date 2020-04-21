@@ -571,6 +571,65 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
+store_urb_control_transfer_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+{
+	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urb->UrbControlTransfer;
+	PVOID	dst;
+	char* buf;
+
+	dst = get_read_irp_data(irp, urb_ctltrans->TransferBufferLength);
+	if (dst == NULL)
+		return STATUS_BUFFER_TOO_SMALL;
+
+	/*
+	 * reading from TransferBuffer or TransferBufferMDL,
+	 * whichever of them is not null
+	 */
+	buf = get_buf(urb_ctltrans->TransferBuffer, urb_ctltrans->TransferBufferMDL);
+	if (buf == NULL)
+		return STATUS_INSUFFICIENT_RESOURCES;
+	RtlCopyMemory(dst, buf, urb_ctltrans->TransferBufferLength);
+	irp->IoStatus.Information = urb_ctltrans->TransferBufferLength;
+	vpdo->len_sent_partial = 0;
+
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+store_urb_control_transfer(PIRP irp, PURB urb, struct urb_req* urbr)
+{
+	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urb->UrbControlTransfer;
+	struct usbip_header* hdr;
+	int	in = urb_ctltrans->TransferFlags & USBD_TRANSFER_DIRECTION_IN;
+
+	hdr = get_usbip_hdr_from_read_irp(irp);
+	if (hdr == NULL) {
+		DBGE(DBG_READ, "Cannot get usbip header\n");
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, in, urb_ctltrans->PipeHandle,
+		urb_ctltrans->TransferFlags | USBD_SHORT_TRANSFER_OK, urb_ctltrans->TransferBufferLength);
+	RtlCopyMemory(hdr->u.cmd_submit.setup, urb_ctltrans->SetupPacket, 8);
+
+	irp->IoStatus.Information = sizeof(struct usbip_header);
+
+	if (!in && urb_ctltrans->TransferBufferLength > 0) {
+		if (get_read_payload_length(irp) >= urb_ctltrans->TransferBufferLength) {
+			PVOID buf = get_buf(urb_ctltrans->TransferBuffer, urb_ctltrans->TransferBufferMDL);
+			if (buf == NULL)
+				return STATUS_INSUFFICIENT_RESOURCES;
+			RtlCopyMemory(hdr + 1, buf, urb_ctltrans->TransferBufferLength);
+		}
+		else {
+			urbr->vpdo->len_sent_partial = sizeof(struct usbip_header);
+		}
+	}
+
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
 store_urb_control_transfer_ex_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_TRANSFER_EX	*urb_control_ex = &urb->UrbControlTransferEx;
@@ -688,6 +747,9 @@ store_urbr_submit(PIRP irp, struct urb_req *urbr)
 	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
 		status = store_urb_reset_pipe(irp, urb, urbr);
 		break;
+	case URB_FUNCTION_CONTROL_TRANSFER:
+		status = store_urb_control_transfer(irp, urb, urbr);
+		break;
 	case URB_FUNCTION_CONTROL_TRANSFER_EX:
 		status = store_urb_control_transfer_ex(irp, urb, urbr);
 		break;
@@ -730,6 +792,9 @@ store_urbr_partial(PIRP irp, struct urb_req *urbr)
 	case URB_FUNCTION_VENDOR_INTERFACE:
 	case URB_FUNCTION_VENDOR_ENDPOINT:
 		status = store_urb_class_vendor_partial(urbr->vpdo, irp, urb);
+		break;
+	case URB_FUNCTION_CONTROL_TRANSFER:
+		status = store_urb_control_transfer_partial(urbr->vpdo, irp, urb);
 		break;
 	case URB_FUNCTION_CONTROL_TRANSFER_EX:
 		status = store_urb_control_transfer_ex_partial(urbr->vpdo, irp, urb);

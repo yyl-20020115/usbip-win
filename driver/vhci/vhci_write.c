@@ -136,6 +136,21 @@ store_urb_control(PURB urb, struct usbip_header *hdr)
 }
 
 static NTSTATUS
+store_urb_control_transfer(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_CONTROL_TRANSFER	*urb_desc = &urb->UrbControlTransfer;
+	NTSTATUS	status;
+
+	if (urb_desc->TransferBufferLength == 0)
+		return STATUS_SUCCESS;
+	status = copy_to_transfer_buffer(urb_desc->TransferBuffer, urb_desc->TransferBufferMDL,
+		urb_desc->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+	if (status == STATUS_SUCCESS)
+		urb_desc->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	return status;
+}
+
+static NTSTATUS
 store_urb_control_transfer_ex(PURB urb, struct usbip_header* hdr)
 {
 	struct _URB_CONTROL_TRANSFER_EX	*urb_desc = &urb->UrbControlTransferEx;
@@ -244,6 +259,9 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 		break;
 	case URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL:
 		status = STATUS_SUCCESS;
+		break;
+	case URB_FUNCTION_CONTROL_TRANSFER:
+		status = store_urb_control_transfer(urb, hdr);
 		break;
 	case URB_FUNCTION_CONTROL_TRANSFER_EX:
 		status = store_urb_control_transfer_ex(urb, hdr);
