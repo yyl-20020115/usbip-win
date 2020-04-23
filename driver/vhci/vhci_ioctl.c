@@ -44,10 +44,18 @@ vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
 
 		if (urbr_local->irp) {
 			PIRP	irp = urbr_local->irp;
+			BOOLEAN	valid_irp;
 
-			IoSetCancelRoutine(irp, NULL);
-			irp->IoStatus.Status = STATUS_CANCELLED;
-			IoCompleteRequest(irp, IO_NO_INCREMENT);
+			KIRQL oldirql_cancel;
+			IoAcquireCancelSpinLock(&oldirql_cancel);
+			valid_irp = IoSetCancelRoutine(irp, NULL) != NULL;
+			IoReleaseCancelSpinLock(oldirql_cancel);
+
+			if (valid_irp) {
+				irp->IoStatus.Status = STATUS_CANCELLED;
+				irp->IoStatus.Information = 0;
+				IoCompleteRequest(irp, IO_NO_INCREMENT);
+			}
 		}
 		RemoveEntryListInit(&urbr_local->list_state);
 		RemoveEntryListInit(&urbr_local->list_all);
@@ -149,7 +157,7 @@ setup_topology_address(pusbip_vpdo_dev_t vpdo, PIO_STACK_LOCATION irpStack)
 	return STATUS_SUCCESS;
 }
 
-PAGEABLE NTSTATUS
+NTSTATUS
 vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION      irpStack;
@@ -229,12 +237,13 @@ vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 
 	devcom = (pdev_common_t)devobj->DeviceExtension;
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Enter\n");
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Enter %p\n", Irp);
 
 	// We only allow create/close requests for the vhub.
 	if (!devcom->is_vhub) {
 		DBGE(DBG_IOCTL, "ioctl for vhub is not allowed\n");
 
+		Irp->IoStatus.Information = 0;
 		Irp->IoStatus.Status = status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return status;

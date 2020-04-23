@@ -104,8 +104,9 @@ static void
 remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 {
 	struct urb_req	*urbr;
+	KIRQL	oldirql;
 
-	KeAcquireSpinLockAtDpcLevel(&vpdo->lock_urbr);
+	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
 
 	urbr = find_urbr_with_irp(vpdo, irp);
 	if (urbr != NULL) {
@@ -120,7 +121,7 @@ remove_cancelled_urbr(pusbip_vpdo_dev_t vpdo, PIRP irp)
 		DBGW(DBG_URB, "no matching urbr\n");
 	}
 
-	KeReleaseSpinLockFromDpcLevel(&vpdo->lock_urbr);
+	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
 	if (urbr != NULL) {
 		submit_urbr_unlink(vpdo, urbr->seq_num);
@@ -137,12 +138,13 @@ cancel_urbr(PDEVICE_OBJECT devobj, PIRP irp)
 
 	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
 	DBGI(DBG_GENERAL, "irp will be cancelled: %p\n", irp);
+	IoReleaseCancelSpinLock(irp->CancelIrql);
 
 	remove_cancelled_urbr(vpdo, irp);
 
 	irp->IoStatus.Status = STATUS_CANCELLED;
+	irp->IoStatus.Information = 0;
 	IoCompleteRequest(irp, IO_NO_INCREMENT);
-	IoReleaseCancelSpinLock(irp->CancelIrql);
 }
 
 struct urb_req *
@@ -208,6 +210,7 @@ NTSTATUS
 submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 {
 	KIRQL	oldirql;
+	KIRQL	oldirql_cancel;
 	PIRP	read_irp;
 	NTSTATUS	status = STATUS_PENDING;
 
@@ -215,7 +218,9 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 
 	if (vpdo->urbr_sent_partial || vpdo->pending_read_irp == NULL) {
 		if (urbr->irp != NULL) {
+			IoAcquireCancelSpinLock(&oldirql_cancel);
 			IoSetCancelRoutine(urbr->irp, cancel_urbr);
+			IoReleaseCancelSpinLock(oldirql_cancel);
 			IoMarkIrpPending(urbr->irp);
 		}
 		InsertTailList(&vpdo->head_urbr_pending, &urbr->list_state);
@@ -224,6 +229,18 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 
 		DBGI(DBG_URB, "submit_urbr: urb pending\n");
 		return STATUS_PENDING;
+	}
+
+	BOOLEAN valid_irp;
+	IoAcquireCancelSpinLock(&oldirql_cancel);
+	valid_irp = IoSetCancelRoutine(vpdo->pending_read_irp, NULL) != NULL;
+	IoReleaseCancelSpinLock(oldirql_cancel);
+	if (!valid_irp) {
+		DBGI(DBG_URB, "submit_urbr: read irp was cancelled");
+		status = STATUS_INVALID_PARAMETER;
+		vpdo->pending_read_irp = NULL;
+		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
+		return status;
 	}
 
 	read_irp = vpdo->pending_read_irp;
@@ -239,7 +256,9 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 
 	if (status == STATUS_SUCCESS) {
 		if (urbr->irp != NULL) {
+			IoAcquireCancelSpinLock(&oldirql_cancel);
 			IoSetCancelRoutine(urbr->irp, cancel_urbr);
+			IoReleaseCancelSpinLock(oldirql_cancel);
 			IoMarkIrpPending(urbr->irp);
 		}
 		if (vpdo->len_sent_partial == 0) {
@@ -249,19 +268,12 @@ submit_urbr(pusbip_vpdo_dev_t vpdo, struct urb_req *urbr)
 
 		InsertTailList(&vpdo->head_urbr, &urbr->list_all);
 
-		read_irp = vpdo->pending_read_irp;
 		vpdo->pending_read_irp = NULL;
 		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
 
-		if (read_irp) {
-			read_irp->IoStatus.Status = STATUS_SUCCESS;
-			IoCompleteRequest(read_irp, IO_NO_INCREMENT);
-			status = STATUS_PENDING;
-		}
-		else {
-			DBGI(DBG_URB, "submit_urbr: read irp was cancelled\n");
-			status = STATUS_INVALID_PARAMETER;
-		}
+		read_irp->IoStatus.Status = STATUS_SUCCESS;
+		IoCompleteRequest(read_irp, IO_NO_INCREMENT);
+		status = STATUS_PENDING;
 	}
 	else {
 		vpdo->urbr_sent_partial = NULL;

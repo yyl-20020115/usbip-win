@@ -330,14 +330,14 @@ get_usbip_hdr_from_write_irp(PIRP irp)
 }
 
 static NTSTATUS
-process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
+process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP write_irp)
 {
 	struct usbip_header	*hdr;
 	struct urb_req	*urbr;
 	KIRQL	oldirql;
 	NTSTATUS	status;
 
-	hdr = get_usbip_hdr_from_write_irp(irp);
+	hdr = get_usbip_hdr_from_write_irp(write_irp);
 	if (hdr == NULL) {
 		DBGE(DBG_WRITE, "small write irp\n");
 		return STATUS_INVALID_PARAMETER;
@@ -351,21 +351,27 @@ process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
 	}
 
 	status = process_urb_res(urbr, hdr);
-
-	if (urbr->irp != NULL) {
-		IoSetCancelRoutine(urbr->irp, NULL);
-		urbr->irp->IoStatus.Status = status;
-
-		/* it seems windows client usb driver will think
-		 * IoCompleteRequest is running at DISPATCH_LEVEL
-		 * so without this it will change IRQL sometimes,
-		 * and introduce to a dead of my userspace program
-		 */
-		KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
-		IoCompleteRequest(urbr->irp, IO_NO_INCREMENT);
-		KeLowerIrql(oldirql);
-	}
+	PIRP irp = urbr->irp;
 	free_urbr(urbr);
+
+	if (irp != NULL) {
+		BOOLEAN valid_irp;
+		IoAcquireCancelSpinLock(&oldirql);
+		valid_irp = IoSetCancelRoutine(irp, NULL) != NULL;
+		IoReleaseCancelSpinLock(oldirql);
+		if (valid_irp) {
+			irp->IoStatus.Status = status;
+
+			/* it seems windows client usb driver will think
+			 * IoCompleteRequest is running at DISPATCH_LEVEL
+			 * so without this it will change IRQL sometimes,
+			 * and introduce to a dead of my userspace program
+			 */
+			KeRaiseIrql(DISPATCH_LEVEL, &oldirql);
+			IoCompleteRequest(irp, IO_NO_INCREMENT);
+			KeLowerIrql(oldirql);
+		}
+	}
 
 	return STATUS_SUCCESS;
 }
