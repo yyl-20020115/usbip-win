@@ -30,5 +30,6 @@
 
 #include <winsock2.h>
 
+BOOL is_stub_devno(devno_t devno);
 BOOL build_udev(devno_t devno, struct usbip_usb_device *pudev);
 HANDLE open_stub_dev(devno_t devno);

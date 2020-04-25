@@ -123,6 +123,27 @@ get_devpath_from_devno(devno_t devno)
 	return devpath;
 }
 
+static int
+walker_check_stub(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
+{
+	devno_t	*pdevno = (devno_t *)ctx;
+
+	if (*pdevno == devno)
+		return 1;
+	return 0;
+}
+
+BOOL
+is_stub_devno(devno_t devno)
+{
+	int	rc;
+
+	rc = traverse_intfdevs(walker_check_stub, &GUID_DEVINTERFACE_STUB_USBIP, &devno);
+	if (rc == 1)
+		return TRUE;
+	return FALSE;
+}
+
 BOOL
 build_udev(devno_t devno, struct usbip_usb_device *pudev)
 {

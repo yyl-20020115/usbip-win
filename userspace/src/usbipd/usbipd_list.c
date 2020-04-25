@@ -47,6 +47,8 @@ walker_edev_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t dev
 		err("%s: out of memory", __FUNCTION__);
 		return 0;
 	}
+	if (!is_stub_devno(devno))
+		return 0;
 	if (!build_udev(devno, &edev->udev)) {
 		err("%s: cannot build usbip dev", __FUNCTION__);
 		free(edev);

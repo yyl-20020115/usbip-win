@@ -195,23 +195,13 @@ get_devno_from_inst_id(unsigned char devno_map[], const char *id_inst)
 	return devno;
 }
 
-int
-traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
+static int
+traverse_dev_info(HDEVINFO dev_info, walkfunc_t walker, void *ctx)
 {
-	HDEVINFO	dev_info;
 	SP_DEVINFO_DATA	dev_info_data;
-	DWORD	flags = DIGCF_ALLCLASSES;
 	unsigned char	devno_map[255];
-	int	ret = 0;
 	int	idx;
-
-	if (present_only)
-		flags |= DIGCF_PRESENT;
-	dev_info = SetupDiGetClassDevs(NULL, "USB", NULL, flags);
-	if (dev_info == INVALID_HANDLE_VALUE) {
-		err("%s: SetupDiGetClassDevs failed: 0x%lx\n", __FUNCTION__, GetLastError());
-		return -1;
-	}
+	int	ret = 0;
 
 	memset(devno_map, 0, 255);
 	dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
@@ -219,8 +209,7 @@ traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
 		char	*id_inst;
 		devno_t	devno;
 
-		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data))
-		{
+		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data)) {
 			DWORD	err = GetLastError();
 
 			if (err != ERROR_NO_MORE_ITEMS) {
@@ -245,12 +234,26 @@ traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
 }
 
 int
+traverse_usbdevs(walkfunc_t walker, BOOL present_only, void *ctx)
+{
+	HDEVINFO	dev_info;
+	DWORD	flags = DIGCF_ALLCLASSES;
+
+	if (present_only)
+		flags |= DIGCF_PRESENT;
+	dev_info = SetupDiGetClassDevs(NULL, "USB", NULL, flags);
+	if (dev_info == INVALID_HANDLE_VALUE) {
+		err("%s: SetupDiGetClassDevs failed: 0x%lx\n", __FUNCTION__, GetLastError());
+		return -1;
+	}
+
+	return traverse_dev_info(dev_info, walker, ctx);
+}
+
+int
 traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 {
 	HDEVINFO	dev_info;
-	SP_DEVINFO_DATA	dev_info_data;
-	int	ret = 0;
-	int	idx;
 
 	dev_info = SetupDiGetClassDevs(pguid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
 	if (dev_info == INVALID_HANDLE_VALUE) {
@@ -258,23 +261,7 @@ traverse_intfdevs(walkfunc_t walker, LPCGUID pguid, void *ctx)
 		return -1;
 	}
 
-	dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
-	for (idx = 0;; idx++) {
-		if (!SetupDiEnumDeviceInfo(dev_info, idx, &dev_info_data)) {
-			DWORD	err = GetLastError();
-
-			if (err != ERROR_NO_MORE_ITEMS) {
-				err("%s: failed to get device information: err: %d\n", __FUNCTION__, err);
-			}
-			break;
-		}
-		ret = walker(dev_info, &dev_info_data, 0, ctx);
-		if (ret != 0)
-			break;
-	}
-
-	SetupDiDestroyDeviceInfoList(dev_info);
-	return ret;
+	return traverse_dev_info(dev_info, walker, ctx);
 }
 
 static BOOL
