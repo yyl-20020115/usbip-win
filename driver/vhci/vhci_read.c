@@ -174,6 +174,57 @@ store_urb_get_dev_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
+store_urb_get_status(PIRP irp, PURB urb, struct urb_req *urbr)
+{
+	struct _URB_CONTROL_GET_STATUS_REQUEST	*urb_gsr = &urb->UrbControlGetStatusRequest;
+	struct usbip_header	*hdr;
+	USHORT		code_func;
+	char		recip;
+	usb_cspkt_t	*csp;
+
+	hdr = get_usbip_hdr_from_read_irp(irp);
+	if (hdr == NULL) {
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+
+	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
+
+	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vpdo->devid, USBIP_DIR_IN, 0,
+				    USBD_SHORT_TRANSFER_OK, urb_gsr->TransferBufferLength);
+
+	code_func = urb->UrbHeader.Function;
+	DBGI(DBG_READ, "store_urb_get_status: urbr: %s, func:%s\n", dbg_urbr(urbr), dbg_urbfunc(code_func));
+
+	switch (code_func) {
+	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
+		recip = BMREQUEST_TO_DEVICE;
+		break;
+	case URB_FUNCTION_GET_STATUS_FROM_INTERFACE:
+		recip = BMREQUEST_TO_INTERFACE;
+		break;
+	case URB_FUNCTION_GET_STATUS_FROM_ENDPOINT:
+		recip = BMREQUEST_TO_ENDPOINT;
+		break;
+	case URB_FUNCTION_GET_STATUS_FROM_OTHER:
+		recip = BMREQUEST_TO_OTHER;
+		break;
+	default:
+		DBGW(DBG_IOCTL, "store_urb_get_status: unhandled function: %s: len: %d\n",
+			dbg_urbfunc(urb->UrbHeader.Function), urb->UrbHeader.Length);
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	build_setup_packet(csp, USBIP_DIR_IN, BMREQUEST_STANDARD, recip, USB_REQUEST_GET_STATUS);
+
+	csp->wLength = (unsigned short)urb_gsr->TransferBufferLength;
+	csp->wIndex.W = urb_gsr->Index;
+	csp->wValue.W = 0;
+
+	irp->IoStatus.Information = sizeof(struct usbip_header);
+	return STATUS_SUCCESS;
+}
+
+static NTSTATUS
 store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 {
 	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_desc = &urb->UrbControlDescriptorRequest;
@@ -609,6 +660,12 @@ store_urbr_submit(PIRP irp, struct urb_req *urbr)
 		break;
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
 		status = store_urb_get_dev_desc(irp, urb, urbr);
+		break;
+	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
+	case URB_FUNCTION_GET_STATUS_FROM_INTERFACE:
+	case URB_FUNCTION_GET_STATUS_FROM_ENDPOINT:
+	case URB_FUNCTION_GET_STATUS_FROM_OTHER:
+		status = store_urb_get_status(irp, urb, urbr);
 		break;
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
 		status = store_urb_get_intf_desc(irp, urb, urbr);

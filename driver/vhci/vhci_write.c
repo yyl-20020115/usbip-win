@@ -214,6 +214,10 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
+	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
+	case URB_FUNCTION_GET_STATUS_FROM_INTERFACE:
+	case URB_FUNCTION_GET_STATUS_FROM_ENDPOINT:
+	case URB_FUNCTION_GET_STATUS_FROM_OTHER:
 		status = store_urb_control(urb, hdr);
 		break;
 	case URB_FUNCTION_CLASS_DEVICE:
