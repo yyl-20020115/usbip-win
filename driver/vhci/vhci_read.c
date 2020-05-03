@@ -96,8 +96,8 @@ store_urb_reset_pipe(PIRP irp, PURB urb, struct urb_req *urbr)
 
 	in = PIPE2DIRECT(urb_rp->PipeHandle);
 	type = PIPE2TYPE(urb_rp->PipeHandle);
-	if (type != USB_ENDPOINT_TYPE_BULK && type != USB_ENDPOINT_TYPE_INTERRUPT) {
-		DBGW(DBG_READ, "CLEAR not allowed to a non-bulk pipe[%d]\n", type);
+	if (type == USB_ENDPOINT_TYPE_CONTROL) {
+		DBGW(DBG_READ, "CLEAR not allowed to a control pipe\n");
 		return STATUS_INVALID_PARAMETER;
 	}
 
