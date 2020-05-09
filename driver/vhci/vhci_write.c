@@ -123,7 +123,7 @@ copy_to_transfer_buffer(PVOID buf_dst, PMDL bufMDL, int dst_len, PVOID src, int 
 }
 
 static NTSTATUS
-store_urb_control(PURB urb, struct usbip_header *hdr)
+store_urb_get_desc(PURB urb, struct usbip_header *hdr)
 {
 	struct _URB_CONTROL_DESCRIPTOR_REQUEST *urb_desc = &urb->UrbControlDescriptorRequest;
 	NTSTATUS	status;
@@ -132,6 +132,19 @@ store_urb_control(PURB urb, struct usbip_header *hdr)
 		urb_desc->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
 	if (status == STATUS_SUCCESS)
 		urb_desc->TransferBufferLength = hdr->u.ret_submit.actual_length;
+	return status;
+}
+
+static NTSTATUS
+store_urb_get_status(PURB urb, struct usbip_header *hdr)
+{
+	struct _URB_CONTROL_GET_STATUS_REQUEST	*urb_gsr = &urb->UrbControlGetStatusRequest;
+	NTSTATUS	status;
+
+	status = copy_to_transfer_buffer(urb_gsr->TransferBuffer, urb_gsr->TransferBufferMDL,
+		urb_gsr->TransferBufferLength, hdr + 1, hdr->u.ret_submit.actual_length);
+	if (status == STATUS_SUCCESS)
+		urb_gsr->TransferBufferLength = hdr->u.ret_submit.actual_length;
 	return status;
 }
 
@@ -229,11 +242,13 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 	switch (urb->UrbHeader.Function) {
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
 	case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
+		status = store_urb_get_desc(urb, hdr);
+		break;
 	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
 	case URB_FUNCTION_GET_STATUS_FROM_INTERFACE:
 	case URB_FUNCTION_GET_STATUS_FROM_ENDPOINT:
 	case URB_FUNCTION_GET_STATUS_FROM_OTHER:
-		status = store_urb_control(urb, hdr);
+		status = store_urb_get_status(urb, hdr);
 		break;
 	case URB_FUNCTION_CLASS_DEVICE:
 	case URB_FUNCTION_CLASS_INTERFACE:
