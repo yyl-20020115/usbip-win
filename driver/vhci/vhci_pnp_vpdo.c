@@ -722,13 +722,15 @@ GetUSBDIVersion(IN PVOID context, IN OUT PUSBD_VERSION_INFORMATION inf, IN OUT P
 static VOID
 InterfaceReference(__in PVOID Context)
 {
-	InterlockedIncrement(&((pusbip_vpdo_dev_t)Context)->InterfaceRefCount);
+	pusbip_vpdo_dev_t	vpdo = (pusbip_vpdo_dev_t)Context;
+	add_ref_vpdo(vpdo);
 }
 
 static VOID
 InterfaceDereference(__in PVOID Context)
 {
-	InterlockedDecrement(&((pusbip_vpdo_dev_t)Context)->InterfaceRefCount);
+	pusbip_vpdo_dev_t	vpdo = (pusbip_vpdo_dev_t)Context;
+	del_ref_vpdo(vpdo);
 }
 
 static NTSTATUS
@@ -822,7 +824,7 @@ vhci_QueryInterface_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 		return STATUS_INVALID_PARAMETER;
 	}
 
-	InterfaceReference(vpdo);
+	add_ref_vpdo(vpdo);
 	return STATUS_SUCCESS;
 }
 
@@ -883,7 +885,7 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		// Check to see whether the device can be removed safely.
 		// If not fail this request. This is the last opportunity
 		// to do so.
-		if (vpdo->InterfaceRefCount) {
+		if (vpdo->n_refs > 0) {
 			// Somebody is still using our interface.
 			// We must fail remove.
 			status = STATUS_UNSUCCESSFUL;

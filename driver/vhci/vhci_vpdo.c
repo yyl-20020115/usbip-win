@@ -1,9 +1,16 @@
 #include "vhci.h"
 
-#include <usbdi.h>
+VOID
+add_ref_vpdo(pusbip_vpdo_dev_t vpdo)
+{
+	InterlockedIncrement(&vpdo->n_refs);
+}
 
-#include "vhci_pnp.h"
-#include "usbip_proto.h"
+VOID
+del_ref_vpdo(pusbip_vpdo_dev_t vpdo)
+{
+	InterlockedDecrement(&vpdo->n_refs);
+}
 
 PAGEABLE NTSTATUS
 destroy_vpdo(pusbip_vpdo_dev_t vpdo)

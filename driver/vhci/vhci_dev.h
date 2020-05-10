@@ -123,9 +123,9 @@ typedef struct
 	UCHAR	speed;
 	UCHAR	unused; /* 4 bytes alignment */
 
-	// Used to track the intefaces handed out to other drivers.
+	// maintain vpdo usage count to guarantee valid vpdo reference
 	// If this value is non-zero, we fail query-remove.
-	LONG	InterfaceRefCount;
+	LONG	n_refs;
 	// a pending irp when no urb is requested
 	PIRP	pending_read_irp;
 	// a partially transferred urb_req
@@ -143,29 +143,13 @@ typedef struct
 	unsigned int	devid;
 	unsigned long	seq_num;
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
-	KTIMER	timer;
-	KDPC	dpc;
 	UNICODE_STRING	usb_dev_interface;
-
-	//
-	// In order to reduce the complexity of the driver, I chose not
-	// to use any queues for holding IRPs when the system tries to
-	// rebalance resources to accommodate a new device, and stops our
-	// device temporarily. But in a real world driver this is required.
-	// If you hold Irps then you should also support Cancel and
-	// Cleanup functions. The function driver demonstrates these techniques.
-	//
-	// The queue where the incoming requests are held when
-	// the device is stopped for resource rebalance.
-
-	//LIST_ENTRY	PendingQueue;
-
-	// The spin lock that protects access to  the queue
-
-	//KSPIN_LOCK	PendingQueueLock;
 } usbip_vpdo_dev_t, *pusbip_vpdo_dev_t;
 
 void inc_io_vhub(__in pusbip_vhub_dev_t vhub);
 void dec_io_vhub(__in pusbip_vhub_dev_t vhub);
+
+void add_ref_vpdo(__in pusbip_vpdo_dev_t vpdo);
+void del_ref_vpdo(__in pusbip_vpdo_dev_t vpdo);
 
 extern PAGEABLE NTSTATUS destroy_vpdo(pusbip_vpdo_dev_t vpdo);
