@@ -35,7 +35,7 @@ DRIVER_DISPATCH vhci_power;
 PAGEABLE __drv_dispatchType(IRP_MJ_SYSTEM_CONTROL)
 DRIVER_DISPATCH vhci_system_control;
 
-PAGEABLE DRIVER_ADD_DEVICE vhci_add_device;
+PAGEABLE DRIVER_ADD_DEVICE vhci_add_vhub;
 
 static PAGEABLE VOID
 vhci_driverUnload(__in PDRIVER_OBJECT drvobj)
@@ -136,7 +136,7 @@ vhci_cleanup(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 		vpdo->fo = NULL;
 		irpstack->FileObject->FsContext = NULL;
 		if (vpdo->Present)
-			vhci_unplug_dev(vpdo->port, vhub);
+			vhci_unplug_vpdo(vpdo->port, vhub);
 	}
 	status = STATUS_SUCCESS;
 	irp->IoStatus.Information = 0;
@@ -219,7 +219,7 @@ DriverEntry(__in PDRIVER_OBJECT drvobj, __in PUNICODE_STRING RegistryPath)
 	drvobj->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = vhci_internal_ioctl;
 	drvobj->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = vhci_system_control;
 	drvobj->DriverUnload = vhci_driverUnload;
-	drvobj->DriverExtension->AddDevice = vhci_add_device;
+	drvobj->DriverExtension->AddDevice = vhci_add_vhub;
 
 	DBGI(DBG_GENERAL, "DriverEntry: Leave\n");
 

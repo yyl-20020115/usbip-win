@@ -23,6 +23,9 @@
     <ClCompile Include="vhci_dbg.c" />
     <ClCompile Include="vhci_devconf.c" />
     <ClCompile Include="vhci_ioctl.c" />
+    <ClCompile Include="vhci_pnp_vhub.c" />
+    <ClCompile Include="vhci_pnp_vpdo.c" />
+    <ClCompile Include="vhci_vhub.c" />
     <ClCompile Include="vhci_vpdo.c" />
     <ClCompile Include="vhci_read.c" />
     <ClCompile Include="vhci_write.c" />

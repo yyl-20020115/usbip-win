@@ -2,6 +2,7 @@
 
 #include <wdmsec.h> // for IoCreateDeviceSecure
 
+#include "vhci_pnp.h"
 #include "vhci_dev.h"
 #include "usbip_vhci_api.h"
 
@@ -16,11 +17,42 @@ DEFINE_GUID(GUID_SD_USBIP_VHCI_VPDO,
 	0x9d3039dd, 0xcca5, 0x4b4d, 0xb3, 0x3d, 0xe2, 0xdd, 0xc8, 0xa8, 0xc5, 0x2e);
 // {9D3039DD-CCA5-4b4d-B33D-E2DDC8A8C52E}
 
-extern PAGEABLE void
-vhci_init_vpdo(pusbip_vpdo_dev_t vpdo);
+static PAGEABLE void
+vhci_init_vpdo(pusbip_vpdo_dev_t vpdo)
+{
+	pusbip_vhub_dev_t	vhub;
+
+	PAGED_CODE();
+
+	DBGI(DBG_PNP, "vhci_init_vpdo: 0x%p\n", vpdo);
+
+	vpdo->Present = TRUE; // attached to the bus
+	vpdo->ReportedMissing = FALSE; // not yet reported missing
+
+	INITIALIZE_PNP_STATE(vpdo);
+
+	// vpdo usually starts its life at D3
+	vpdo->common.DevicePowerState = PowerDeviceD3;
+	vpdo->common.SystemPowerState = PowerSystemWorking;
+
+	InitializeListHead(&vpdo->head_urbr);
+	InitializeListHead(&vpdo->head_urbr_pending);
+	InitializeListHead(&vpdo->head_urbr_sent);
+	KeInitializeSpinLock(&vpdo->lock_urbr);
+
+	DEVOBJ_FROM_VPDO(vpdo)->Flags |= DO_POWER_PAGABLE|DO_DIRECT_IO;
+
+	vhub = vpdo->vhub;
+	ExAcquireFastMutex(&vhub->Mutex);
+	InsertTailList(&vhub->head_vpdo, &vpdo->Link);
+	vhub->n_vpdos++;
+	ExReleaseFastMutex(&vhub->Mutex);
+	// This should be the last step in initialization.
+	DEVOBJ_FROM_VPDO(vpdo)->Flags &= ~DO_DEVICE_INITIALIZING;
+}
 
 PAGEABLE NTSTATUS
-vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo)
+vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo)
 {
 	PDEVICE_OBJECT		devobj;
 	pusbip_vpdo_dev_t	vpdo, devpdo_old;

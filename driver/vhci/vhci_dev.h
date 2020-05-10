@@ -167,3 +167,5 @@ typedef struct
 
 void inc_io_vhub(__in pusbip_vhub_dev_t vhub);
 void dec_io_vhub(__in pusbip_vhub_dev_t vhub);
+
+extern PAGEABLE NTSTATUS destroy_vpdo(pusbip_vpdo_dev_t vpdo);

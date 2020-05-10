@@ -6,13 +6,10 @@
 #include "usbip_vhci_api.h"
 
 extern PAGEABLE NTSTATUS
-vhci_plugin_dev(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo);
+vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo);
 
 extern PAGEABLE NTSTATUS
 vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t vhub, ULONG *info);
-
-extern PAGEABLE NTSTATUS
-vhci_eject_device(PUSBIP_VHCI_EJECT_HARDWARE Eject, pusbip_vhub_dev_t vhub);
 
 NTSTATUS
 vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
@@ -261,7 +258,7 @@ vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 	switch (ioctl_code) {
 	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
 		if (sizeof(ioctl_usbip_vhci_plugin) == inlen) {
-			status = vhci_plugin_dev((ioctl_usbip_vhci_plugin *)buffer, vhub, irpStack->FileObject);
+			status = vhci_plugin_vpdo((ioctl_usbip_vhci_plugin *)buffer, vhub, irpStack->FileObject);
 		}
 		break;
 	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
@@ -271,12 +268,12 @@ vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 		break;
 	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
 		if (sizeof(ioctl_usbip_vhci_unplug) == inlen) {
-			status = vhci_unplug_dev(((ioctl_usbip_vhci_unplug *)buffer)->addr, vhub);
+			status = vhci_unplug_vpdo(((ioctl_usbip_vhci_unplug *)buffer)->addr, vhub);
 		}
 		break;
 	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
 		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen) {
-			status = vhci_eject_device((PUSBIP_VHCI_EJECT_HARDWARE)buffer, vhub);
+			status = vhci_eject_vpdo(((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->port, vhub);
 		}
 		break;
 	default:
