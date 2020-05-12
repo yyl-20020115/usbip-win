@@ -55,21 +55,48 @@ vhub_detach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
 	ExReleaseFastMutex(&vhub->Mutex);
 }
 
+static pusbip_vpdo_dev_t
+find_managed_vpdo(pusbip_vhub_dev_t vhub, PDEVICE_OBJECT devobj)
+{
+	PLIST_ENTRY	entry;
+
+	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
+		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		if (vpdo->common.Self == devobj) {
+			return vpdo;
+		}
+	}
+	return NULL;
+}
+
+static BOOLEAN
+is_in_dev_relations(PDEVICE_OBJECT devobjs[], ULONG n_counts, pusbip_vpdo_dev_t vpdo)
+{
+	ULONG	i;
+
+	for (i = 0; i < n_counts; i++) {
+		if (vpdo->common.Self == devobjs[i]) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 PAGEABLE PDEVICE_RELATIONS
 vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 {
 	PDEVICE_RELATIONS	relations;
-	ULONG			length, prevcount = 0;
+	ULONG			length, n_olds = 0, n_news = 0;
 	PLIST_ENTRY		entry;
-	int	i;
+	ULONG	i;
 
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	if (oldRelations)
-		prevcount = oldRelations->Count;
+		n_olds = oldRelations->Count;
 
 	// Need to allocate a new relations structure and add our vpdos to it
-	length = sizeof(DEVICE_RELATIONS) + (vhub->n_vpdos_plugged + prevcount - 1) * sizeof(PDEVICE_OBJECT);
+	length = sizeof(DEVICE_RELATIONS) + (vhub->n_vpdos_plugged + n_olds - 1) * sizeof(PDEVICE_OBJECT);
 
 	relations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag(PagedPool, length, USBIP_VHCI_POOL_TAG);
 	if (relations == NULL) {
@@ -80,33 +107,40 @@ vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 		return oldRelations;
 	}
 
-	// Copy in the device objects so far
-	if (prevcount > 0) {
-		RtlCopyMemory(relations->Objects, oldRelations->Objects, prevcount * sizeof(PDEVICE_OBJECT));
+	for (i = 0; i < n_olds; i++) {
+		pusbip_vpdo_dev_t	vpdo;
+		PDEVICE_OBJECT	devobj = oldRelations->Objects[i];
+		vpdo = find_managed_vpdo(vhub, devobj);
+		if (vpdo == NULL || vpdo->plugged) {
+			relations->Objects[n_news] = devobj;
+			n_news++;
+		}
+		else {
+			vpdo->ReportedMissing = TRUE;
+			ObDereferenceObject(devobj);
+		}
 	}
 
-	relations->Count = prevcount + vhub->n_vpdos_plugged;
-
-	// For each vpdo present on this bus add a pointer to the device relations
-	// buffer, being sure to take out a reference to that object.
-	// The Plug & Play system will dereference the object when it is done
-	// with it and free the device relations buffer.
-	for (entry = vhub->head_vpdo.Flink, i = 0; entry != &vhub->head_vpdo; entry = entry->Flink, i++) {
+	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
 		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
 
+		if (is_in_dev_relations(relations->Objects, n_news, vpdo))
+			continue;
 		if (vpdo->plugged) {
-			relations->Objects[prevcount + i] = vpdo->common.Self;
+			relations->Objects[n_news] = vpdo->common.Self;
+			n_news++;
 			ObReferenceObject(vpdo->common.Self);
 		} else {
 			vpdo->ReportedMissing = TRUE;
 		}
 	}
 
-	DBGI(DBG_VHUB, "# of vpdo's: present: %d, reported: %d\n", vhub->n_vpdos, relations->Count);
+	relations->Count = n_news;
 
-	if (oldRelations) {
+	DBGI(DBG_VHUB, "vhub vpdos: total:%u,plugged:%u: bus relations: old:%u,new:%u\n", vhub->n_vpdos, vhub->n_vpdos_plugged, n_olds, n_news);
+
+	if (oldRelations)
 		ExFreePool(oldRelations);
-	}
 
 	ExReleaseFastMutex(&vhub->Mutex);
 
