@@ -17,6 +17,8 @@
 #define DBG_POWER	0x0040
 #define DBG_WMI		0x0080
 #define DBG_URB		0x0100
+#define DBG_VHUB	0x0200
+#define DBG_VPDO	0x0400
 
 extern const char *dbg_urbr(struct urb_req *urbr);
 

@@ -994,7 +994,7 @@ vhci_read(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 	}
 	irpstack = IoGetCurrentIrpStackLocation(irp);
 	vpdo = irpstack->FileObject->FsContext;
-	if (vpdo == NULL || !vpdo->Present)
+	if (vpdo == NULL || !vpdo->plugged)
 		status = STATUS_INVALID_DEVICE_REQUEST;
 	else
 		status = process_read_irp(vpdo, irp);

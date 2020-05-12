@@ -7,6 +7,11 @@
 extern PAGEABLE void invalidate_vhub(pusbip_vhub_dev_t vhub);
 extern PAGEABLE NTSTATUS start_vhub(pusbip_vhub_dev_t vhub);
 
+extern PAGEABLE PDEVICE_RELATIONS
+vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations);
+extern PAGEABLE BOOLEAN vhub_invalidate_vpdos_by_vhub_surprise_removal(pusbip_vhub_dev_t vhub);
+extern PAGEABLE void vhub_remove_all_vpdos(pusbip_vhub_dev_t vhub);
+
 static NTSTATUS
 vhci_completion_routine(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in PVOID Context)
 {
@@ -177,11 +182,7 @@ End:
 PAGEABLE NTSTATUS
 vhci_pnp_vhub(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusbip_vhub_dev_t vhub)
 {
-	pusbip_vpdo_dev_t	vpdo;
-	PDEVICE_RELATIONS	relations, oldRelations;
-	ULONG			length, prevcount, n_vpdos_cur;
-	PLIST_ENTRY		entry, listHead, nextEntry;
-	NTSTATUS		status;
+	NTSTATUS	status;
 
 	PAGED_CODE ();
 
@@ -273,35 +274,25 @@ vhci_pnp_vhub(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		// someone above us fails a query-remove and passes down the
 		// subsequent cancel-remove.
 
-		if (RemovePending == vhub->common.DevicePnPState) {
+		if (vhub->common.DevicePnPState == RemovePending) {
 			// We did receive a query-remove, so restore.
 			RESTORE_PREVIOUS_PNP_STATE(vhub);
 		}
 		Irp->IoStatus.Status = STATUS_SUCCESS;// You must not fail the IRP.
 		break;
 	case IRP_MN_SURPRISE_REMOVAL:
-		// The device has been unexpectedly removed from the machine
+		/* NOTE: vhub does not seem to suffer from surprise removal because it's a legacy device */
+		DBGE(DBG_PNP, "FIXME: IRP_MN_SURPRISE_REMOVAL for vhub called\n");
+
+		// The vhub has been unexpectedly removed from the machine
 		// and is no longer available for I/O. invalidate_vhub clears
 		// all the resources, frees the interface and de-registers
 		// with WMI, but it doesn't delete the vhub. That's done
 		// later in Remove device query.
-
 		SET_NEW_PNP_STATE(vhub, SurpriseRemovePending);
 		invalidate_vhub(vhub);
 
-		ExAcquireFastMutex(&vhub->Mutex);
-
-		listHead = &vhub->head_vpdo;
-
-		for (entry = listHead->Flink,nextEntry = entry->Flink; entry != listHead; entry = nextEntry,nextEntry = entry->Flink) {
-			vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-			RemoveEntryList(&vpdo->Link);
-			InitializeListHead(&vpdo->Link);
-			vpdo->vhub = NULL;
-			vpdo->ReportedMissing = TRUE;
-		}
-
-		ExReleaseFastMutex(&vhub->Mutex);
+		vhub_invalidate_vpdos_by_vhub_surprise_removal(vhub);
 
 		Irp->IoStatus.Status = STATUS_SUCCESS; // You must not fail the IRP.
 		break;
@@ -329,35 +320,7 @@ vhci_pnp_vhub(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 
 		KeWaitForSingleObject(&vhub->RemoveEvent, Executive, KernelMode, FALSE, NULL);
 
-		// Typically the system removes all the  children before
-		// removing the parent vhub. If for any reason child vpdo's are
-		// still present we will destroy them explicitly, with one exception -
-		// we will not delete the vpdos that are in SurpriseRemovePending state.
-
-		ExAcquireFastMutex(&vhub->Mutex);
-
-		listHead = &vhub->head_vpdo;
-
-		for (entry = listHead->Flink,nextEntry = entry->Flink; entry != listHead; entry = nextEntry,nextEntry = entry->Flink) {
-			vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-			RemoveEntryList (&vpdo->Link);
-			if (SurpriseRemovePending == vpdo->common.DevicePnPState) {
-				// We will reinitialize the list head so that we
-				// wouldn't barf when we try to delink this vpdo from
-				// the parent's vpdo list, when the system finally
-				// removes the vpdo. Let's also not forget to set the
-				// ReportedMissing flag to cause the deletion of the vpdo.
-				DBGI(DBG_PNP, "\tFound a surprise removed device: 0x%p\n", vpdo->common.Self);
-				InitializeListHead(&vpdo->Link);
-				vpdo->vhub = NULL;
-				vpdo->ReportedMissing = TRUE;
-				continue;
-			}
-			vhub->n_vpdos--;
-			destroy_vpdo(vpdo);
-		}
-
-		ExReleaseFastMutex(&vhub->Mutex);
+		vhub_remove_all_vpdos(vhub);
 
 		// We need to send the remove down the stack before we detach,
 		// but we don't need to wait for the completion of this operation
@@ -391,76 +354,7 @@ vhci_pnp_vhub(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		// to success.  (vpdos complete plug and play irps with the current
 		// IoStatus.Status and IoStatus.Information as the default.)
 
-		ExAcquireFastMutex(&vhub->Mutex);
-
-		oldRelations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
-		if (oldRelations) {
-			prevcount = oldRelations->Count;
-			if (vhub->n_vpdos == 0) {
-				// There is a device relations struct already present and we have
-				// nothing to add to it, so just call IoSkip and IoCall
-				ExReleaseFastMutex(&vhub->Mutex);
-				break;
-			}
-		}
-		else  {
-			prevcount = 0;
-		}
-
-		// Calculate the number of vpdos actually present on the bus
-		n_vpdos_cur = 0;
-		for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-			vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-			if (vpdo->Present)
-				n_vpdos_cur++;
-		}
-
-		// Need to allocate a new relations structure and add our vpdos to it
-		length = sizeof(DEVICE_RELATIONS) + ((n_vpdos_cur + prevcount) * sizeof(PDEVICE_OBJECT)) - 1;
-
-		relations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag(PagedPool, length, USBIP_VHCI_POOL_TAG);
-
-		if (relations == NULL) {
-			// Fail the IRP
-			ExReleaseFastMutex(&vhub->Mutex);
-			Irp->IoStatus.Status = status = STATUS_INSUFFICIENT_RESOURCES;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
-			dec_io_vhub(vhub);
-			return status;
-		}
-
-		// Copy in the device objects so far
-		if (prevcount) {
-			RtlCopyMemory(relations->Objects, oldRelations->Objects, prevcount * sizeof(PDEVICE_OBJECT));
-		}
-
-		relations->Count = prevcount + n_vpdos_cur;
-
-		// For each vpdo present on this bus add a pointer to the device relations
-		// buffer, being sure to take out a reference to that object.
-		// The Plug & Play system will dereference the object when it is done
-		// with it and free the device relations buffer.
-		for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-			vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-			if (vpdo->Present) {
-				relations->Objects[prevcount] = vpdo->common.Self;
-				ObReferenceObject(vpdo->common.Self);
-				prevcount++;
-			} else {
-				vpdo->ReportedMissing = TRUE;
-			}
-		}
-
-		DBGI(DBG_PNP, "# of vpdo's: present: %d, reported: %d\n", vhub->n_vpdos, relations->Count);
-
-		// Replace the relations structure in the IRP with the new
-		// one.
-		if (oldRelations) {
-			ExFreePool(oldRelations);
-		}
-		Irp->IoStatus.Information = (ULONG_PTR) relations;
-
-		ExReleaseFastMutex(&vhub->Mutex);
+		Irp->IoStatus.Information = (ULONG_PTR)vhub_get_bus_relations(vhub, (PDEVICE_RELATIONS)Irp->IoStatus.Information);
 
 		// Set up and pass the IRP further down the stack
 		Irp->IoStatus.Status = STATUS_SUCCESS;

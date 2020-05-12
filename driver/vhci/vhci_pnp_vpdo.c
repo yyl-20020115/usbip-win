@@ -6,6 +6,12 @@
 #include "vhci_pnp.h"
 #include "usbip_vhci_api.h"
 
+extern PAGEABLE void vhub_invalidate_unplugged_vpdos(pusbip_vhub_dev_t vhub);
+extern PAGEABLE NTSTATUS vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject);
+
+extern PAGEABLE void vhub_detach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo);
+extern PAGEABLE void vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo);
+
 // IRP_MN_DEVICE_ENUMERATED is included by default since Windows 7.
 #if WINVER<0x0701
 #define IRP_MN_DEVICE_ENUMERATED 0x19
@@ -33,195 +39,78 @@ dbg_GUID(GUID *guid)
 }
 #endif
 
-static void
-complete_pending_read_irp(pusbip_vpdo_dev_t vpdo)
-{
-	KIRQL	oldirql;
-	PIRP	irp;
-
-	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
-	irp = vpdo->pending_read_irp;
-	vpdo->pending_read_irp = NULL;
-	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
-
-	if (irp != NULL) {
-		// We got pending_read_irp before submit_urbr
-		BOOLEAN valid_irp;
-		IoAcquireCancelSpinLock(&oldirql);
-		valid_irp = IoSetCancelRoutine(irp, NULL) != NULL;
-		IoReleaseCancelSpinLock(oldirql);
-		if (valid_irp) {
-			irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
-			irp->IoStatus.Information = 0;
-			IoCompleteRequest(irp, IO_NO_INCREMENT);
-		}
-	}
-}
-
-static void
-complete_pending_irp(pusbip_vpdo_dev_t vpdo)
-{
-	KIRQL	oldirql;
-	BOOLEAN	valid_irp;
-
-	DBGI(DBG_PNP, "finish pending irp\n");
-
-	KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
-	while (!IsListEmpty(&vpdo->head_urbr)) {
-		struct urb_req	*urbr;
-		PIRP	irp;
-
-		urbr = CONTAINING_RECORD(vpdo->head_urbr.Flink, struct urb_req, list_all);
-		RemoveEntryListInit(&urbr->list_all);
-		RemoveEntryListInit(&urbr->list_state);
-		/* FIMXE event */
-		KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
-
-		irp = urbr->irp;
-		free_urbr(urbr);
-		if (irp != NULL) {
-			// urbr irps have cancel routine
-			IoAcquireCancelSpinLock(&oldirql);
-			valid_irp = IoSetCancelRoutine(irp, NULL) != NULL;
-			IoReleaseCancelSpinLock(oldirql);
-			if (valid_irp) {
-				irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
-				irp->IoStatus.Information = 0;
-				IoCompleteRequest(irp, IO_NO_INCREMENT);
-			}
-		}
-
-		KeAcquireSpinLock(&vpdo->lock_urbr, &oldirql);
-	}
-
-	vpdo->urbr_sent_partial = NULL; // sure?
-	vpdo->len_sent_partial = 0;
-	InitializeListHead(&vpdo->head_urbr_sent);
-	InitializeListHead(&vpdo->head_urbr_pending);
-
-	KeReleaseSpinLock(&vpdo->lock_urbr, oldirql);
-}
-
 PAGEABLE NTSTATUS
 vhci_unplug_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 {
-	pusbip_vpdo_dev_t	vpdo;
-	PLIST_ENTRY		entry;
-	int	found = 0, all;
+	NTSTATUS	status;
 
 	PAGED_CODE();
 
 	if (port > 127)
 		return STATUS_INVALID_PARAMETER;
 
-	all = (0 == port);
+	if (port == 0)
+		DBGI(DBG_PNP, "plugging out all the devices!\n");
+	else
+		DBGI(DBG_PNP, "plugging out device: port: %u\n", port);
 
-	ExAcquireFastMutex(&vhub->Mutex);
+	status = vhub_unplug_vpdo(vhub, port, FALSE);
 
-	if (all) {
-		DBGI(DBG_PNP, "Plugging out all the devices!\n");
-	} else {
-		DBGI(DBG_PNP, "Plugging out single device: port: %u\n", port);
-	}
-
-	if (vhub->n_vpdos == 0) {
+	switch (status) {
+	case STATUS_NO_SUCH_DEVICE:
 		// We got a 2nd plugout...somebody in user space isn't playing nice!!!
 		DBGW(DBG_PNP, "BAD BAD BAD...2 removes!!! Send only one!\n");
-		ExReleaseFastMutex(&vhub->Mutex);
-		return STATUS_NO_SUCH_DEVICE;
-	}
-
-	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-
-		DBGI(DBG_PNP, "found device: port: %d\n", vpdo->port);
-
-		if (all || port == vpdo->port) {
-			DBGI(DBG_PNP, "Plugging out: port: %u\n", vpdo->port);
-			vpdo->Present = FALSE;
-			complete_pending_read_irp(vpdo);
-			found = 1;
-			if (!all) {
-				break;
-			}
-		}
-	}
-
-	ExReleaseFastMutex(&vhub->Mutex);
-
-	if (found) {
+		break;
+	case STATUS_SUCCESS:
 		IoInvalidateDeviceRelations(vhub->UnderlyingPDO, BusRelations);
-
-		ExAcquireFastMutex(&vhub->Mutex);
-
-		for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-			vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-
-			if (!vpdo->Present) {
-				complete_pending_irp(vpdo);
-				SET_NEW_PNP_STATE(vpdo, PNP_DEVICE_REMOVED);
-				IoInvalidateDeviceState(vpdo->common.Self);
-			}
-		}
-		ExReleaseFastMutex(&vhub->Mutex);
-
-		DBGI(DBG_PNP, "Device %u plug out finished\n", port);
-		return  STATUS_SUCCESS;
+		vhub_invalidate_unplugged_vpdos(vhub);
+		if (port == 0)
+			DBGI(DBG_PNP, "all the devices are plugged out\n");
+		else
+			DBGI(DBG_PNP, "the device is plugged out: port: %u\n", port);
+		break;
+	default:
+		break;
 	}
 
-	return STATUS_INVALID_PARAMETER;
+	return status;
 }
 
 PAGEABLE NTSTATUS
 vhci_eject_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 {
-	pusbip_vpdo_dev_t	vpdo;
-	PLIST_ENTRY		entry;
-	BOOLEAN			found = FALSE, ejectAll;
+	NTSTATUS	status;
 
 	PAGED_CODE ();
 
-	ejectAll = (0 == port);
-
-	ExAcquireFastMutex(&vhub->Mutex);
-
-	if (ejectAll) {
-		DBGI(DBG_PNP, "Ejecting all the vpdo's!\n");
-	} else {
-		DBGI(DBG_PNP, "Ejecting: port: %u\n", port);
-	}
+	if (port == 0)
+		DBGI(DBG_PNP, "ejecting all the devices!\n");
+	else
+		DBGI(DBG_PNP, "ejecting device: port: %u\n", port);
 
 	if (vhub->n_vpdos == 0) {
-		// Somebody in user space isn't playing nice!!!
-		DBGW(DBG_PNP, "No devices to eject!\n");
 		ExReleaseFastMutex(&vhub->Mutex);
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
-	// Scan the list to find matching vpdo's
-	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+	status = vhub_unplug_vpdo(vhub, port, TRUE);
 
-		DBGI(DBG_PNP, "found device: %u\n", vpdo->port);
-
-		if (ejectAll || port == vpdo->port) {
-			DBGI(DBG_PNP, "Ejected: %u\n", vpdo->port);
-			found = TRUE;
-			IoRequestDeviceEject(vpdo->common.Self);
-			if (!ejectAll) {
-				break;
-			}
-		}
-	}
-	ExReleaseFastMutex(&vhub->Mutex);
-
-	if (found) {
-		return STATUS_SUCCESS;
+	switch (status) {
+	case STATUS_NO_SUCH_DEVICE:
+		// Somebody in user space isn't playing nice!!!
+		DBGW(DBG_PNP, "No devices to eject!\n");
+		break;
+	case STATUS_SUCCESS:
+		break;
+	default:
+		if (port == 0)
+			DBGI(DBG_PNP, "no device to be ejected\n");
+		else
+			DBGI(DBG_PNP, "the device does not exist: port: %u\n", port);
+		break;
 	}
 
-	DBGW(DBG_PNP, "Device %u is not present\n", port);
-
-	return STATUS_INVALID_PARAMETER;
+	return status;
 }
 
 static PAGEABLE NTSTATUS
@@ -928,19 +817,13 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 			// If the parent vhub is already deleted, vhub will be NULL.
 			// This could happen if the child vpdo is in a SurpriseRemovePending
 			// state when the vhub is removed.
-			if (vpdo->vhub) {
-				pusbip_vhub_dev_t	vhub = vpdo->vhub;
-				ExAcquireFastMutex(&vhub->Mutex);
-				RemoveEntryList(&vpdo->Link);
-				vhub->n_vpdos--;
-				ExReleaseFastMutex(&vhub->Mutex);
-			}
+			if (vpdo->vhub)
+				vhub_detach_vpdo(vpdo->vhub, vpdo);
 
 			// Free up resources associated with vpdo and delete it.
 			status = destroy_vpdo(vpdo);
-			break;
 		}
-		if (vpdo->Present) {
+		else if (vpdo->plugged) {
 			// When the device is disabled, the vpdo transitions from
 			// RemovePending to NotStarted. We shouldn't delete the vpdo because
 			// a) the device is still present on the bus,
@@ -996,7 +879,7 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		// for this IRP must wait until the device has been ejected before
 		// completing the IRP.
 
-		vpdo->Present = FALSE;
+		vhub_mark_unplugged_vpdo(vpdo->vhub, vpdo);
 
 		status = STATUS_SUCCESS;
 		break;

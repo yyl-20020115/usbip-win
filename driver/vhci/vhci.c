@@ -135,7 +135,7 @@ vhci_cleanup(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 	if (vpdo) {
 		vpdo->fo = NULL;
 		irpstack->FileObject->FsContext = NULL;
-		if (vpdo->Present)
+		if (vpdo->plugged)
 			vhci_unplug_vpdo(vpdo->port, vhub);
 	}
 	status = STATUS_SUCCESS;

@@ -170,7 +170,7 @@ vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 
 	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
 
-	if (!vpdo->Present) {
+	if (!vpdo->plugged) {
 		DBGW(DBG_IOCTL, "device is not connected\n");
 		Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);

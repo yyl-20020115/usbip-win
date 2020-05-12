@@ -17,16 +17,17 @@ DEFINE_GUID(GUID_SD_USBIP_VHCI_VPDO,
 	0x9d3039dd, 0xcca5, 0x4b4d, 0xb3, 0x3d, 0xe2, 0xdd, 0xc8, 0xa8, 0xc5, 0x2e);
 // {9D3039DD-CCA5-4b4d-B33D-E2DDC8A8C52E}
 
+extern PAGEABLE BOOLEAN vhub_is_empty_port(pusbip_vhub_dev_t vhub, ULONG port);
+extern PAGEABLE void vhub_attach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo);
+
 static PAGEABLE void
 vhci_init_vpdo(pusbip_vpdo_dev_t vpdo)
 {
-	pusbip_vhub_dev_t	vhub;
-
 	PAGED_CODE();
 
 	DBGI(DBG_PNP, "vhci_init_vpdo: 0x%p\n", vpdo);
 
-	vpdo->Present = TRUE; // attached to the bus
+	vpdo->plugged = TRUE;
 	vpdo->ReportedMissing = FALSE; // not yet reported missing
 
 	INITIALIZE_PNP_STATE(vpdo);
@@ -42,11 +43,10 @@ vhci_init_vpdo(pusbip_vpdo_dev_t vpdo)
 
 	DEVOBJ_FROM_VPDO(vpdo)->Flags |= DO_POWER_PAGABLE|DO_DIRECT_IO;
 
-	vhub = vpdo->vhub;
-	ExAcquireFastMutex(&vhub->Mutex);
-	InsertTailList(&vhub->head_vpdo, &vpdo->Link);
-	vhub->n_vpdos++;
-	ExReleaseFastMutex(&vhub->Mutex);
+	InitializeListHead(&vpdo->Link);
+
+	vhub_attach_vpdo(vpdo->vhub, vpdo);
+
 	// This should be the last step in initialization.
 	DEVOBJ_FROM_VPDO(vpdo)->Flags &= ~DO_DEVICE_INITIALIZING;
 }
@@ -56,7 +56,6 @@ vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_
 {
 	PDEVICE_OBJECT		devobj;
 	pusbip_vpdo_dev_t	vpdo, devpdo_old;
-	PLIST_ENTRY	entry;
 	NTSTATUS	status;
 
 	PAGED_CODE();
@@ -66,18 +65,8 @@ vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_
 	if (plugin->port <= 0)
 		return STATUS_INVALID_PARAMETER;
 
-	ExAcquireFastMutex(&vhub->Mutex);
-
-	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-		if ((ULONG)plugin->port == vpdo->port &&
-			vpdo->common.DevicePnPState != SurpriseRemovePending) {
-			ExReleaseFastMutex(&vhub->Mutex);
-			return STATUS_INVALID_PARAMETER;
-		}
-	}
-
-	ExReleaseFastMutex(&vhub->Mutex);
+	if (!vhub_is_empty_port(vhub, plugin->port))
+		return STATUS_INVALID_PARAMETER;
 
 	// Create the vpdo
 	DBGI(DBG_PNP, "vhub->NextLowerDriver = 0x%p\n", vhub->NextLowerDriver);

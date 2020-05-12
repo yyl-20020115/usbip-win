@@ -446,7 +446,7 @@ vhci_write(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 	}
 	stackirp = IoGetCurrentIrpStackLocation(Irp);
 	vpdo = stackirp->FileObject->FsContext;
-	if (vpdo == NULL || !vpdo->Present) {
+	if (vpdo == NULL || !vpdo->plugged) {
 		status = STATUS_INVALID_DEVICE_REQUEST;
 		goto END;
 	}

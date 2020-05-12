@@ -65,6 +65,7 @@ typedef struct
 
 	// the number of current vpdo's
 	ULONG		n_vpdos;
+	ULONG		n_vpdos_plugged;
 
 	// A synchronization for access to the device extension.
 	FAST_MUTEX		Mutex;
@@ -112,13 +113,12 @@ typedef struct
 	// Link point to hold all the vpdos for a single bus together
 	LIST_ENTRY	Link;
 
-	//
-	// Present is set to TRUE when the vpdo is exposed via PlugIn IOCTL,
+	// set to TRUE when the vpdo is exposed via PlugIn IOCTL,
 	// and set to FALSE when a UnPlug IOCTL is received.
+	BOOLEAN		plugged;
+
 	// We will delete the vpdo in IRP_MN_REMOVE only after we have reported
 	// to the Plug and Play manager that it's missing.
-	//
-	BOOLEAN		Present;
 	BOOLEAN		ReportedMissing;
 	UCHAR	speed;
 	UCHAR	unused; /* 4 bytes alignment */
