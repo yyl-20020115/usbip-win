@@ -5,11 +5,20 @@
 #include "vhci_pnp.h"
 #include "usbip_vhci_api.h"
 
-extern PAGEABLE NTSTATUS
+extern NTSTATUS
 vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo);
 
-extern PAGEABLE NTSTATUS
+extern NTSTATUS
 vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t vhub, ULONG *info);
+
+extern NTSTATUS
+vhub_get_roothub_name(pusbip_vhub_dev_t vhub, PIRP irp, ULONG* pinfo);
+
+extern NTSTATUS
+vpdo_get_nodeconn_info(pusbip_vpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION conninfo, ULONG *psize);
+
+extern NTSTATUS
+vpdo_get_dsc_from_nodeconn(pusbip_vpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_req, ULONG *psize);
 
 NTSTATUS
 vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
@@ -207,6 +216,50 @@ vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 	return status;
 }
 
+static PAGEABLE NTSTATUS
+get_nodeconn_info(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *psize)
+{
+	PUSB_NODE_CONNECTION_INFORMATION	conninfo = (PUSB_NODE_CONNECTION_INFORMATION)irp->AssociatedIrp.SystemBuffer;
+	pusbip_vpdo_dev_t	vpdo;
+	PIO_STACK_LOCATION      irpStack;
+	NTSTATUS	status;
+
+	vpdo = vhub_find_vpdo(vhub, conninfo->ConnectionIndex);
+	if (vpdo == NULL)
+		return STATUS_NO_SUCH_DEVICE;
+
+	irpStack = IoGetCurrentIrpStackLocation(irp);
+	*psize = irpStack->Parameters.DeviceIoControl.InputBufferLength;
+	status = vpdo_get_nodeconn_info(vpdo, conninfo, psize);
+	if (NT_SUCCESS(status)) {
+		irpStack->Parameters.DeviceIoControl.OutputBufferLength = *psize;
+	}
+	del_ref_vpdo(vpdo);
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+get_descriptor_from_nodeconn(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *psize)
+{
+	PUSB_DESCRIPTOR_REQUEST	dsc_req = (PUSB_DESCRIPTOR_REQUEST)irp->AssociatedIrp.SystemBuffer;
+	pusbip_vpdo_dev_t	vpdo;
+	PIO_STACK_LOCATION      irpStack;
+	NTSTATUS	status;
+
+	vpdo = vhub_find_vpdo(vhub, dsc_req->ConnectionIndex);
+	if (vpdo == NULL)
+		return STATUS_NO_SUCH_DEVICE;
+
+	irpStack = IoGetCurrentIrpStackLocation(irp);
+	*psize = irpStack->Parameters.DeviceIoControl.InputBufferLength;
+	status = vpdo_get_dsc_from_nodeconn(vpdo, dsc_req, psize);
+	if (NT_SUCCESS(status)) {
+		irpStack->Parameters.DeviceIoControl.OutputBufferLength = *psize;
+	}
+	del_ref_vpdo(vpdo);
+	return status;
+}
+
 PAGEABLE NTSTATUS
 vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
@@ -276,8 +329,17 @@ vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 			status = vhci_eject_vpdo(((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->port, vhub);
 		}
 		break;
+	case IOCTL_USB_GET_ROOT_HUB_NAME:
+		status = vhub_get_roothub_name(vhub, Irp, &info);
+		break;
+	case IOCTL_USB_GET_NODE_CONNECTION_INFORMATION:
+		status = get_nodeconn_info(vhub, Irp, &info);
+		break;
+	case IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION:
+		status = get_descriptor_from_nodeconn(vhub, Irp, &info);
+		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled ioctl: %s", dbg_vhci_ioctl_code(ioctl_code));
+		DBGE(DBG_IOCTL, "unhandled ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 		break;
 	}
 

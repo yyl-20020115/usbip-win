@@ -133,6 +133,15 @@ static namecode_t	namecodes_device_power[] = {
 	{0,0}
 };
 
+static namecode_t	namecodes_usb_descriptor_type[] = {
+	K_V(USB_DEVICE_DESCRIPTOR_TYPE)
+	K_V(USB_CONFIGURATION_DESCRIPTOR_TYPE)
+	K_V(USB_STRING_DESCRIPTOR_TYPE)
+	K_V(USB_INTERFACE_DESCRIPTOR_TYPE)
+	K_V(USB_ENDPOINT_DESCRIPTOR_TYPE)
+	{0,0}
+};
+
 const char *
 dbg_namecode(namecode_t *namecodes, const char *codetype, unsigned int code)
 {
@@ -205,6 +214,12 @@ const char *
 dbg_device_power(DEVICE_POWER_STATE state)
 {
 	return dbg_namecode(namecodes_device_power, "device power", (int)state);
+}
+
+const char *
+dbg_usb_descriptor_type(UCHAR dsc_type)
+{
+	return dbg_namecode(namecodes_usb_descriptor_type, "descriptor type", dsc_type);
 }
 
 #endif

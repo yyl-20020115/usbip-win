@@ -6,6 +6,12 @@
 
 extern struct urb_req *
 find_sent_urbr(pusbip_vpdo_dev_t vpdo, struct usbip_header *hdr);
+extern NTSTATUS
+try_to_cache_descriptor(pusbip_vpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc);
+extern NTSTATUS
+vpdo_select_config(pusbip_vpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb_selc);
+extern NTSTATUS
+vpdo_select_interface(pusbip_vpdo_dev_t vpdo, PUSBD_INTERFACE_INFORMATION info_intf);
 
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
@@ -64,32 +70,26 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 	}
 }
 
+void
+post_get_desc(pusbip_vpdo_dev_t vpdo, PURB urb)
+{
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_cdr = &urb->UrbControlDescriptorRequest;
+	PUSB_COMMON_DESCRIPTOR	dsc;
+
+	dsc = get_buf(urb_cdr->TransferBuffer, urb_cdr->TransferBufferMDL);
+	if (dsc == NULL)
+		return;
+	if (dsc->bLength > urb_cdr->TransferBufferLength) {
+		DBGE(DBG_WRITE, "invalid format descriptor: too small(%u < %hhu)\n", urb_cdr->TransferBufferLength, dsc->bLength);
+		return;
+	}
+	try_to_cache_descriptor(vpdo, urb_cdr, dsc);
+}
+
 static NTSTATUS
 post_select_config(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
-	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
-	USHORT	len;
-	struct _URB_SELECT_CONFIGURATION	*urb_selc = &urb->UrbSelectConfiguration;
-
-	// If ConfigurationDescriptor is NULL, the device will be set to an unconfigured state.
-	if (urb_selc->ConfigurationDescriptor == NULL) {
-		DBGE(DBG_WRITE, "post_select_config: unconfigured state\n");
-		return STATUS_SUCCESS;
-	}
-
-	len = urb_selc->ConfigurationDescriptor->wTotalLength;
-	dsc_conf = ExAllocatePoolWithTag(NonPagedPool, len, USBIP_VHCI_POOL_TAG);
-	if (dsc_conf == NULL) {
-		DBGE(DBG_WRITE, "post_select_config: out of memory\n");
-		return STATUS_UNSUCCESSFUL;
-	}
-
-	RtlCopyMemory(dsc_conf, urb_selc->ConfigurationDescriptor, len);
-	if (vpdo->dsc_conf)
-		ExFreePoolWithTag(vpdo->dsc_conf, USBIP_VHCI_POOL_TAG);
-	vpdo->dsc_conf = dsc_conf;
-
-	return select_config(urb_selc, vpdo->speed);
+	return vpdo_select_config(vpdo, &urb->UrbSelectConfiguration);
 }
 
 static NTSTATUS
@@ -97,12 +97,7 @@ post_select_interface(pusbip_vpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
-	if (vpdo->dsc_conf == NULL) {
-		DBGW(DBG_WRITE, "post_select_interface: empty configuration descriptor\n");
-		return STATUS_INVALID_DEVICE_REQUEST;
-	}
-
-	return select_interface(urb_seli, vpdo->dsc_conf, vpdo->speed);
+	return vpdo_select_interface(vpdo, &urb_seli->Interface);
 }
 
 static NTSTATUS
@@ -313,6 +308,11 @@ process_urb_res_submit(pusbip_vpdo_dev_t vpdo, PURB urb, struct usbip_header *hd
 	status = store_urb_data(urb, hdr);
 	if (status == STATUS_SUCCESS) {
 		switch (urb->UrbHeader.Function) {
+		case URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE:
+		case URB_FUNCTION_GET_DESCRIPTOR_FROM_INTERFACE:
+		case URB_FUNCTION_GET_DESCRIPTOR_FROM_ENDPOINT:
+			post_get_desc(vpdo, urb);
+			break;
 		case URB_FUNCTION_SELECT_CONFIGURATION:
 			status = post_select_config(vpdo, urb);
 			break;

@@ -75,7 +75,7 @@ setup_endpoints(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR 
 	return TRUE;
 }
 
-static NTSTATUS
+NTSTATUS
 setup_intf(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR speed)
 {
 	PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
@@ -104,24 +104,11 @@ setup_intf(USBD_INTERFACE_INFORMATION *intf, PUSB_CONFIGURATION_DESCRIPTOR dsc_c
 }
 
 NTSTATUS
-select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed)
+setup_config(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PUSBD_INTERFACE_INFORMATION info_intf, PVOID end_info_intf, UCHAR speed)
 {
-	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
-	PUSBD_INTERFACE_INFORMATION	info_intf;
-	/*
-	 * The end position of _URB_SELECT_CONFIGURATION, with which
-	 * valid count of info_intf can be detected.
-	 */
-	PVOID	end_urb_selc;
 	unsigned int	i;
 
-	/* assign meaningless value, handle value is not used */
-	urb_selc->ConfigurationHandle = (USBD_CONFIGURATION_HANDLE)0x12345678;
-
-	dsc_conf = urb_selc->ConfigurationDescriptor;
-	end_urb_selc = (PUCHAR)urb_selc + urb_selc->Hdr.Length;
-	info_intf = &urb_selc->Interface;
-	for (i = 0; i < urb_selc->ConfigurationDescriptor->bNumInterfaces; i++) {
+	for (i = 0; i < dsc_conf->bNumInterfaces; i++) {
 		NTSTATUS	status;
 
 		if ((status = setup_intf(info_intf, dsc_conf, speed)) != STATUS_SUCCESS)
@@ -129,20 +116,10 @@ select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed)
 
 		info_intf = NEXT_USBD_INTERFACE_INFO(info_intf);
 		/* urb_selc may have less info_intf than bNumInterfaces in conf desc */
-		if ((PVOID)info_intf >= end_urb_selc)
+		if ((PVOID)info_intf >= end_info_intf)
 			break;
 	}
 
 	/* it seems we must return now */
 	return STATUS_SUCCESS;
-}
-
-NTSTATUS
-select_interface(struct _URB_SELECT_INTERFACE *urb_seli, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR speed)
-{
-	PUSBD_INTERFACE_INFORMATION	info_intf;
-
-	info_intf = &urb_seli->Interface;
-
-	return setup_intf(info_intf, dsc_conf, speed);
 }

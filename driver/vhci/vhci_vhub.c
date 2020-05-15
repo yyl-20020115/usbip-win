@@ -9,8 +9,8 @@ extern PAGEABLE NTSTATUS dereg_wmi(__in pusbip_vhub_dev_t vhub);
 extern PAGEABLE void complete_pending_irp(pusbip_vpdo_dev_t vpdo);
 extern PAGEABLE void complete_pending_read_irp(pusbip_vpdo_dev_t vpdo);
 
-PAGEABLE BOOLEAN
-vhub_is_empty_port(pusbip_vhub_dev_t vhub, ULONG port)
+PAGEABLE pusbip_vpdo_dev_t
+vhub_find_vpdo(pusbip_vhub_dev_t vhub, unsigned port)
 {
 	PLIST_ENTRY	entry;
 
@@ -18,15 +18,34 @@ vhub_is_empty_port(pusbip_vhub_dev_t vhub, ULONG port)
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
 		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-		if (port == vpdo->port && vpdo->common.DevicePnPState != SurpriseRemovePending) {
+
+		if (vpdo->port == port) {
+			add_ref_vpdo(vpdo);
 			ExReleaseFastMutex(&vhub->Mutex);
-			return FALSE;
+			return vpdo;
 		}
 	}
 
 	ExReleaseFastMutex(&vhub->Mutex);
 
-	return TRUE;
+	return NULL;
+}
+
+PAGEABLE BOOLEAN
+vhub_is_empty_port(pusbip_vhub_dev_t vhub, ULONG port)
+{
+	pusbip_vpdo_dev_t	vpdo;
+
+	vpdo = vhub_find_vpdo(vhub, port);
+	if (vpdo == NULL)
+		return TRUE;
+	if (vpdo->common.DevicePnPState == SurpriseRemovePending) {
+		del_ref_vpdo(vpdo);
+		return TRUE;
+	}
+
+	del_ref_vpdo(vpdo);
+	return FALSE;
 }
 
 PAGEABLE void
@@ -145,6 +164,44 @@ vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 	ExReleaseFastMutex(&vhub->Mutex);
 
 	return relations;
+}
+
+/* IOCTL_USB_GET_ROOT_HUB_NAME requires a device interface symlink name with the prefix(\??\) stripped */
+static PAGEABLE SIZE_T
+get_name_prefix_size(PWCHAR name)
+{
+	SIZE_T	i;
+	for (i = 1; name[i]; i++) {
+		if (name[i] == L'\\') {
+			return i + 1;
+		}
+	}
+	return 0;
+}
+
+PAGEABLE NTSTATUS
+vhub_get_roothub_name(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *pinfo)
+{
+	PUSB_ROOT_HUB_NAME	roothub_name;
+	SIZE_T	roothub_namelen, prefix_len;
+
+	prefix_len = get_name_prefix_size(vhub->DevIntfRootHub.Buffer);
+	if (prefix_len == 0) {
+		DBGE(DBG_IOCTL, "inavlid root hub format: %S\n", vhub->DevIntfRootHub.Buffer);
+		return STATUS_INVALID_PARAMETER;
+	}
+	roothub_namelen = sizeof(USB_ROOT_HUB_NAME) + vhub->DevIntfRootHub.Length - prefix_len * sizeof(WCHAR);
+	roothub_name = ExAllocatePoolWithTag(NonPagedPool, roothub_namelen, USBIP_VHCI_POOL_TAG);
+	if (roothub_name == NULL) {
+		DBGE(DBG_IOCTL, "failed to allocate root hub name: len: %d\n", roothub_namelen);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	roothub_name->ActualLength = (ULONG)roothub_namelen;
+	RtlStringCchCopyW(roothub_name->RootHubName, vhub->DevIntfRootHub.Length / sizeof(WCHAR) - prefix_len + 1, vhub->DevIntfRootHub.Buffer + prefix_len);
+	*pinfo = (ULONG)roothub_namelen;
+	irp->AssociatedIrp.SystemBuffer = roothub_name;
+	return STATUS_SUCCESS;
 }
 
 static PAGEABLE void
@@ -290,13 +347,12 @@ invalidate_vhub(pusbip_vhub_dev_t vhub)
 	// Stop all access to the device, fail any outstanding I/O to the device,
 	// and free all the resources associated with the device.
 
-	// Disable the device interface and free the buffer
-	if (vhub->InterfaceName.Buffer != NULL) {
-		IoSetDeviceInterfaceState(&vhub->InterfaceName, FALSE);
-
-		ExFreePool(vhub->InterfaceName.Buffer);
-		RtlZeroMemory(&vhub->InterfaceName, sizeof(UNICODE_STRING));
-	}
+	IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
+	IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, FALSE);
+	IoSetDeviceInterfaceState(&vhub->DevIntfRootHub, FALSE);
+	RtlFreeUnicodeString(&vhub->DevIntfVhci);
+	RtlFreeUnicodeString(&vhub->DevIntfUSBHC);
+	RtlFreeUnicodeString(&vhub->DevIntfRootHub);
 
 	// Inform WMI to remove this DeviceObject from its list of providers.
 	dereg_wmi(vhub);
@@ -317,9 +373,22 @@ start_vhub(pusbip_vhub_dev_t vhub)
 	// STATUS_OBJECT_NAME_EXISTS means we are enabling the interface
 	// that was already enabled, which could happen if the device
 	// is stopped and restarted for resource rebalancing.
-	status = IoSetDeviceInterfaceState(&vhub->InterfaceName, TRUE);
+	status = IoSetDeviceInterfaceState(&vhub->DevIntfVhci, TRUE);
 	if (!NT_SUCCESS(status)) {
-		DBGE(DBG_VHUB, "IoSetDeviceInterfaceState failed: 0x%x\n", status);
+		DBGE(DBG_PNP, "failed to enable vhci device interface: %s\n", dbg_ntstatus(status));
+		return status;
+	}
+	status = IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, TRUE);
+	if (!NT_SUCCESS(status)) {
+		IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
+		DBGE(DBG_PNP, "failed to enable USB host controller device interface: %s\n", dbg_ntstatus(status));
+		return status;
+	}
+	status = IoSetDeviceInterfaceState(&vhub->DevIntfRootHub, TRUE);
+	if (!NT_SUCCESS(status)) {
+		IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
+		IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, FALSE);
+		DBGE(DBG_PNP, "failed to enable root hub device interface: %s\n", dbg_ntstatus(status));
 		return status;
 	}
 

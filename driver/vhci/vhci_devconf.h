@@ -5,7 +5,7 @@
 #include <usbdi.h>
 
 extern NTSTATUS
-select_config(struct _URB_SELECT_CONFIGURATION *urb_selc, UCHAR speed);
+setup_config(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PUSBD_INTERFACE_INFORMATION info_intf, PVOID end_info_intf, UCHAR speed);
 
 extern NTSTATUS
-select_interface(struct _URB_SELECT_INTERFACE *urb_seli, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR speed);
+setup_intf(USBD_INTERFACE_INFORMATION *intf_info, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR speed);

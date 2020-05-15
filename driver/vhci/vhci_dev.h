@@ -83,7 +83,9 @@ typedef struct
 
 	// The name returned from IoRegisterDeviceInterface,
 	// which is used as a handle for IoSetDeviceInterfaceState.
-	UNICODE_STRING	InterfaceName;
+	UNICODE_STRING	DevIntfVhci;
+	UNICODE_STRING	DevIntfUSBHC;
+	UNICODE_STRING	DevIntfRootHub;
 
 	// WMI Information
 	WMILIB_CONTEXT	WmiLibInfo;
@@ -142,12 +144,16 @@ typedef struct
 	PFILE_OBJECT	fo;
 	unsigned int	devid;
 	unsigned long	seq_num;
+	PUSB_DEVICE_DESCRIPTOR	dsc_dev;
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
 	UNICODE_STRING	usb_dev_interface;
+	UCHAR	current_intf_num, current_intf_alt;
 } usbip_vpdo_dev_t, *pusbip_vpdo_dev_t;
 
 void inc_io_vhub(__in pusbip_vhub_dev_t vhub);
 void dec_io_vhub(__in pusbip_vhub_dev_t vhub);
+
+pusbip_vpdo_dev_t vhub_find_vpdo(pusbip_vhub_dev_t vhub, unsigned port);
 
 void add_ref_vpdo(__in pusbip_vpdo_dev_t vpdo);
 void del_ref_vpdo(__in pusbip_vpdo_dev_t vpdo);

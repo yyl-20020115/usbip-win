@@ -23,5 +23,6 @@ const char *dbg_wmi_minor(UCHAR minor);
 const char *dbg_power_minor(UCHAR minor);
 const char *dbg_system_power(SYSTEM_POWER_STATE state);
 const char *dbg_device_power(DEVICE_POWER_STATE state);
+const char *dbg_usb_descriptor_type(UCHAR dsc_type);
 
 #endif

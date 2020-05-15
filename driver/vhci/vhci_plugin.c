@@ -30,6 +30,9 @@ vhci_init_vpdo(pusbip_vpdo_dev_t vpdo)
 	vpdo->plugged = TRUE;
 	vpdo->ReportedMissing = FALSE; // not yet reported missing
 
+	vpdo->current_intf_num = 0;
+	vpdo->current_intf_alt = 0;
+
 	INITIALIZE_PNP_STATE(vpdo);
 
 	// vpdo usually starts its life at D3

@@ -116,10 +116,22 @@ vhci_add_vhub(__in PDRIVER_OBJECT drvobj, __in PDEVICE_OBJECT devobj_lower)
 
 	// Tell the Plug & Play system that this device will need a
 	// device interface.
-	status = IoRegisterDeviceInterface(devobj_lower, (LPGUID)& GUID_DEVINTERFACE_VHCI_USBIP, NULL, &vhub->InterfaceName);
-
+	status = IoRegisterDeviceInterface(devobj_lower, (LPGUID)&GUID_DEVINTERFACE_VHCI_USBIP, NULL, &vhub->DevIntfVhci);
 	if (!NT_SUCCESS(status)) {
-		DBGE(DBG_PNP, "AddDevice: IoRegisterDeviceInterface failed (%x)", status);
+		DBGE(DBG_PNP, "failed to register vhci device interface: %s\n", dbg_ntstatus(status));
+		goto End;
+	}
+	status = IoRegisterDeviceInterface(devobj_lower, (LPGUID)&GUID_DEVINTERFACE_USB_HOST_CONTROLLER, NULL, &vhub->DevIntfUSBHC);
+	if (!NT_SUCCESS(status)) {
+		RtlFreeUnicodeString(&vhub->DevIntfVhci);
+		DBGE(DBG_PNP, "failed to register USB Host controller device interface: %s\n", dbg_ntstatus(status));
+		goto End;
+	}
+	status = IoRegisterDeviceInterface(devobj_lower, (LPGUID)&GUID_DEVINTERFACE_USB_HUB, NULL, &vhub->DevIntfRootHub);
+	if (!NT_SUCCESS(status)) {
+		RtlFreeUnicodeString(&vhub->DevIntfVhci);
+		RtlFreeUnicodeString(&vhub->DevIntfUSBHC);
+		DBGE(DBG_PNP, "failed to register USB Root Hub device interface: %s\n", dbg_ntstatus(status));
 		goto End;
 	}
 
