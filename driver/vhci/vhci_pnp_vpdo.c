@@ -29,12 +29,12 @@ extern PAGEABLE void vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpd
 static const char *
 dbg_GUID(GUID *guid)
 {
-	static char	buf[2048];
-	int	i;
+	static char	buf[64];
 
-	for (i = 0; i < sizeof(GUID); i++) {
-		RtlStringCchPrintfA(buf + 2 * i, 3, "%02X", ((unsigned char *)guid)[i]);
-	}
+	RtlStringCchPrintfA(buf, 128, "{%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
+		guid->Data1, guid->Data2, guid->Data3,
+		guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3],
+		guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]);
 	return buf;
 }
 #endif
