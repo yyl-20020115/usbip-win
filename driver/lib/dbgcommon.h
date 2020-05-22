@@ -13,8 +13,6 @@
 #define DBGW(part, fmt, ...)	DbgPrintEx(MY_DPFLTR, 0x02000000 | (part), DRVPREFIX ":(WW) " fmt, ## __VA_ARGS__)
 #define DBGI(part, fmt, ...)	DbgPrintEx(MY_DPFLTR, 0x04000000 | (part), DRVPREFIX ": " fmt, ## __VA_ARGS__)
 
-int dbg_snprintf(char *buf, int size, const char *fmt, ...);
-
 const char *dbg_usbip_hdr(struct usbip_header *hdr);
 const char *dbg_command(UINT32 command);
 

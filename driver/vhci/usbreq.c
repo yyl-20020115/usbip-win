@@ -16,7 +16,7 @@ dbg_urbr(struct urb_req *urbr)
 
 	if (urbr == NULL)
 		return "[null]";
-	dbg_snprintf(buf, 128, "[seq:%u]", urbr->seq_num);
+	libdrv_snprintf(buf, 128, "[seq:%u]", urbr->seq_num);
 	return buf;
 }
 

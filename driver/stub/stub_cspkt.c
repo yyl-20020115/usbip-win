@@ -7,6 +7,8 @@
 
 #ifdef DBG
 
+#include "strutil.h"
+
 #include <usbspec.h>
 
 static namecode_t	namecodes_cspkt_reqtype[] = {
@@ -78,13 +80,13 @@ dbg_ctlsetup_packet(usb_cspkt_t *csp)
 	static char	buf[1024];
 	int	n;
 
-	n = dbg_snprintf(buf, 1024, "%s", CSPKT_IS_IN(csp) ? "in": "out");
-	n += dbg_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_reqtype(CSPKT_REQUEST_TYPE(csp)));
-	n += dbg_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_recipient(CSPKT_RECIPIENT(csp)));
-	n += dbg_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_request(CSPKT_REQUEST(csp)));
-	n += dbg_snprintf(buf + n, 1024 - n, ",wIndex:%hu", csp->wIndex);
-	n += dbg_snprintf(buf + n, 1024 - n, ",wLength:%hu", csp->wLength);
-	n += dbg_snprintf(buf + n, 1024 - n, ",wValue:%hu", csp->wValue);
+	n = libdrv_snprintf(buf, 1024, "%s", CSPKT_IS_IN(csp) ? "in": "out");
+	n += libdrv_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_reqtype(CSPKT_REQUEST_TYPE(csp)));
+	n += libdrv_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_recipient(CSPKT_RECIPIENT(csp)));
+	n += libdrv_snprintf(buf + n, 1024 - n, ",%s", dbg_cspkt_request(CSPKT_REQUEST(csp)));
+	n += libdrv_snprintf(buf + n, 1024 - n, ",wIndex:%hu", csp->wIndex);
+	n += libdrv_snprintf(buf + n, 1024 - n, ",wLength:%hu", csp->wLength);
+	n += libdrv_snprintf(buf + n, 1024 - n, ",wValue:%hu", csp->wValue);
 
 	return buf;
 }

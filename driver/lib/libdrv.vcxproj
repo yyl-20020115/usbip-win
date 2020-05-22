@@ -23,6 +23,7 @@
     <ClCompile Include="dbgcommon.c" />
     <ClCompile Include="devconf.c" />
     <ClCompile Include="pdu.c" />
+    <ClCompile Include="strutil.c" />
     <ClCompile Include="usbd_helper.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -181,6 +182,7 @@
     <ClInclude Include="dbgcommon.h" />
     <ClInclude Include="devconf.h" />
     <ClInclude Include="pdu.h" />
+    <ClInclude Include="strutil.h" />
     <ClInclude Include="usbd_helper.h" />
     <ClInclude Include="usb_cspkt.h" />
   </ItemGroup>

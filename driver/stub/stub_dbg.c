@@ -8,6 +8,8 @@
 
 #ifdef DBG
 
+#include "strutil.h"
+
 const char *
 dbg_device(PDEVICE_OBJECT devobj)
 {
@@ -38,7 +40,7 @@ dbg_devices(PDEVICE_OBJECT devobj, BOOLEAN is_attached)
 	for (i = 0; i < 16; i++) {
 		if (devobj == NULL)
 			break;
-		n += dbg_snprintf(buf + n, 1024 - n, "[%s]", dbg_device(devobj));
+		n += libdrv_snprintf(buf + n, 1024 - n, "[%s]", dbg_device(devobj));
 		if (is_attached)
 			devobj = devobj->AttachedDevice;
 		else

@@ -8,6 +8,8 @@
 
 #ifdef DBG
 
+#include "strutil.h"
+
 const char *
 dbg_info_intf(PUSBD_INTERFACE_INFORMATION info_intf)
 {
@@ -16,7 +18,7 @@ dbg_info_intf(PUSBD_INTERFACE_INFORMATION info_intf)
 	if (info_intf == NULL)
 		return "<null>";
 
-	dbg_snprintf(buf, 128, "num:%hhu,alt:%hhu", info_intf->InterfaceNumber, info_intf->AlternateSetting);
+	libdrv_snprintf(buf, 128, "num:%hhu,alt:%hhu", info_intf->InterfaceNumber, info_intf->AlternateSetting);
 
 	return buf;
 }
@@ -29,7 +31,7 @@ dbg_info_pipe(PUSBD_PIPE_INFORMATION info_pipe)
 	if (info_pipe == NULL)
 		return "<null>";
 
-	dbg_snprintf(buf, 128, "epaddr:%hhx", info_pipe->EndpointAddress);
+	libdrv_snprintf(buf, 128, "epaddr:%hhx", info_pipe->EndpointAddress);
 
 	return buf;
 }

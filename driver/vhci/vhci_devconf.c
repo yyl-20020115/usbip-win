@@ -19,7 +19,7 @@ dbg_pipe(PUSBD_PIPE_INFORMATION pipe)
 {
 	static char	buf[512];
 
-	dbg_snprintf(buf, 512, "addr:%02x intv:%d typ:%d mps:%d mts:%d flags:%x",
+	libdrv_snprintf(buf, 512, "addr:%02x intv:%d typ:%d mps:%d mts:%d flags:%x",
 		pipe->EndpointAddress, pipe->Interval, pipe->PipeType, pipe->PipeFlags,
 		pipe->MaximumPacketSize, pipe->MaximumTransferSize, pipe->PipeFlags);
 	return buf;
