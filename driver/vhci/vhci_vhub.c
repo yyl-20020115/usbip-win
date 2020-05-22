@@ -3,24 +3,24 @@
 #include "usbip_vhci_api.h"
 #include "vhci_pnp.h"
 
-extern PAGEABLE NTSTATUS reg_wmi(__in pusbip_vhub_dev_t vhub);
-extern PAGEABLE NTSTATUS dereg_wmi(__in pusbip_vhub_dev_t vhub);
+extern void complete_pending_irp(pvpdo_dev_t vpdo);
+extern void complete_pending_read_irp(pvpdo_dev_t vpdo);
 
-extern PAGEABLE void complete_pending_irp(pusbip_vpdo_dev_t vpdo);
-extern PAGEABLE void complete_pending_read_irp(pusbip_vpdo_dev_t vpdo);
+extern BOOLEAN start_hpdo(phpdo_dev_t hpdo);
+extern void invalidate_hpdo(phpdo_dev_t hpdo);
 
-PAGEABLE pusbip_vpdo_dev_t
-vhub_find_vpdo(pusbip_vhub_dev_t vhub, unsigned port)
+PAGEABLE pvpdo_dev_t
+vhub_find_vpdo(pvhub_dev_t vhub, unsigned port)
 {
 	PLIST_ENTRY	entry;
 
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 
 		if (vpdo->port == port) {
-			add_ref_vpdo(vpdo);
+			vdev_add_ref((pvdev_t)vpdo);
 			ExReleaseFastMutex(&vhub->Mutex);
 			return vpdo;
 		}
@@ -32,24 +32,24 @@ vhub_find_vpdo(pusbip_vhub_dev_t vhub, unsigned port)
 }
 
 PAGEABLE BOOLEAN
-vhub_is_empty_port(pusbip_vhub_dev_t vhub, ULONG port)
+vhub_is_empty_port(pvhub_dev_t vhub, ULONG port)
 {
-	pusbip_vpdo_dev_t	vpdo;
+	pvpdo_dev_t	vpdo;
 
 	vpdo = vhub_find_vpdo(vhub, port);
 	if (vpdo == NULL)
 		return TRUE;
 	if (vpdo->common.DevicePnPState == SurpriseRemovePending) {
-		del_ref_vpdo(vpdo);
+		vdev_del_ref((pvdev_t)vpdo);
 		return TRUE;
 	}
 
-	del_ref_vpdo(vpdo);
+	vdev_del_ref((pvdev_t)vpdo);
 	return FALSE;
 }
 
 PAGEABLE void
-vhub_attach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
+vhub_attach_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo)
 {
 	ExAcquireFastMutex(&vhub->Mutex);
 
@@ -62,7 +62,7 @@ vhub_attach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
 }
 
 PAGEABLE void
-vhub_detach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
+vhub_detach_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo)
 {
 	ExAcquireFastMutex(&vhub->Mutex);
 
@@ -74,13 +74,13 @@ vhub_detach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
 	ExReleaseFastMutex(&vhub->Mutex);
 }
 
-static pusbip_vpdo_dev_t
-find_managed_vpdo(pusbip_vhub_dev_t vhub, PDEVICE_OBJECT devobj)
+static pvpdo_dev_t
+find_managed_vpdo(pvhub_dev_t vhub, PDEVICE_OBJECT devobj)
 {
 	PLIST_ENTRY	entry;
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 		if (vpdo->common.Self == devobj) {
 			return vpdo;
 		}
@@ -89,7 +89,7 @@ find_managed_vpdo(pusbip_vhub_dev_t vhub, PDEVICE_OBJECT devobj)
 }
 
 static BOOLEAN
-is_in_dev_relations(PDEVICE_OBJECT devobjs[], ULONG n_counts, pusbip_vpdo_dev_t vpdo)
+is_in_dev_relations(PDEVICE_OBJECT devobjs[], ULONG n_counts, pvpdo_dev_t vpdo)
 {
 	ULONG	i;
 
@@ -101,18 +101,18 @@ is_in_dev_relations(PDEVICE_OBJECT devobjs[], ULONG n_counts, pusbip_vpdo_dev_t 
 	return FALSE;
 }
 
-PAGEABLE PDEVICE_RELATIONS
-vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
+PAGEABLE NTSTATUS
+vhub_get_bus_relations(pvhub_dev_t vhub, PDEVICE_RELATIONS *pdev_relations)
 {
-	PDEVICE_RELATIONS	relations;
+	PDEVICE_RELATIONS	relations_old = *pdev_relations, relations;
 	ULONG			length, n_olds = 0, n_news = 0;
 	PLIST_ENTRY		entry;
 	ULONG	i;
 
 	ExAcquireFastMutex(&vhub->Mutex);
 
-	if (oldRelations)
-		n_olds = oldRelations->Count;
+	if (relations_old)
+		n_olds = relations_old->Count;
 
 	// Need to allocate a new relations structure and add our vpdos to it
 	length = sizeof(DEVICE_RELATIONS) + (vhub->n_vpdos_plugged + n_olds - 1) * sizeof(PDEVICE_OBJECT);
@@ -120,15 +120,14 @@ vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 	relations = (PDEVICE_RELATIONS)ExAllocatePoolWithTag(PagedPool, length, USBIP_VHCI_POOL_TAG);
 	if (relations == NULL) {
 		DBGE(DBG_VHUB, "failed to allocate a new relation: out of memory\n");
-		DBGE(DBG_VHUB, "old relations will be used\n");
 
 		ExReleaseFastMutex(&vhub->Mutex);
-		return oldRelations;
+		return STATUS_INSUFFICIENT_RESOURCES;
 	}
 
 	for (i = 0; i < n_olds; i++) {
-		pusbip_vpdo_dev_t	vpdo;
-		PDEVICE_OBJECT	devobj = oldRelations->Objects[i];
+		pvpdo_dev_t	vpdo;
+		PDEVICE_OBJECT	devobj = relations_old->Objects[i];
 		vpdo = find_managed_vpdo(vhub, devobj);
 		if (vpdo == NULL || vpdo->plugged) {
 			relations->Objects[n_news] = devobj;
@@ -141,7 +140,7 @@ vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 	}
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 
 		if (is_in_dev_relations(relations->Objects, n_news, vpdo))
 			continue;
@@ -158,54 +157,66 @@ vhub_get_bus_relations(pusbip_vhub_dev_t vhub, PDEVICE_RELATIONS oldRelations)
 
 	DBGI(DBG_VHUB, "vhub vpdos: total:%u,plugged:%u: bus relations: old:%u,new:%u\n", vhub->n_vpdos, vhub->n_vpdos_plugged, n_olds, n_news);
 
-	if (oldRelations)
-		ExFreePool(oldRelations);
+	if (relations_old)
+		ExFreePool(relations_old);
 
 	ExReleaseFastMutex(&vhub->Mutex);
 
-	return relations;
-}
-
-/* IOCTL_USB_GET_ROOT_HUB_NAME requires a device interface symlink name with the prefix(\??\) stripped */
-static PAGEABLE SIZE_T
-get_name_prefix_size(PWCHAR name)
-{
-	SIZE_T	i;
-	for (i = 1; name[i]; i++) {
-		if (name[i] == L'\\') {
-			return i + 1;
-		}
-	}
-	return 0;
+	*pdev_relations = relations;
+	return STATUS_SUCCESS;
 }
 
 PAGEABLE NTSTATUS
-vhub_get_roothub_name(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *pinfo)
+vhub_get_information_ex(pvhub_dev_t vhub, PUSB_HUB_INFORMATION_EX pinfo)
 {
-	PUSB_ROOT_HUB_NAME	roothub_name;
-	SIZE_T	roothub_namelen, prefix_len;
+	UNREFERENCED_PARAMETER(vhub);
 
-	prefix_len = get_name_prefix_size(vhub->DevIntfRootHub.Buffer);
-	if (prefix_len == 0) {
-		DBGE(DBG_IOCTL, "inavlid root hub format: %S\n", vhub->DevIntfRootHub.Buffer);
+	pinfo->HubType = UsbRootHub;
+	pinfo->HighestPortNumber = (USHORT)vhub->n_max_ports;
+	return STATUS_SUCCESS;
+}
+
+PAGEABLE NTSTATUS
+vhub_get_capabilities_ex(pvhub_dev_t vhub, PUSB_HUB_CAPABILITIES_EX pinfo)
+{
+	UNREFERENCED_PARAMETER(vhub);
+
+	pinfo->CapabilityFlags.ul = 0xffffffff;
+	pinfo->CapabilityFlags.HubIsHighSpeedCapable = FALSE;
+	pinfo->CapabilityFlags.HubIsHighSpeed = FALSE;
+	pinfo->CapabilityFlags.HubIsMultiTtCapable = TRUE;
+	pinfo->CapabilityFlags.HubIsMultiTt = TRUE;
+	pinfo->CapabilityFlags.HubIsRoot = TRUE;
+	pinfo->CapabilityFlags.HubIsBusPowered = FALSE;
+
+	return STATUS_SUCCESS;
+}
+
+PAGEABLE NTSTATUS
+vhub_get_port_connector_properties(pvhub_dev_t vhub, PUSB_PORT_CONNECTOR_PROPERTIES pinfo, PULONG poutlen)
+{
+	if (pinfo->ConnectionIndex > vhub->n_max_ports)
 		return STATUS_INVALID_PARAMETER;
-	}
-	roothub_namelen = sizeof(USB_ROOT_HUB_NAME) + vhub->DevIntfRootHub.Length - prefix_len * sizeof(WCHAR);
-	roothub_name = ExAllocatePoolWithTag(NonPagedPool, roothub_namelen, USBIP_VHCI_POOL_TAG);
-	if (roothub_name == NULL) {
-		DBGE(DBG_IOCTL, "failed to allocate root hub name: len: %d\n", roothub_namelen);
-		return STATUS_INSUFFICIENT_RESOURCES;
-	}
+	if (*poutlen < sizeof(USB_PORT_CONNECTOR_PROPERTIES))
+		return STATUS_BUFFER_TOO_SMALL;
 
-	roothub_name->ActualLength = (ULONG)roothub_namelen;
-	RtlStringCchCopyW(roothub_name->RootHubName, vhub->DevIntfRootHub.Length / sizeof(WCHAR) - prefix_len + 1, vhub->DevIntfRootHub.Buffer + prefix_len);
-	*pinfo = (ULONG)roothub_namelen;
-	irp->AssociatedIrp.SystemBuffer = roothub_name;
+	pinfo->ActualLength = sizeof(USB_PORT_CONNECTOR_PROPERTIES);
+	pinfo->UsbPortProperties.ul = 0xffffffff;
+	pinfo->UsbPortProperties.PortIsUserConnectable = TRUE;
+	pinfo->UsbPortProperties.PortIsDebugCapable = TRUE;
+	pinfo->UsbPortProperties.PortHasMultipleCompanions = FALSE;
+	pinfo->UsbPortProperties.PortConnectorIsTypeC = FALSE;
+	pinfo->CompanionIndex = 0;
+	pinfo->CompanionPortNumber = 0;
+	pinfo->CompanionHubSymbolicLinkName[0] = L'\0';
+
+	*poutlen = sizeof(USB_PORT_CONNECTOR_PROPERTIES);
+
 	return STATUS_SUCCESS;
 }
 
 static PAGEABLE void
-mark_unplugged(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
+mark_unplugged(pvhub_dev_t vhub, pvpdo_dev_t vpdo)
 {
 	if (vpdo->plugged) {
 		vpdo->plugged = FALSE;
@@ -218,7 +229,7 @@ mark_unplugged(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
 }
 
 PAGEABLE void
-vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
+vhub_mark_unplugged_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo)
 {
 	ExAcquireFastMutex(&vhub->Mutex);
 
@@ -227,28 +238,8 @@ vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo)
 	ExReleaseFastMutex(&vhub->Mutex);
 }
 
-/* TODO: NOTE: This function will be removed if it is useless */
 PAGEABLE void
-vhub_invalidate_vpdos_by_vhub_surprise_removal(pusbip_vhub_dev_t vhub)
-{
-	PLIST_ENTRY	entry, nextEntry;
-
-	ExAcquireFastMutex(&vhub->Mutex);
-
-	for (entry = vhub->head_vpdo.Flink, nextEntry = entry->Flink; entry != &vhub->head_vpdo; entry = nextEntry, nextEntry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
-
-		RemoveEntryList(&vpdo->Link);
-		InitializeListHead(&vpdo->Link);
-		vpdo->vhub = NULL;
-		vpdo->ReportedMissing = TRUE;
-	}
-
-	ExReleaseFastMutex(&vhub->Mutex);
-}
-
-PAGEABLE void
-vhub_remove_all_vpdos(pusbip_vhub_dev_t vhub)
+vhub_remove_all_vpdos(pvhub_dev_t vhub)
 {
 	PLIST_ENTRY	entry, nextEntry;
 
@@ -260,7 +251,7 @@ vhub_remove_all_vpdos(pusbip_vhub_dev_t vhub)
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	for (entry = vhub->head_vpdo.Flink, nextEntry = entry->Flink; entry != &vhub->head_vpdo; entry = nextEntry, nextEntry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 
 		RemoveEntryList(&vpdo->Link);
 		if (vpdo->common.DevicePnPState == SurpriseRemovePending) {
@@ -283,7 +274,7 @@ vhub_remove_all_vpdos(pusbip_vhub_dev_t vhub)
 }
 
 PAGEABLE NTSTATUS
-vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject)
+vhub_unplug_vpdo(pvhub_dev_t vhub, ULONG port, BOOLEAN is_eject)
 {
 	BOOLEAN		found = FALSE;
 	PLIST_ENTRY	entry;
@@ -295,7 +286,7 @@ vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject)
 	}
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 
 		if (port == 0 || port == vpdo->port) {
 			if (!is_eject) {
@@ -320,14 +311,14 @@ vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject)
 }
 
 PAGEABLE void
-vhub_invalidate_unplugged_vpdos(pusbip_vhub_dev_t vhub)
+vhub_invalidate_unplugged_vpdos(pvhub_dev_t vhub)
 {
 	PLIST_ENTRY	entry;
 
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pusbip_vpdo_dev_t	vpdo = CONTAINING_RECORD(entry, usbip_vpdo_dev_t, Link);
+		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
 
 		if (!vpdo->plugged) {
 			complete_pending_irp(vpdo);
@@ -339,83 +330,10 @@ vhub_invalidate_unplugged_vpdos(pusbip_vhub_dev_t vhub)
 	ExReleaseFastMutex(&vhub->Mutex);
 }
 
-PAGEABLE void
-invalidate_vhub(pusbip_vhub_dev_t vhub)
-{
-	PAGED_CODE();
-
-	// Stop all access to the device, fail any outstanding I/O to the device,
-	// and free all the resources associated with the device.
-
-	IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
-	IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, FALSE);
-	IoSetDeviceInterfaceState(&vhub->DevIntfRootHub, FALSE);
-	RtlFreeUnicodeString(&vhub->DevIntfVhci);
-	RtlFreeUnicodeString(&vhub->DevIntfUSBHC);
-	RtlFreeUnicodeString(&vhub->DevIntfRootHub);
-
-	// Inform WMI to remove this DeviceObject from its list of providers.
-	dereg_wmi(vhub);
-}
-
 PAGEABLE NTSTATUS
-start_vhub(pusbip_vhub_dev_t vhub)
+vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pvhub_dev_t vhub)
 {
-	POWER_STATE	powerState;
-	NTSTATUS	status;
-
-	PAGED_CODE();
-
-	// Check the function driver source to learn
-	// about parsing resource list.
-
-	// Enable device interface. If the return status is
-	// STATUS_OBJECT_NAME_EXISTS means we are enabling the interface
-	// that was already enabled, which could happen if the device
-	// is stopped and restarted for resource rebalancing.
-	status = IoSetDeviceInterfaceState(&vhub->DevIntfVhci, TRUE);
-	if (!NT_SUCCESS(status)) {
-		DBGE(DBG_PNP, "failed to enable vhci device interface: %s\n", dbg_ntstatus(status));
-		return status;
-	}
-	status = IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, TRUE);
-	if (!NT_SUCCESS(status)) {
-		IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
-		DBGE(DBG_PNP, "failed to enable USB host controller device interface: %s\n", dbg_ntstatus(status));
-		return status;
-	}
-	status = IoSetDeviceInterfaceState(&vhub->DevIntfRootHub, TRUE);
-	if (!NT_SUCCESS(status)) {
-		IoSetDeviceInterfaceState(&vhub->DevIntfVhci, FALSE);
-		IoSetDeviceInterfaceState(&vhub->DevIntfUSBHC, FALSE);
-		DBGE(DBG_PNP, "failed to enable root hub device interface: %s\n", dbg_ntstatus(status));
-		return status;
-	}
-
-	// Set the device power state to fully on. Also if this Start
-	// is due to resource rebalance, you should restore the device
-	// to the state it was before you stopped the device and relinquished
-	// resources.
-
-	vhub->common.DevicePowerState = PowerDeviceD0;
-	powerState.DeviceState = PowerDeviceD0;
-	PoSetPowerState(vhub->common.Self, DevicePowerState, powerState);
-
-	SET_NEW_PNP_STATE(vhub, Started);
-
-	// Register with WMI
-	status = reg_wmi(vhub);
-	if (!NT_SUCCESS(status)) {
-		DBGE(DBG_VHUB, "start_vhub: reg_wmi failed (%x)\n", status);
-	}
-
-	return status;
-}
-
-PAGEABLE NTSTATUS
-vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t vhub, ULONG *info)
-{
-	pusbip_vpdo_dev_t	vpdo;
+	pvpdo_dev_t	vpdo;
 	PLIST_ENTRY		entry;
 
 	PAGED_CODE();
@@ -426,7 +344,7 @@ vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t v
 	ExAcquireFastMutex(&vhub->Mutex);
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		vpdo = CONTAINING_RECORD (entry, usbip_vpdo_dev_t, Link);
+		vpdo = CONTAINING_RECORD (entry, vpdo_dev_t, Link);
 		if (vpdo->port > 127 || vpdo->port == 0) {
 			DBGE(DBG_VHUB, "strange error");
 			continue;
@@ -436,6 +354,43 @@ vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t v
 		st->u.port_status[vpdo->port] = 1;
 	}
 	ExReleaseFastMutex(&vhub->Mutex);
-	*info = sizeof(*st);
 	return STATUS_SUCCESS;
+}
+
+PAGEABLE BOOLEAN
+start_vhub(pvhub_dev_t vhub)
+{
+	PAGED_CODE();
+
+	if (!start_hpdo(vhub->vhci->hpdo))
+		return FALSE;
+
+	vhub->common.DevicePowerState = PowerDeviceD0;
+	SET_NEW_PNP_STATE(vhub, Started);
+
+	return TRUE;
+}
+
+PAGEABLE void
+stop_vhub(pvhub_dev_t vhub)
+{
+	PAGED_CODE();
+
+	KeWaitForSingleObject(&vhub->StopEvent, Executive, KernelMode, FALSE, NULL);
+	SET_NEW_PNP_STATE(vhub, Stopped);
+}
+
+PAGEABLE void
+remove_vhub(pvhub_dev_t vhub)
+{
+	invalidate_hpdo(vhub->vhci->hpdo);
+	IoDetachDevice(vhub->devobj_lower);
+
+	SET_NEW_PNP_STATE(vhub, Deleted);
+	vhub_remove_all_vpdos(vhub);
+
+	DBGI(DBG_PNP, "Deleting vhub device object: 0x%p\n", TO_DEVOBJ(vhub));
+
+	IoDeleteDevice(TO_DEVOBJ(vhub));
+	vhub->vhci->vhub = NULL;
 }

@@ -21,10 +21,18 @@
   <ItemGroup>
     <ClCompile Include="vhci.c" />
     <ClCompile Include="vhci_dbg.c" />
+    <ClCompile Include="vhci_dev.c" />
     <ClCompile Include="vhci_devconf.c" />
+    <ClCompile Include="vhci_hpdo.c" />
     <ClCompile Include="vhci_ioctl.c" />
+    <ClCompile Include="vhci_ioctl_usrreq.c" />
+    <ClCompile Include="vhci_irp.c" />
+    <ClCompile Include="vhci_pnp_hpdo.c" />
+    <ClCompile Include="vhci_pnp_intf.c" />
+    <ClCompile Include="vhci_pnp_vhci.c" />
     <ClCompile Include="vhci_pnp_vhub.c" />
     <ClCompile Include="vhci_pnp_vpdo.c" />
+    <ClCompile Include="vhci_vhci.c" />
     <ClCompile Include="vhci_vhub.c" />
     <ClCompile Include="vhci_vpdo.c" />
     <ClCompile Include="vhci_read.c" />
@@ -45,6 +53,7 @@
     <ClInclude Include="vhci_dev.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="vhci_devconf.h" />
+    <ClInclude Include="vhci_irp.h" />
     <ClInclude Include="vhci_pnp.h" />
     <ClInclude Include="trace.h" />
     <ClInclude Include="usbreq.h" />
@@ -145,7 +154,7 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>..\..\include;..\lib;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\lib;$(UM_IncludePath);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
@@ -165,7 +174,7 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>..\..\include;..\lib;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\lib;$(UM_IncludePath);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
@@ -185,7 +194,7 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>..\..\include;..\lib;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\lib;$(UM_IncludePath);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <Inf2CatAdditionalOptions>/driver:aaaa\temp\</Inf2CatAdditionalOptions>
     </ClCompile>
@@ -209,7 +218,7 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>..\..\include;..\lib;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;..\lib;$(UM_IncludePath);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>

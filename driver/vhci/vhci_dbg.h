@@ -5,6 +5,7 @@
 
 #ifdef DBG
 
+#include "vhci_dev.h"
 #include "usbreq.h"
 #include "dbgcode.h"
 
@@ -17,12 +18,19 @@
 #define DBG_POWER	0x0040
 #define DBG_WMI		0x0080
 #define DBG_URB		0x0100
-#define DBG_VHUB	0x0200
-#define DBG_VPDO	0x0400
+#define DBG_VHCI	0x0200
+#define DBG_HPDO	0x0400
+#define DBG_VHUB	0x0800
+#define DBG_VPDO	0x1000
 
+extern const char *dbg_GUID(GUID *guid);
+
+extern const char *dbg_vdev_type(vdev_type_t type);
 extern const char *dbg_urbr(struct urb_req *urbr);
 
 extern const char *dbg_vhci_ioctl_code(unsigned int ioctl_code);
 extern const char *dbg_urbfunc(unsigned int urbfunc);
+
+extern const char *dbg_usb_user_request_code(ULONG code);
 
 #endif	

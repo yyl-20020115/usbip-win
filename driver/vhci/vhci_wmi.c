@@ -28,44 +28,38 @@ static WMIGUIDREGINFO USBIPBusWmiGuidList[] = {
 };
 
 PAGEABLE NTSTATUS
-vhci_system_control(__in  PDEVICE_OBJECT devobj, __in PIRP Irp)
+vhci_system_control(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	pusbip_vhub_dev_t	vhub;
-	pdev_common_t		devcom;
+	pvhci_dev_t	vhci;
 	SYSCTL_IRP_DISPOSITION	disposition;
-	PIO_STACK_LOCATION	stack;
+	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS		status;
 
 	PAGED_CODE();
 
 	DBGI(DBG_WMI, "vhci_system_control: Enter\n");
 
-	stack = IoGetCurrentIrpStackLocation(Irp);
+	irpstack = IoGetCurrentIrpStackLocation(irp);
 
-	devcom = (pdev_common_t)devobj->DeviceExtension;
-
-	if (!devcom->is_vhub) {
+	if (!IS_DEVOBJ_VHCI(devobj)) {
 		// The vpdo, just complete the request with the current status
-		DBGI(DBG_WMI, "vpdo %s\n", dbg_wmi_minor(stack->MinorFunction));
-		status = Irp->IoStatus.Status;
-		IoCompleteRequest (Irp, IO_NO_INCREMENT);
+		DBGI(DBG_WMI, "non-vhci: skip: minor:%s\n", dbg_wmi_minor(irpstack->MinorFunction));
+		status = irp->IoStatus.Status;
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return status;
 	}
 
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
+	vhci = DEVOBJ_TO_VHCI(devobj);
 
-	DBGI(DBG_WMI, "vhci: %s\n", dbg_wmi_minor(stack->MinorFunction));
+	DBGI(DBG_WMI, "vhci: %s\n", dbg_wmi_minor(irpstack->MinorFunction));
 
-	inc_io_vhub(vhub);
-
-	if (vhub->common.DevicePnPState == Deleted) {
-		Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
-		IoCompleteRequest (Irp, IO_NO_INCREMENT);
-		dec_io_vhub(vhub);
+	if (vhci->common.DevicePnPState == Deleted) {
+		irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
+		IoCompleteRequest (irp, IO_NO_INCREMENT);
 		return status;
 	}
 
-	status = WmiSystemControl(&vhub->WmiLibInfo, devobj, Irp, &disposition);
+	status = WmiSystemControl(&vhci->WmiLibInfo, devobj, irp, &disposition);
 	switch(disposition) {
 	case IrpProcessed:
 		// This irp has been processed and may be completed or pending.
@@ -73,34 +67,33 @@ vhci_system_control(__in  PDEVICE_OBJECT devobj, __in PIRP Irp)
 	case IrpNotCompleted:
 		// This irp has not been completed, but has been fully processed.
 		// we will complete it now
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		break;
 	case IrpForward:
 	case IrpNotWmi:
 		// This irp is either not a WMI irp or is a WMI irp targetted
 		// at a device lower in the stack.
-		IoSkipCurrentIrpStackLocation (Irp);
-		status = IoCallDriver(vhub->NextLowerDriver, Irp);
+		IoSkipCurrentIrpStackLocation(irp);
+		status = IoCallDriver(vhci->devobj_lower, irp);
 		break;
 	default:
 		// We really should never get here, but if we do just forward....
 		ASSERT(FALSE);
-		IoSkipCurrentIrpStackLocation(Irp);
-		status = IoCallDriver(vhub->NextLowerDriver, Irp);
+		IoSkipCurrentIrpStackLocation(irp);
+		status = IoCallDriver(vhci->devobj_lower, irp);
 		break;
 	}
 
-	dec_io_vhub(vhub);
+	DBGI(DBG_WMI, "vhci_system_control: Leave: %s\n", dbg_ntstatus(status));
 
 	return status;
 }
 
 // WMI System Call back functions
 static NTSTATUS
-vhci_SetWmiDataItem(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidIndex,
+vhci_SetWmiDataItem(__in PDEVICE_OBJECT devobj, __in PIRP irp, __in ULONG GuidIndex,
 	__in ULONG InstanceIndex, __in ULONG DataItemId, __in ULONG BufferSize, __in_bcount(BufferSize) PUCHAR Buffer)
 {
-	pusbip_vhub_dev_t	vhub;
 	ULONG		requiredSize = 0;
 	NTSTATUS	status;
 
@@ -108,8 +101,6 @@ vhci_SetWmiDataItem(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidIn
 
 	UNREFERENCED_PARAMETER(InstanceIndex);
 	UNREFERENCED_PARAMETER(Buffer);
-
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
 
 	switch (GuidIndex) {
 	case WMI_USBIP_BUS_DRIVER_INFORMATION:
@@ -130,16 +121,15 @@ vhci_SetWmiDataItem(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidIn
 		status = STATUS_WMI_GUID_NOT_FOUND;
 	}
 
-	status = WmiCompleteRequest(devobj, Irp, status, requiredSize, IO_NO_INCREMENT);
+	status = WmiCompleteRequest(devobj, irp, status, requiredSize, IO_NO_INCREMENT);
 
 	return status;
 }
 
 static NTSTATUS
-vhci_SetWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidIndex,
+vhci_SetWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP irp, __in ULONG GuidIndex,
 	__in ULONG InstanceIndex, __in ULONG BufferSize, __in_bcount(BufferSize) PUCHAR Buffer)
 {
-	pusbip_vhub_dev_t	vhub;
 	ULONG		requiredSize = 0;
 	NTSTATUS	status;
 
@@ -147,8 +137,6 @@ vhci_SetWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidI
 
 	UNREFERENCED_PARAMETER(InstanceIndex);
 	UNREFERENCED_PARAMETER(Buffer);
-
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
 
 	switch(GuidIndex) {
 	case WMI_USBIP_BUS_DRIVER_INFORMATION:
@@ -166,17 +154,17 @@ vhci_SetWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidI
 		break;
 	}
 
-	status = WmiCompleteRequest(devobj, Irp, status, requiredSize, IO_NO_INCREMENT);
+	status = WmiCompleteRequest(devobj, irp, status, requiredSize, IO_NO_INCREMENT);
 
 	return(status);
 }
 
 static NTSTATUS
-vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG GuidIndex,
+vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP irp, __in ULONG GuidIndex,
 	__in ULONG InstanceIndex, __in ULONG InstanceCount, __inout PULONG InstanceLengthArray,
 	__in ULONG OutBufferSize, __out_bcount(OutBufferSize) PUCHAR Buffer)
 {
-	pusbip_vhub_dev_t	vhub;
+	pvhci_dev_t	vhci = DEVOBJ_TO_VHCI(devobj);
 	ULONG		size = 0;
 	NTSTATUS	status;
 
@@ -188,8 +176,6 @@ vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG Gui
 	// Only ever registers 1 instance per guid
 	ASSERT((InstanceIndex == 0) && (InstanceCount == 1));
 
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
-
 	switch (GuidIndex) {
 	case WMI_USBIP_BUS_DRIVER_INFORMATION:
 		size = sizeof (USBIP_BUS_WMI_STD_DATA);
@@ -199,7 +185,7 @@ vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG Gui
 			break;
 		}
 
-		*(PUSBIP_BUS_WMI_STD_DATA)Buffer = vhub->StdUSBIPBusData;
+		*(PUSBIP_BUS_WMI_STD_DATA)Buffer = vhci->StdUSBIPBusData;
 		*InstanceLengthArray = size;
 		status = STATUS_SUCCESS;
 
@@ -208,7 +194,7 @@ vhci_QueryWmiDataBlock(__in PDEVICE_OBJECT devobj, __in PIRP Irp, __in ULONG Gui
 		status = STATUS_WMI_GUID_NOT_FOUND;
 	}
 
-	status = WmiCompleteRequest(devobj, Irp, status, size, IO_NO_INCREMENT);
+	status = WmiCompleteRequest(devobj, irp, status, size, IO_NO_INCREMENT);
 
 	return status;
 }
@@ -217,53 +203,51 @@ static NTSTATUS
 vhci_QueryWmiRegInfo(__in PDEVICE_OBJECT devobj, __out ULONG *RegFlags, __out PUNICODE_STRING InstanceName,
 	__out PUNICODE_STRING *RegistryPath, __out PUNICODE_STRING MofResourceName, __out PDEVICE_OBJECT *Pdo)
 {
-	pusbip_vhub_dev_t	vhub;
+	pvhci_dev_t	vhci = DEVOBJ_TO_VHCI(devobj);
 
 	PAGED_CODE();
 
 	UNREFERENCED_PARAMETER(InstanceName);
 
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
-
 	*RegFlags = WMIREG_FLAG_INSTANCE_PDO;
 	*RegistryPath = &Globals.RegistryPath;
-	*Pdo = vhub->UnderlyingPDO;
+	*Pdo = vhci->UnderlyingPDO;
 	RtlInitUnicodeString(MofResourceName, MOFRESOURCENAME);
 
 	return STATUS_SUCCESS;
 }
 
 PAGEABLE NTSTATUS
-reg_wmi(pusbip_vhub_dev_t vhub)
+reg_wmi(pvhci_dev_t vhci)
 {
 	NTSTATUS	status;
 
 	PAGED_CODE();
 
-	vhub->WmiLibInfo.GuidCount = sizeof(USBIPBusWmiGuidList) /
+	vhci->WmiLibInfo.GuidCount = sizeof(USBIPBusWmiGuidList) /
 		sizeof(WMIGUIDREGINFO);
-	ASSERT(NUMBER_OF_WMI_GUIDS == vhub->WmiLibInfo.GuidCount);
-	vhub->WmiLibInfo.GuidList = USBIPBusWmiGuidList;
-	vhub->WmiLibInfo.QueryWmiRegInfo = vhci_QueryWmiRegInfo;
-	vhub->WmiLibInfo.QueryWmiDataBlock = vhci_QueryWmiDataBlock;
-	vhub->WmiLibInfo.SetWmiDataBlock = vhci_SetWmiDataBlock;
-	vhub->WmiLibInfo.SetWmiDataItem = vhci_SetWmiDataItem;
-	vhub->WmiLibInfo.ExecuteWmiMethod = NULL;
-	vhub->WmiLibInfo.WmiFunctionControl = NULL;
+	ASSERT(NUMBER_OF_WMI_GUIDS == vhci->WmiLibInfo.GuidCount);
+	vhci->WmiLibInfo.GuidList = USBIPBusWmiGuidList;
+	vhci->WmiLibInfo.QueryWmiRegInfo = vhci_QueryWmiRegInfo;
+	vhci->WmiLibInfo.QueryWmiDataBlock = vhci_QueryWmiDataBlock;
+	vhci->WmiLibInfo.SetWmiDataBlock = vhci_SetWmiDataBlock;
+	vhci->WmiLibInfo.SetWmiDataItem = vhci_SetWmiDataItem;
+	vhci->WmiLibInfo.ExecuteWmiMethod = NULL;
+	vhci->WmiLibInfo.WmiFunctionControl = NULL;
 
 	// Register with WMI
-	status = IoWMIRegistrationControl(vhub->common.Self, WMIREG_ACTION_REGISTER);
+	status = IoWMIRegistrationControl(TO_DEVOBJ(vhci), WMIREG_ACTION_REGISTER);
 
 	// Initialize the Std device data structure
-	vhub->StdUSBIPBusData.ErrorCount = 0;
+	vhci->StdUSBIPBusData.ErrorCount = 0;
 
 	return status;
 }
 
 PAGEABLE NTSTATUS
-dereg_wmi(pusbip_vhub_dev_t vhub)
+dereg_wmi(pvhci_dev_t vhci)
 {
 	PAGED_CODE();
 
-	return IoWMIRegistrationControl(vhub->common.Self, WMIREG_ACTION_DEREGISTER);
+	return IoWMIRegistrationControl(TO_DEVOBJ(vhci), WMIREG_ACTION_DEREGISTER);
 }

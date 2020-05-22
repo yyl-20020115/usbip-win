@@ -1,27 +1,50 @@
 #include "vhci.h"
 
+#include <usbuser.h>
+
 #include "usbreq.h"
 #include "vhci_devconf.h"
 #include "vhci_pnp.h"
 #include "usbip_vhci_api.h"
 
 extern NTSTATUS
-vhci_plugin_vpdo(ioctl_usbip_vhci_plugin *plugin, pusbip_vhub_dev_t vhub, PFILE_OBJECT fo);
+vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT fo);
 
 extern NTSTATUS
-vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pusbip_vhub_dev_t vhub, ULONG *info);
+vhci_get_ports_status(ioctl_usbip_vhci_get_ports_status *st, pvhub_dev_t vhub);
 
 extern NTSTATUS
-vhub_get_roothub_name(pusbip_vhub_dev_t vhub, PIRP irp, ULONG* pinfo);
+vhci_get_controller_name(pvhci_dev_t vhci, PVOID buffer, ULONG inlen, PULONG poutlen);
 
 extern NTSTATUS
-vpdo_get_nodeconn_info(pusbip_vpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION conninfo, ULONG *psize);
+hpdo_get_roothub_name(phpdo_dev_t hpdo, PVOID buffer, ULONG inlen, PULONG poutlen);
 
 extern NTSTATUS
-vpdo_get_dsc_from_nodeconn(pusbip_vpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_req, ULONG *psize);
+vpdo_get_nodeconn_info(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION nodeconn, PULONG poutlen);
+
+extern NTSTATUS
+vpdo_get_nodeconn_info_ex(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION_EX nodeconn, PULONG poutlen);
+
+extern NTSTATUS
+vpdo_get_nodeconn_info_ex_v2(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION_EX_V2 nodeconn, PULONG poutlen);
+
+extern NTSTATUS
+vpdo_get_dsc_from_nodeconn(pvpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_req, PULONG poutlen);
+
+extern NTSTATUS
+vhci_ioctl_user_request(pvhci_dev_t vhci, PVOID buffer, ULONG inlen, PULONG poutlen);
+
+extern NTSTATUS
+vhub_get_information_ex(pvhub_dev_t vhub, PUSB_HUB_INFORMATION_EX pinfo);
+
+extern NTSTATUS
+vhub_get_capabilities_ex(pvhub_dev_t vhub, PUSB_HUB_CAPABILITIES_EX pinfo);
+
+extern NTSTATUS
+vhub_get_port_connector_properties(pvhub_dev_t vhub, PUSB_PORT_CONNECTOR_PROPERTIES pinfo, PULONG poutlen);
 
 NTSTATUS
-vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
+vhci_ioctl_abort_pipe(pvpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
 {
 	KIRQL		oldirql;
 	PLIST_ENTRY	le;
@@ -74,7 +97,7 @@ vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe)
 }
 
 static NTSTATUS
-process_urb_get_frame(pusbip_vpdo_dev_t vpdo, PURB urb)
+process_urb_get_frame(pvpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_GET_CURRENT_FRAME_NUMBER	*urb_get = &urb->UrbGetCurrentFrameNumber;
 	UNREFERENCED_PARAMETER(vpdo);
@@ -84,7 +107,7 @@ process_urb_get_frame(pusbip_vpdo_dev_t vpdo, PURB urb)
 }
 
 static NTSTATUS
-submit_urbr_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
+submit_urbr_irp(pvpdo_dev_t vpdo, PIRP irp)
 {
 	struct urb_req	*urbr;
 	NTSTATUS	status;
@@ -99,7 +122,7 @@ submit_urbr_irp(pusbip_vpdo_dev_t vpdo, PIRP irp)
 }
 
 static NTSTATUS
-process_irp_urb_req(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+process_irp_urb_req(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	if (urb == NULL) {
 		DBGE(DBG_IOCTL, "process_irp_urb_req: null urb\n");
@@ -143,7 +166,7 @@ process_irp_urb_req(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
 }
 
 static NTSTATUS
-setup_topology_address(pusbip_vpdo_dev_t vpdo, PIO_STACK_LOCATION irpStack)
+setup_topology_address(pvpdo_dev_t vpdo, PIO_STACK_LOCATION irpStack)
 {
 	PUSB_TOPOLOGY_ADDRESS	topoaddr;
 
@@ -157,11 +180,8 @@ vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION      irpStack;
 	NTSTATUS		status;
-	pusbip_vpdo_dev_t	vpdo;
-	pdev_common_t		devcom;
+	pvpdo_dev_t	vpdo;
 	ULONG			ioctl_code;
-
-	devcom = (pdev_common_t)devobj->DeviceExtension;
 
 	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_internal_ioctl: Enter\n");
 
@@ -170,14 +190,14 @@ vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 
 	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
 
-	if (devcom->is_vhub) {
-		DBGW(DBG_IOCTL, "internal ioctl for vhub is not allowed\n");
+	if (!IS_DEVOBJ_VPDO(devobj)) {
+		DBGW(DBG_IOCTL, "internal ioctl only for vpdo is allowed\n");
 		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	vpdo = (pusbip_vpdo_dev_t)devobj->DeviceExtension;
+	vpdo = (pvpdo_dev_t)devobj->DeviceExtension;
 
 	if (!vpdo->plugged) {
 		DBGW(DBG_IOCTL, "device is not connected\n");
@@ -217,139 +237,244 @@ vhci_internal_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
 }
 
 static PAGEABLE NTSTATUS
-get_nodeconn_info(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *psize)
+get_nodeconn_info(pvhub_dev_t vhub, PVOID buffer, ULONG inlen, PULONG poutlen)
 {
-	PUSB_NODE_CONNECTION_INFORMATION	conninfo = (PUSB_NODE_CONNECTION_INFORMATION)irp->AssociatedIrp.SystemBuffer;
-	pusbip_vpdo_dev_t	vpdo;
-	PIO_STACK_LOCATION      irpStack;
+	PUSB_NODE_CONNECTION_INFORMATION	conninfo = (PUSB_NODE_CONNECTION_INFORMATION)buffer;
+	pvpdo_dev_t	vpdo;
 	NTSTATUS	status;
 
-	vpdo = vhub_find_vpdo(vhub, conninfo->ConnectionIndex);
-	if (vpdo == NULL)
-		return STATUS_NO_SUCH_DEVICE;
-
-	irpStack = IoGetCurrentIrpStackLocation(irp);
-	*psize = irpStack->Parameters.DeviceIoControl.InputBufferLength;
-	status = vpdo_get_nodeconn_info(vpdo, conninfo, psize);
-	if (NT_SUCCESS(status)) {
-		irpStack->Parameters.DeviceIoControl.OutputBufferLength = *psize;
+	if (inlen < sizeof(USB_NODE_CONNECTION_INFORMATION)) {
+		*poutlen = sizeof(USB_NODE_CONNECTION_INFORMATION);
+		return STATUS_BUFFER_TOO_SMALL;
 	}
-	del_ref_vpdo(vpdo);
+	if (conninfo->ConnectionIndex > vhub->n_max_ports)
+		return STATUS_NO_SUCH_DEVICE;
+	vpdo = vhub_find_vpdo(vhub, conninfo->ConnectionIndex);
+	status = vpdo_get_nodeconn_info(vpdo, conninfo, poutlen);
+	if (vpdo != NULL)
+		vdev_del_ref((pvdev_t)vpdo);
 	return status;
 }
 
 static PAGEABLE NTSTATUS
-get_descriptor_from_nodeconn(pusbip_vhub_dev_t vhub, PIRP irp, ULONG *psize)
+get_nodeconn_info_ex(pvhub_dev_t vhub, PVOID buffer, ULONG inlen, PULONG poutlen)
 {
-	PUSB_DESCRIPTOR_REQUEST	dsc_req = (PUSB_DESCRIPTOR_REQUEST)irp->AssociatedIrp.SystemBuffer;
-	pusbip_vpdo_dev_t	vpdo;
-	PIO_STACK_LOCATION      irpStack;
+	PUSB_NODE_CONNECTION_INFORMATION_EX	conninfo = (PUSB_NODE_CONNECTION_INFORMATION_EX)buffer;
+	pvpdo_dev_t	vpdo;
 	NTSTATUS	status;
+
+	if (inlen < sizeof(PUSB_NODE_CONNECTION_INFORMATION_EX)) {
+		*poutlen = sizeof(PUSB_NODE_CONNECTION_INFORMATION_EX);
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+	if (conninfo->ConnectionIndex > vhub->n_max_ports)
+		return STATUS_NO_SUCH_DEVICE;
+	vpdo = vhub_find_vpdo(vhub, conninfo->ConnectionIndex);
+	status = vpdo_get_nodeconn_info_ex(vpdo, conninfo, poutlen);
+	if (vpdo != NULL)
+		vdev_del_ref((pvdev_t)vpdo);
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+get_nodeconn_info_ex_v2(pvhub_dev_t vhub, PVOID buffer, ULONG inlen, PULONG poutlen)
+{
+	PUSB_NODE_CONNECTION_INFORMATION_EX_V2	conninfo = (PUSB_NODE_CONNECTION_INFORMATION_EX_V2)buffer;
+	pvpdo_dev_t	vpdo;
+	NTSTATUS	status;
+
+	if (inlen < sizeof(PUSB_NODE_CONNECTION_INFORMATION_EX_V2)) {
+		*poutlen = sizeof(PUSB_NODE_CONNECTION_INFORMATION_EX_V2);
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+	if (conninfo->ConnectionIndex > vhub->n_max_ports)
+		return STATUS_NO_SUCH_DEVICE;
+	vpdo = vhub_find_vpdo(vhub, conninfo->ConnectionIndex);
+	status = vpdo_get_nodeconn_info_ex_v2(vpdo, conninfo, poutlen);
+	if (vpdo != NULL)
+		vdev_del_ref((pvdev_t)vpdo);
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+get_descriptor_from_nodeconn(pvhub_dev_t vhub, PVOID buffer, ULONG inlen, PULONG poutlen)
+{
+	PUSB_DESCRIPTOR_REQUEST	dsc_req = (PUSB_DESCRIPTOR_REQUEST)buffer;
+	pvpdo_dev_t	vpdo;
+	NTSTATUS	status;
+
+	if (inlen < sizeof(USB_DESCRIPTOR_REQUEST)) {
+		*poutlen = sizeof(USB_DESCRIPTOR_REQUEST);
+		return STATUS_BUFFER_TOO_SMALL;
+	}
 
 	vpdo = vhub_find_vpdo(vhub, dsc_req->ConnectionIndex);
 	if (vpdo == NULL)
 		return STATUS_NO_SUCH_DEVICE;
 
-	irpStack = IoGetCurrentIrpStackLocation(irp);
-	*psize = irpStack->Parameters.DeviceIoControl.InputBufferLength;
-	status = vpdo_get_dsc_from_nodeconn(vpdo, dsc_req, psize);
-	if (NT_SUCCESS(status)) {
-		irpStack->Parameters.DeviceIoControl.OutputBufferLength = *psize;
+	status = vpdo_get_dsc_from_nodeconn(vpdo, dsc_req, poutlen);
+	vdev_del_ref((pvdev_t)vpdo);
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+get_hub_information_ex(pvhub_dev_t vhub, PVOID buffer, PULONG poutlen)
+{
+	PUSB_HUB_INFORMATION_EX	pinfo = (PUSB_HUB_INFORMATION_EX)buffer;
+
+	if (*poutlen < sizeof(USB_HUB_INFORMATION_EX))
+		return STATUS_BUFFER_TOO_SMALL;
+	return vhub_get_information_ex(vhub, pinfo);
+}
+
+static PAGEABLE NTSTATUS
+get_hub_capabilities_ex(pvhub_dev_t vhub, PVOID buffer, PULONG poutlen)
+{
+	PUSB_HUB_CAPABILITIES_EX	pinfo = (PUSB_HUB_CAPABILITIES_EX)buffer;
+
+	if (*poutlen < sizeof(USB_HUB_CAPABILITIES_EX))
+		return STATUS_BUFFER_TOO_SMALL;
+	return vhub_get_capabilities_ex(vhub, pinfo);
+}
+
+static PAGEABLE NTSTATUS
+get_port_connector_properties(pvhub_dev_t vhub, PVOID buffer, ULONG inlen, PULONG poutlen)
+{
+	PUSB_PORT_CONNECTOR_PROPERTIES	pinfo = (PUSB_PORT_CONNECTOR_PROPERTIES)buffer;
+
+	if (inlen < sizeof(USB_PORT_CONNECTOR_PROPERTIES))
+		return STATUS_BUFFER_TOO_SMALL;
+	return vhub_get_port_connector_properties(vhub, pinfo, poutlen);
+}
+
+static PAGEABLE NTSTATUS
+vhci_ioctl_vhci(pvhci_dev_t vhci, PIO_STACK_LOCATION irpstack, ULONG ioctl_code, PVOID buffer, ULONG inlen, ULONG *poutlen)
+{
+	NTSTATUS	status = STATUS_INVALID_DEVICE_REQUEST;
+
+	switch (ioctl_code) {
+	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
+		if (inlen == sizeof(ioctl_usbip_vhci_plugin))
+			status = vhci_plugin_vpdo(vhci, (ioctl_usbip_vhci_plugin *)buffer, irpstack->FileObject);
+		*poutlen = 0;
+		break;
+	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
+		if (*poutlen == sizeof(ioctl_usbip_vhci_get_ports_status))
+			status = vhci_get_ports_status((ioctl_usbip_vhci_get_ports_status*)buffer, vhci->vhub);
+		break;
+	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
+		if (inlen == sizeof(ioctl_usbip_vhci_unplug))
+			status = vhci_unplug_port(vhci, ((ioctl_usbip_vhci_unplug *)buffer)->addr);
+		*poutlen = 0;
+		break;
+	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
+		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen)
+			status = vhci_eject_port(vhci, ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->port);
+		*poutlen = 0;
+		break;
+	case IOCTL_INTERNAL_USB_GET_CONTROLLER_NAME:
+		inlen = (ULONG)(ULONG_PTR)irpstack->Parameters.Others.Argument2;
+		status = vhci_get_controller_name(vhci, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_ROOT_HUB_NAME:
+		status = hpdo_get_roothub_name(vhci->hpdo, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_USER_REQUEST:
+		status = vhci_ioctl_user_request(vhci, buffer, inlen, poutlen);
+		break;
+	default:
+		DBGE(DBG_IOCTL, "unhandled vhci ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
+		break;
 	}
-	del_ref_vpdo(vpdo);
+
+	return status;
+}
+
+static PAGEABLE NTSTATUS
+vhci_ioctl_vhub(pvhub_dev_t vhub, ULONG ioctl_code, PVOID buffer, ULONG inlen, ULONG *poutlen)
+{
+	NTSTATUS	status = STATUS_INVALID_DEVICE_REQUEST;
+
+	switch (ioctl_code) {
+	case IOCTL_USB_GET_ROOT_HUB_NAME:
+		status = hpdo_get_roothub_name(vhub->vhci->hpdo, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_NODE_CONNECTION_INFORMATION:
+		status = get_nodeconn_info(vhub, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX:
+		status = get_nodeconn_info_ex(vhub, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX_V2:
+		status = get_nodeconn_info_ex_v2(vhub, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION:
+		status = get_descriptor_from_nodeconn(vhub, buffer, inlen, poutlen);
+		break;
+	case IOCTL_USB_GET_HUB_INFORMATION_EX:
+		status = get_hub_information_ex(vhub, buffer, poutlen);
+		break;
+	case IOCTL_USB_GET_HUB_CAPABILITIES_EX:
+		status = get_hub_capabilities_ex(vhub, buffer, poutlen);
+		break;
+	case IOCTL_USB_GET_PORT_CONNECTOR_PROPERTIES:
+		status = get_port_connector_properties(vhub, buffer, inlen, poutlen);
+		break;
+	default:
+		DBGE(DBG_IOCTL, "unhandled vhub ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
+		break;
+	}
+
 	return status;
 }
 
 PAGEABLE NTSTATUS
-vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
+vhci_ioctl(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	PIO_STACK_LOCATION	irpStack;
-	NTSTATUS			status;
-	ULONG				inlen, outlen;
-	ULONG				info = 0;
-	pusbip_vhub_dev_t		vhub;
-	pdev_common_t			devcom;
-	PVOID				buffer;
-	ULONG				ioctl_code;
+	pvdev_t	vdev = DEVOBJ_TO_VDEV(devobj);
+	PIO_STACK_LOCATION	irpstack;
+	ULONG		ioctl_code;
+	PVOID		buffer;
+	ULONG		inlen, outlen;
+	NTSTATUS	status = STATUS_INVALID_DEVICE_REQUEST;
 
 	PAGED_CODE();
 
-	devcom = (pdev_common_t)devobj->DeviceExtension;
+	irpstack = IoGetCurrentIrpStackLocation(irp);
+	ioctl_code = irpstack->Parameters.DeviceIoControl.IoControlCode;
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Enter %p\n", Irp);
-
-	// We only allow create/close requests for the vhub.
-	if (!devcom->is_vhub) {
-		DBGE(DBG_IOCTL, "ioctl for vhub is not allowed\n");
-
-		Irp->IoStatus.Information = 0;
-		Irp->IoStatus.Status = status = STATUS_INVALID_DEVICE_REQUEST;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
-		return status;
-	}
-
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
-	irpStack = IoGetCurrentIrpStackLocation(Irp);
-
-	ioctl_code = irpStack->Parameters.DeviceIoControl.IoControlCode;
-	DBGI(DBG_IOCTL, "ioctl code: %s\n", dbg_vhci_ioctl_code(ioctl_code));
-
-	inc_io_vhub(vhub);
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl(%s): Enter: code:%s, irp:%p\n",
+		dbg_vdev_type(DEVOBJ_VDEV_TYPE(devobj)), dbg_vhci_ioctl_code(ioctl_code), irp);
 
 	// Check to see whether the bus is removed
-	if (vhub->common.DevicePnPState == Deleted) {
+	if (vdev->DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
 
-	buffer = Irp->AssociatedIrp.SystemBuffer;
-	inlen = irpStack->Parameters.DeviceIoControl.InputBufferLength;
-	outlen = irpStack->Parameters.DeviceIoControl.OutputBufferLength;
+	buffer = irp->AssociatedIrp.SystemBuffer;
+	inlen = irpstack->Parameters.DeviceIoControl.InputBufferLength;
+	outlen = irpstack->Parameters.DeviceIoControl.OutputBufferLength;
 
-	status = STATUS_INVALID_PARAMETER;
-
-	switch (ioctl_code) {
-	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
-		if (sizeof(ioctl_usbip_vhci_plugin) == inlen) {
-			status = vhci_plugin_vpdo((ioctl_usbip_vhci_plugin *)buffer, vhub, irpStack->FileObject);
-		}
+	switch (DEVOBJ_VDEV_TYPE(devobj)) {
+	case VDEV_VHCI:
+		status = vhci_ioctl_vhci(DEVOBJ_TO_VHCI(devobj), irpstack, ioctl_code, buffer, inlen, &outlen);
 		break;
-	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
-		if (sizeof(ioctl_usbip_vhci_get_ports_status) == outlen) {
-			status = vhci_get_ports_status((ioctl_usbip_vhci_get_ports_status *)buffer, vhub, &info);
-		}
-		break;
-	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
-		if (sizeof(ioctl_usbip_vhci_unplug) == inlen) {
-			status = vhci_unplug_vpdo(((ioctl_usbip_vhci_unplug *)buffer)->addr, vhub);
-		}
-		break;
-	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
-		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen) {
-			status = vhci_eject_vpdo(((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->port, vhub);
-		}
-		break;
-	case IOCTL_USB_GET_ROOT_HUB_NAME:
-		status = vhub_get_roothub_name(vhub, Irp, &info);
-		break;
-	case IOCTL_USB_GET_NODE_CONNECTION_INFORMATION:
-		status = get_nodeconn_info(vhub, Irp, &info);
-		break;
-	case IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION:
-		status = get_descriptor_from_nodeconn(vhub, Irp, &info);
+	case VDEV_VHUB:
+		status = vhci_ioctl_vhub(DEVOBJ_TO_VHUB(devobj), ioctl_code, buffer, inlen, &outlen);
 		break;
 	default:
-		DBGE(DBG_IOCTL, "unhandled ioctl: %s\n", dbg_vhci_ioctl_code(ioctl_code));
+		DBGW(DBG_IOCTL, "ioctl for %s is not allowed\n", dbg_vdev_type(DEVOBJ_VDEV_TYPE(devobj)));
+		outlen = 0;
 		break;
 	}
 
-	Irp->IoStatus.Information = info;
+	irp->IoStatus.Information = outlen;
 END:
-	Irp->IoStatus.Status = status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	dec_io_vhub(vhub);
+	irp->IoStatus.Status = status;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
-	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL | DBG_IOCTL, "vhci_ioctl: Leave: irp:%p, status:%s\n", irp, dbg_ntstatus(status));
 
 	return status;
 }

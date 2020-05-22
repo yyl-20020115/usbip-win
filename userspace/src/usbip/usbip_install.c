@@ -32,7 +32,7 @@ static struct usbip_install_devinfo_struct device_list[] = {
 	{
 		.inf_filename        = "usbip_vhci.inf",
 		.hwid_inf_section    = "Standard.NTamd64",
-		.hwid_inf_key        = "USB/IP VHCI",
+		.hwid_inf_key        = "usbip-win VHCI",
 		.devdesc_inf_section = "Strings",
 		.devdesc_inf_key     = "DeviceDesc",
 		.dev_instance_path   = "ROOT\\USBIP\\0000"

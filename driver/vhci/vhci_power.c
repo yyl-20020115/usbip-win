@@ -3,30 +3,24 @@
 #include "vhci_dev.h"
 
 static NTSTATUS
-vhci_power_vhub(pusbip_vhub_dev_t vhub, PIRP Irp)
+vhci_power_vhci(pvhci_dev_t vhci, PIRP irp, PIO_STACK_LOCATION irpstack)
 {
-	PIO_STACK_LOCATION	stack;
 	POWER_STATE		powerState;
 	POWER_STATE_TYPE	powerType;
 	NTSTATUS		status;
 
-	stack = IoGetCurrentIrpStackLocation(Irp);
-	powerType = stack->Parameters.Power.Type;
-	powerState = stack->Parameters.Power.State;
-
-	inc_io_vhub(vhub);
+	powerType = irpstack->Parameters.Power.Type;
+	powerState = irpstack->Parameters.Power.State;
 
 	// If the device is not stated yet, just pass it down.
-	if (vhub->common.DevicePnPState == NotStarted) {
-		PoStartNextPowerIrp(Irp);
-		IoSkipCurrentIrpStackLocation(Irp);
-		status = PoCallDriver(vhub->NextLowerDriver, Irp);
-		dec_io_vhub(vhub);
+	if (vhci->common.DevicePnPState == NotStarted) {
+		PoStartNextPowerIrp(irp);
+		IoSkipCurrentIrpStackLocation(irp);
+		status = PoCallDriver(vhci->devobj_lower, irp);
 		return status;
-
 	}
 
-	if (stack->MinorFunction == IRP_MN_SET_POWER) {
+	if (irpstack->MinorFunction == IRP_MN_SET_POWER) {
 		DBGI(DBG_POWER, "\tRequest to set %s state to %s\n",
 			((powerType == SystemPowerState) ? "System" : "Device"),
 			((powerType == SystemPowerState) ? \
@@ -34,26 +28,23 @@ vhci_power_vhub(pusbip_vhub_dev_t vhub, PIRP Irp)
 				dbg_device_power(powerState.DeviceState)));
 	}
 
-	PoStartNextPowerIrp(Irp);
-	IoSkipCurrentIrpStackLocation(Irp);
-	status = PoCallDriver(vhub->NextLowerDriver, Irp);
-	dec_io_vhub(vhub);
+	PoStartNextPowerIrp(irp);
+	IoSkipCurrentIrpStackLocation(irp);
+	status = PoCallDriver(vhci->devobj_lower, irp);
 	return status;
 }
 
 static NTSTATUS
-vhci_power_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
+vhci_power_vdev(pvdev_t vdev, PIRP irp, PIO_STACK_LOCATION irpstack)
 {
-	PIO_STACK_LOCATION	stack;
 	POWER_STATE		powerState;
 	POWER_STATE_TYPE	powerType;
 	NTSTATUS		status;
 
-	stack = IoGetCurrentIrpStackLocation(Irp);
-	powerType = stack->Parameters.Power.Type;
-	powerState = stack->Parameters.Power.State;
+	powerType = irpstack->Parameters.Power.Type;
+	powerState = irpstack->Parameters.Power.State;
 
-	switch (stack->MinorFunction) {
+	switch (irpstack->MinorFunction) {
 	case IRP_MN_SET_POWER:
 		DBGI(DBG_POWER, "\tSetting %s power state to %s\n",
 			((powerType == SystemPowerState) ? "System" : "Device"),
@@ -63,13 +54,13 @@ vhci_power_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
 
 		switch (powerType) {
 		case DevicePowerState:
-			PoSetPowerState(vpdo->common.Self, powerType, powerState);
-			vpdo->common.DevicePowerState = powerState.DeviceState;
+			PoSetPowerState(vdev->Self, powerType, powerState);
+			vdev->DevicePowerState = powerState.DeviceState;
 			status = STATUS_SUCCESS;
 			break;
 
 		case SystemPowerState:
-			vpdo->common.SystemPowerState = powerState.SystemState;
+			vdev->SystemPowerState = powerState.SystemState;
 			status = STATUS_SUCCESS;
 			break;
 
@@ -105,54 +96,46 @@ vhci_power_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
 	}
 
 	if (status != STATUS_NOT_SUPPORTED) {
-		Irp->IoStatus.Status = status;
+		irp->IoStatus.Status = status;
 	}
 
-	PoStartNextPowerIrp(Irp);
-	status = Irp->IoStatus.Status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	PoStartNextPowerIrp(irp);
+	status = irp->IoStatus.Status;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
 	return status;
 }
 
 NTSTATUS
-vhci_power(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
+vhci_power(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	pdev_common_t	devcom;
-	PIO_STACK_LOCATION	irpStack;
+	pvdev_t	vdev = DEVOBJ_TO_VDEV(devobj);
+	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS		status;
 
-	DBGI(DBG_GENERAL | DBG_POWER, "vhci_power: Enter\n");
+	irpstack = IoGetCurrentIrpStackLocation(irp);
+
+	DBGI(DBG_GENERAL | DBG_POWER, "vhci_power(%s): Enter: minor:%s, irp:%p\n",
+		dbg_vdev_type(DEVOBJ_VDEV_TYPE(devobj)), dbg_power_minor(irpstack->MinorFunction), irp);
 
 	status = STATUS_SUCCESS;
-	irpStack = IoGetCurrentIrpStackLocation (Irp);
-	ASSERT (IRP_MJ_POWER == irpStack->MajorFunction);
-
-	devcom = (pdev_common_t)devobj->DeviceExtension;
 
 	// If the device has been removed, the driver should
 	// not pass the IRP down to the next lower driver.
-	if (devcom->DevicePnPState == Deleted) {
-		PoStartNextPowerIrp (Irp);
-		Irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE ;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	if (vdev->DevicePnPState == Deleted) {
+		PoStartNextPowerIrp(irp);
+		irp->IoStatus.Status = status = STATUS_NO_SUCH_DEVICE;
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return status;
 	}
 
-	if (devcom->is_vhub) {
-		DBGI(DBG_POWER, "vhub: minor: %s IRP:0x%p %s %s\n",
-		     dbg_power_minor(irpStack->MinorFunction), Irp,
-		     dbg_system_power(devcom->SystemPowerState),
-		     dbg_device_power(devcom->DevicePowerState));
-
-		status = vhci_power_vhub((pusbip_vhub_dev_t)devobj->DeviceExtension, Irp);
-	} else {
-		DBGI(DBG_POWER, "vpdo: minor: %s IRP:0x%p %s %s\n",
-			 dbg_power_minor(irpStack->MinorFunction), Irp,
-			 dbg_system_power(devcom->SystemPowerState),
-			 dbg_device_power(devcom->DevicePowerState));
-
-		status = vhci_power_vpdo((pusbip_vpdo_dev_t)devobj->DeviceExtension, Irp);
+	switch (DEVOBJ_VDEV_TYPE(devobj)) {
+	case VDEV_VHCI:
+		status = vhci_power_vhci((pvhci_dev_t)vdev, irp, irpstack);
+		break;
+	default:
+		status = vhci_power_vdev(vdev, irp, irpstack);
+		break;
 	}
 
 	return status;

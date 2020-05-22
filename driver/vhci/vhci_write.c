@@ -5,13 +5,13 @@
 #include "usbd_helper.h"
 
 extern struct urb_req *
-find_sent_urbr(pusbip_vpdo_dev_t vpdo, struct usbip_header *hdr);
+find_sent_urbr(pvpdo_dev_t vpdo, struct usbip_header *hdr);
 extern NTSTATUS
-try_to_cache_descriptor(pusbip_vpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc);
+try_to_cache_descriptor(pvpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc);
 extern NTSTATUS
-vpdo_select_config(pusbip_vpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb_selc);
+vpdo_select_config(pvpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb_selc);
 extern NTSTATUS
-vpdo_select_interface(pusbip_vpdo_dev_t vpdo, PUSBD_INTERFACE_INFORMATION info_intf);
+vpdo_select_interface(pvpdo_dev_t vpdo, PUSBD_INTERFACE_INFORMATION info_intf);
 
 static BOOLEAN
 save_iso_desc(struct _URB_ISOCH_TRANSFER *urb, struct usbip_iso_packet_descriptor *iso_desc)
@@ -71,7 +71,7 @@ copy_iso_data(char *dest, ULONG dest_len, char *src, ULONG src_len, struct _URB_
 }
 
 void
-post_get_desc(pusbip_vpdo_dev_t vpdo, PURB urb)
+post_get_desc(pvpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_cdr = &urb->UrbControlDescriptorRequest;
 	PUSB_COMMON_DESCRIPTOR	dsc;
@@ -87,13 +87,13 @@ post_get_desc(pusbip_vpdo_dev_t vpdo, PURB urb)
 }
 
 static NTSTATUS
-post_select_config(pusbip_vpdo_dev_t vpdo, PURB urb)
+post_select_config(pvpdo_dev_t vpdo, PURB urb)
 {
 	return vpdo_select_config(vpdo, &urb->UrbSelectConfiguration);
 }
 
 static NTSTATUS
-post_select_interface(pusbip_vpdo_dev_t vpdo, PURB urb)
+post_select_interface(pvpdo_dev_t vpdo, PURB urb)
 {
 	struct _URB_SELECT_INTERFACE	*urb_seli = &urb->UrbSelectInterface;
 
@@ -289,7 +289,7 @@ store_urb_data(PURB urb, struct usbip_header *hdr)
 }
 
 static NTSTATUS
-process_urb_res_submit(pusbip_vpdo_dev_t vpdo, PURB urb, struct usbip_header *hdr)
+process_urb_res_submit(pvpdo_dev_t vpdo, PURB urb, struct usbip_header *hdr)
 {
 	NTSTATUS	status;
 
@@ -367,7 +367,7 @@ get_usbip_hdr_from_write_irp(PIRP irp)
 }
 
 static NTSTATUS
-process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP write_irp)
+process_write_irp(pvpdo_dev_t vpdo, PIRP write_irp)
 {
 	struct usbip_header	*hdr;
 	struct urb_req	*urbr;
@@ -414,49 +414,44 @@ process_write_irp(pusbip_vpdo_dev_t vpdo, PIRP write_irp)
 }
 
 PAGEABLE NTSTATUS
-vhci_write(__in PDEVICE_OBJECT devobj, __in PIRP Irp)
+vhci_write(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	pusbip_vhub_dev_t	vhub;
-	pusbip_vpdo_dev_t	vpdo;
-	pdev_common_t		devcom;
-	PIO_STACK_LOCATION	stackirp;
+	pvhci_dev_t	vhci;
+	pvpdo_dev_t	vpdo;
+	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS		status;
 
 	PAGED_CODE();
 
-	devcom = (pdev_common_t)devobj->DeviceExtension;
+	irpstack = IoGetCurrentIrpStackLocation(irp);
 
-	DBGI(DBG_GENERAL | DBG_WRITE, "vhci_write: Enter\n");
+	DBGI(DBG_GENERAL | DBG_WRITE, "vhci_write: Enter: len:%u, irp:%p\n", irpstack->Parameters.Write.Length, irp);
 
-	if (!devcom->is_vhub) {
-		DBGE(DBG_WRITE, "write for vhub is not allowed\n");
+	if (!IS_DEVOBJ_VHCI(devobj)) {
+		DBGE(DBG_WRITE, "write for non-vhci is not allowed\n");
 
-		Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
-		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+		irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
+	vhci = DEVOBJ_TO_VHCI(devobj);
 
-	inc_io_vhub(vhub);
-
-	if (vhub->common.DevicePnPState == Deleted) {
+	if (vhci->common.DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
-	stackirp = IoGetCurrentIrpStackLocation(Irp);
-	vpdo = stackirp->FileObject->FsContext;
+	vpdo = irpstack->FileObject->FsContext;
 	if (vpdo == NULL || !vpdo->plugged) {
 		status = STATUS_INVALID_DEVICE_REQUEST;
 		goto END;
 	}
-	Irp->IoStatus.Information = 0;
-	status = process_write_irp(vpdo, Irp);
+	irp->IoStatus.Information = 0;
+	status = process_write_irp(vpdo, irp);
 END:
-	DBGI(DBG_WRITE, "vhci_write: Leave: %s\n", dbg_ntstatus(status));
-	Irp->IoStatus.Status = status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	dec_io_vhub(vhub);
+	DBGI(DBG_WRITE, "vhci_write: Leave: irp:%p, status:%s\n", irp, dbg_ntstatus(status));
+	irp->IoStatus.Status = status;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
 	return status;
 }

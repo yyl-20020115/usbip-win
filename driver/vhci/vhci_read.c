@@ -5,14 +5,14 @@
 #include "usbd_helper.h"
 
 extern struct urb_req *
-find_pending_urbr(pusbip_vpdo_dev_t vpdo);
+find_pending_urbr(pvpdo_dev_t vpdo);
 
 extern void
 set_cmd_submit_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid,
 	unsigned int direct, USBD_PIPE_HANDLE pipe, unsigned int flags, unsigned int len);
 
 extern NTSTATUS
-vhci_ioctl_abort_pipe(pusbip_vpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe);
+vhci_ioctl_abort_pipe(pvpdo_dev_t vpdo, USBD_PIPE_HANDLE hPipe);
 
 extern void
 set_cmd_unlink_usbip_header(struct usbip_header *h, unsigned long seqnum, unsigned int devid, unsigned long seqnum_unlink);
@@ -252,7 +252,7 @@ store_urb_get_intf_desc(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_class_vendor_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+store_urb_class_vendor_partial(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vc = &urb->UrbControlVendorClassRequest;
 	PVOID	dst;
@@ -401,7 +401,7 @@ store_urb_select_interface(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_bulk_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+store_urb_bulk_partial(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urb->UrbBulkOrInterruptTransfer;
 	PVOID	dst, src;
@@ -513,7 +513,7 @@ get_iso_payload_len(struct _URB_ISOCH_TRANSFER *urb_iso)
 }
 
 static NTSTATUS
-store_urb_iso_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+store_urb_iso_partial(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_ISOCH_TRANSFER	*urb_iso = &urb->UrbIsochronousTransfer;
 	ULONG	len_iso;
@@ -571,7 +571,7 @@ store_urb_iso(PIRP irp, PURB urb, struct urb_req *urbr)
 }
 
 static NTSTATUS
-store_urb_control_transfer_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+store_urb_control_transfer_partial(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urb->UrbControlTransfer;
 	PVOID	dst;
@@ -630,7 +630,7 @@ store_urb_control_transfer(PIRP irp, PURB urb, struct urb_req* urbr)
 }
 
 static NTSTATUS
-store_urb_control_transfer_ex_partial(pusbip_vpdo_dev_t vpdo, PIRP irp, PURB urb)
+store_urb_control_transfer_ex_partial(pvpdo_dev_t vpdo, PIRP irp, PURB urb)
 {
 	struct _URB_CONTROL_TRANSFER_EX	*urb_control_ex = &urb->UrbControlTransferEx;
 	PVOID	dst;
@@ -863,10 +863,10 @@ static VOID
 on_pending_irp_read_cancelled(PDEVICE_OBJECT devobj, PIRP irp_read)
 {
 	UNREFERENCED_PARAMETER(devobj);
-	DBGI(DBG_READ, "pending irp read cancelled %p", irp_read);
+	DBGI(DBG_READ, "pending irp read cancelled %p\n", irp_read);
 
 	PIO_STACK_LOCATION	irpstack;
-	pusbip_vpdo_dev_t	vpdo;
+	pvpdo_dev_t	vpdo;
 
 	IoReleaseCancelSpinLock(irp_read->CancelIrql);
 
@@ -886,7 +886,7 @@ on_pending_irp_read_cancelled(PDEVICE_OBJECT devobj, PIRP irp_read)
 }
 
 static NTSTATUS
-process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
+process_read_irp(pvpdo_dev_t vpdo, PIRP read_irp)
 {
 	struct urb_req	*urbr;
 	KIRQL	oldirql;
@@ -963,36 +963,32 @@ process_read_irp(pusbip_vpdo_dev_t vpdo, PIRP read_irp)
 PAGEABLE NTSTATUS
 vhci_read(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 {
-	pusbip_vhub_dev_t	vhub;
-	pusbip_vpdo_dev_t	vpdo;
-	pdev_common_t		devcom;
+	pvhci_dev_t	vhci;
+	pvpdo_dev_t	vpdo;
 	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS		status;
 
 	PAGED_CODE();
 
-	devcom = (pdev_common_t)devobj->DeviceExtension;
+	irpstack = IoGetCurrentIrpStackLocation(irp);
 
-	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Enter\n");
+	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Enter: len:%u, irp:%p\n", irpstack->Parameters.Read.Length, irp);
 
-	if (!devcom->is_vhub) {
-		DBGE(DBG_READ, "read for vhub is not allowed\n");
+	if (!IS_DEVOBJ_VHCI(devobj)) {
+		DBGE(DBG_READ, "read for non-vhci is not allowed\n");
 
 		irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	vhub = (pusbip_vhub_dev_t)devobj->DeviceExtension;
-
-	inc_io_vhub(vhub);
+	vhci = DEVOBJ_TO_VHCI(devobj);
 
 	// Check to see whether the bus is removed
-	if (vhub->common.DevicePnPState == Deleted) {
+	if (vhci->common.DevicePnPState == Deleted) {
 		status = STATUS_NO_SUCH_DEVICE;
 		goto END;
 	}
-	irpstack = IoGetCurrentIrpStackLocation(irp);
 	vpdo = irpstack->FileObject->FsContext;
 	if (vpdo == NULL || !vpdo->plugged)
 		status = STATUS_INVALID_DEVICE_REQUEST;
@@ -1000,11 +996,11 @@ vhci_read(__in PDEVICE_OBJECT devobj, __in PIRP irp)
 		status = process_read_irp(vpdo, irp);
 
 END:
-	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Leave: %s\n", dbg_ntstatus(status));
+	DBGI(DBG_GENERAL | DBG_READ, "vhci_read: Leave: irp:%p, status:%s\n", irp, dbg_ntstatus(status));
 	if (status != STATUS_PENDING) {
 		irp->IoStatus.Status = status;
 		IoCompleteRequest(irp, IO_NO_INCREMENT);
 	}
-	dec_io_vhub(vhub);
+
 	return status;
 }

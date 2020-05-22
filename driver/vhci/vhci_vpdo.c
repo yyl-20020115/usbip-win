@@ -3,20 +3,8 @@
 #include "vhci_dev.h"
 #include "usbreq.h"
 
-VOID
-add_ref_vpdo(pusbip_vpdo_dev_t vpdo)
-{
-	InterlockedIncrement(&vpdo->n_refs);
-}
-
-VOID
-del_ref_vpdo(pusbip_vpdo_dev_t vpdo)
-{
-	InterlockedDecrement(&vpdo->n_refs);
-}
-
 PAGEABLE NTSTATUS
-destroy_vpdo(pusbip_vpdo_dev_t vpdo)
+destroy_vpdo(pvpdo_dev_t vpdo)
 {
 	PAGED_CODE();
 
@@ -31,13 +19,13 @@ destroy_vpdo(pusbip_vpdo_dev_t vpdo)
 		vpdo->fo->FsContext = NULL;
 		vpdo->fo = NULL;
 	}
-	DBGI(DBG_VPDO, "Deleting vpdo: 0x%p\n", vpdo);
+	DBGI(DBG_VPDO, "Deleting vpdo: port: %u, 0x%p\n", vpdo->port, vpdo);
 	IoDeleteDevice(vpdo->common.Self);
 	return STATUS_SUCCESS;
 }
 
 PAGEABLE void
-complete_pending_read_irp(pusbip_vpdo_dev_t vpdo)
+complete_pending_read_irp(pvpdo_dev_t vpdo)
 {
 	KIRQL	oldirql;
 	PIRP	irp;
@@ -62,7 +50,7 @@ complete_pending_read_irp(pusbip_vpdo_dev_t vpdo)
 }
 
 PAGEABLE void
-complete_pending_irp(pusbip_vpdo_dev_t vpdo)
+complete_pending_irp(pvpdo_dev_t vpdo)
 {
 	KIRQL	oldirql;
 	BOOLEAN	valid_irp;
@@ -106,7 +94,7 @@ complete_pending_irp(pusbip_vpdo_dev_t vpdo)
 }
 
 PAGEABLE NTSTATUS
-vpdo_select_config(pusbip_vpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb_selc)
+vpdo_select_config(pvpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb_selc)
 {
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf = urb_selc->ConfigurationDescriptor;
 	PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf_new = NULL;
@@ -147,7 +135,7 @@ vpdo_select_config(pusbip_vpdo_dev_t vpdo, struct _URB_SELECT_CONFIGURATION *urb
 }
 
 PAGEABLE NTSTATUS
-vpdo_select_interface(pusbip_vpdo_dev_t vpdo, PUSBD_INTERFACE_INFORMATION info_intf)
+vpdo_select_interface(pvpdo_dev_t vpdo, PUSBD_INTERFACE_INFORMATION info_intf)
 {
 	NTSTATUS	status;
 
@@ -180,46 +168,122 @@ copy_pipe_info(USB_PIPE_INFO *pinfos, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PU
 }
 
 PAGEABLE NTSTATUS
-vpdo_get_nodeconn_info(pusbip_vpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION conninfo, ULONG *psize)
+vpdo_get_nodeconn_info(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION conninfo, PULONG poutlen)
 {
 	PUSB_INTERFACE_DESCRIPTOR	dsc_intf = NULL;
 	ULONG	outlen;
 	NTSTATUS	status = STATUS_INVALID_PARAMETER;
 
-	if (vpdo->dsc_dev == NULL)
-		return STATUS_INVALID_PARAMETER;
-
-	conninfo->ConnectionStatus = DeviceConnected;
-
-	RtlCopyMemory(&conninfo->DeviceDescriptor, vpdo->dsc_dev, sizeof(USB_DEVICE_DESCRIPTOR));
-
-	if (vpdo->dsc_conf != NULL)
-		conninfo->CurrentConfigurationValue = vpdo->dsc_conf->bConfigurationValue;
-	conninfo->DeviceAddress = 1;
-	conninfo->DeviceIsHub = FALSE;
-	conninfo->LowSpeed = (vpdo->speed == USB_SPEED_LOW || vpdo->speed == USB_SPEED_FULL)? TRUE: FALSE;
+	conninfo->DeviceAddress = (USHORT)conninfo->ConnectionIndex;
 	conninfo->NumberOfOpenPipes = 0;
+	conninfo->DeviceIsHub = FALSE;
 
-	dsc_intf = dsc_find_intf(vpdo->dsc_conf, vpdo->current_intf_num, vpdo->current_intf_alt);
-	if (dsc_intf != NULL)
-		conninfo->NumberOfOpenPipes = dsc_intf->bNumEndpoints;
-
-	outlen = sizeof(USB_NODE_CONNECTION_INFORMATION) + sizeof(USB_PIPE_INFO) * conninfo->NumberOfOpenPipes;
-	if (*psize < outlen) {
-		status = STATUS_INSUFFICIENT_RESOURCES;
-	}
-	else {
-		if (conninfo->NumberOfOpenPipes > 0)
-			copy_pipe_info(conninfo->PipeList, vpdo->dsc_conf, dsc_intf);
+	if (vpdo == NULL) {
+		conninfo->ConnectionStatus = NoDeviceConnected;
+		conninfo->LowSpeed = FALSE;
+		outlen = sizeof(USB_NODE_CONNECTION_INFORMATION);
 		status = STATUS_SUCCESS;
 	}
-	*psize = outlen;
+	else {
+		if (vpdo->dsc_dev == NULL)
+			return STATUS_INVALID_PARAMETER;
+
+		conninfo->ConnectionStatus = DeviceConnected;
+
+		RtlCopyMemory(&conninfo->DeviceDescriptor, vpdo->dsc_dev, sizeof(USB_DEVICE_DESCRIPTOR));
+
+		if (vpdo->dsc_conf != NULL)
+			conninfo->CurrentConfigurationValue = vpdo->dsc_conf->bConfigurationValue;
+		conninfo->LowSpeed = (vpdo->speed == USB_SPEED_LOW || vpdo->speed == USB_SPEED_FULL) ? TRUE : FALSE;
+
+		dsc_intf = dsc_find_intf(vpdo->dsc_conf, vpdo->current_intf_num, vpdo->current_intf_alt);
+		if (dsc_intf != NULL)
+			conninfo->NumberOfOpenPipes = dsc_intf->bNumEndpoints;
+
+		outlen = sizeof(USB_NODE_CONNECTION_INFORMATION) + sizeof(USB_PIPE_INFO) * conninfo->NumberOfOpenPipes;
+		if (*poutlen < outlen) {
+			status = STATUS_BUFFER_TOO_SMALL;
+		}
+		else {
+			if (conninfo->NumberOfOpenPipes > 0)
+				copy_pipe_info(conninfo->PipeList, vpdo->dsc_conf, dsc_intf);
+			status = STATUS_SUCCESS;
+		}
+	}
+	*poutlen = outlen;
 
 	return status;
 }
 
 PAGEABLE NTSTATUS
-vpdo_get_dsc_from_nodeconn(pusbip_vpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_req, ULONG *psize)
+vpdo_get_nodeconn_info_ex(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION_EX conninfo, PULONG poutlen)
+{
+	PUSB_INTERFACE_DESCRIPTOR	dsc_intf = NULL;
+	ULONG	outlen;
+	NTSTATUS	status = STATUS_INVALID_PARAMETER;
+
+	conninfo->DeviceAddress = (USHORT)conninfo->ConnectionIndex;
+	conninfo->NumberOfOpenPipes = 0;
+	conninfo->DeviceIsHub = FALSE;
+
+	if (vpdo == NULL) {
+		conninfo->ConnectionStatus = NoDeviceConnected;
+		conninfo->Speed = UsbFullSpeed;
+		outlen = sizeof(USB_NODE_CONNECTION_INFORMATION);
+		status = STATUS_SUCCESS;
+	}
+	else {
+		if (vpdo->dsc_dev == NULL)
+			return STATUS_INVALID_PARAMETER;
+
+		conninfo->ConnectionStatus = DeviceConnected;
+
+		RtlCopyMemory(&conninfo->DeviceDescriptor, vpdo->dsc_dev, sizeof(USB_DEVICE_DESCRIPTOR));
+
+		if (vpdo->dsc_conf != NULL)
+			conninfo->CurrentConfigurationValue = vpdo->dsc_conf->bConfigurationValue;
+		conninfo->Speed = vpdo->speed;
+
+		dsc_intf = dsc_find_intf(vpdo->dsc_conf, vpdo->current_intf_num, vpdo->current_intf_alt);
+		if (dsc_intf != NULL)
+			conninfo->NumberOfOpenPipes = dsc_intf->bNumEndpoints;
+
+		outlen = sizeof(USB_NODE_CONNECTION_INFORMATION) + sizeof(USB_PIPE_INFO) * conninfo->NumberOfOpenPipes;
+		if (*poutlen < outlen) {
+			status = STATUS_BUFFER_TOO_SMALL;
+		}
+		else {
+			if (conninfo->NumberOfOpenPipes > 0)
+				copy_pipe_info(conninfo->PipeList, vpdo->dsc_conf, dsc_intf);
+			status = STATUS_SUCCESS;
+		}
+	}
+	*poutlen = outlen;
+
+	return status;
+}
+
+PAGEABLE NTSTATUS
+vpdo_get_nodeconn_info_ex_v2(pvpdo_dev_t vpdo, PUSB_NODE_CONNECTION_INFORMATION_EX_V2 conninfo, PULONG poutlen)
+{
+	UNREFERENCED_PARAMETER(vpdo);
+
+	conninfo->SupportedUsbProtocols.ul = 0xffffffff;
+	if (conninfo->SupportedUsbProtocols.Usb300)
+		conninfo->SupportedUsbProtocols.Usb300 = FALSE;
+	conninfo->Flags.ul = 0xffffffff;
+	conninfo->Flags.DeviceIsOperatingAtSuperSpeedOrHigher = FALSE;
+	conninfo->Flags.DeviceIsSuperSpeedCapableOrHigher = FALSE;
+	conninfo->Flags.DeviceIsOperatingAtSuperSpeedPlusOrHigher = FALSE;
+	conninfo->Flags.DeviceIsSuperSpeedPlusCapableOrHigher = FALSE;
+
+	*poutlen = sizeof(PUSB_NODE_CONNECTION_INFORMATION_EX_V2);
+
+	return STATUS_SUCCESS;
+}
+
+PAGEABLE NTSTATUS
+vpdo_get_dsc_from_nodeconn(pvpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_req, PULONG psize)
 {
 	usb_cspkt_t	*csp = (usb_cspkt_t *)&dsc_req->SetupPacket;
 	PVOID		dsc_data = NULL;
@@ -245,7 +309,7 @@ vpdo_get_dsc_from_nodeconn(pusbip_vpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_r
 	if (dsc_data != NULL) {
 		ULONG	outlen = sizeof(USB_DESCRIPTOR_REQUEST) + dsc_len;
 		if (*psize < outlen)
-			status = STATUS_INSUFFICIENT_RESOURCES;
+			status = STATUS_BUFFER_TOO_SMALL;
 		else {
 			RtlCopyMemory(dsc_req->Data, dsc_data, dsc_len);
 			status = STATUS_SUCCESS;
@@ -261,7 +325,7 @@ vpdo_get_dsc_from_nodeconn(pusbip_vpdo_dev_t vpdo, PUSB_DESCRIPTOR_REQUEST dsc_r
  * Currently, device descriptor & full configuration descriptor are cached in vpdo.
  */
 static BOOLEAN
-need_caching_dsc(pusbip_vpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc)
+need_caching_dsc(pvpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc)
 {
 	switch (urb_cdr->DescriptorType) {
 	case USB_DEVICE_DESCRIPTOR_TYPE:
@@ -289,7 +353,7 @@ need_caching_dsc(pusbip_vpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST*
 }
 
 void
-try_to_cache_descriptor(pusbip_vpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc)
+try_to_cache_descriptor(pvpdo_dev_t vpdo, struct _URB_CONTROL_DESCRIPTOR_REQUEST* urb_cdr, PUSB_COMMON_DESCRIPTOR dsc)
 {
 	PUSB_COMMON_DESCRIPTOR	dsc_new;
 

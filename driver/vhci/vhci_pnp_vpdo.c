@@ -8,11 +8,11 @@
 #include "usbip_vhci_api.h"
 #include "usbip_proto.h"
 
-extern PAGEABLE void vhub_invalidate_unplugged_vpdos(pusbip_vhub_dev_t vhub);
-extern PAGEABLE NTSTATUS vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject);
+extern PAGEABLE void vhub_invalidate_unplugged_vpdos(pvhub_dev_t vhub);
+extern PAGEABLE NTSTATUS vhub_unplug_vpdo(pvhub_dev_t vhub, ULONG port, BOOLEAN is_eject);
 
-extern PAGEABLE void vhub_detach_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo);
-extern PAGEABLE void vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpdo_dev_t vpdo);
+extern PAGEABLE void vhub_detach_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo);
+extern PAGEABLE void vhub_mark_unplugged_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo);
 
 // IRP_MN_DEVICE_ENUMERATED is included by default since Windows 7.
 #if WINVER<0x0701
@@ -27,22 +27,8 @@ extern PAGEABLE void vhub_mark_unplugged_vpdo(pusbip_vhub_dev_t vhub, pusbip_vpd
 /* Device with IAD(Interface Association Descriptor) */
 #define IS_IAD_DEVICE(vpdo)	((vpdo)->usbclass == 0xef && (vpdo)->subclass == 0x02 && (vpdo)->protocol == 0x01)
 
-#ifdef DBG
-static const char *
-dbg_GUID(GUID *guid)
-{
-	static char	buf[64];
-
-	RtlStringCchPrintfA(buf, 128, "{%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
-		guid->Data1, guid->Data2, guid->Data3,
-		guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3],
-		guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]);
-	return buf;
-}
-#endif
-
 PAGEABLE NTSTATUS
-vhci_unplug_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
+vhci_unplug_port(pvhci_dev_t vhci, ULONG port)
 {
 	NTSTATUS	status;
 
@@ -56,7 +42,7 @@ vhci_unplug_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 	else
 		DBGI(DBG_PNP, "plugging out device: port: %u\n", port);
 
-	status = vhub_unplug_vpdo(vhub, port, FALSE);
+	status = vhub_unplug_vpdo(vhci->vhub, port, FALSE);
 
 	switch (status) {
 	case STATUS_NO_SUCH_DEVICE:
@@ -64,8 +50,8 @@ vhci_unplug_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 		DBGW(DBG_PNP, "BAD BAD BAD...2 removes!!! Send only one!\n");
 		break;
 	case STATUS_SUCCESS:
-		IoInvalidateDeviceRelations(vhub->UnderlyingPDO, BusRelations);
-		vhub_invalidate_unplugged_vpdos(vhub);
+		IoInvalidateDeviceRelations(vhci->UnderlyingPDO, BusRelations);
+		vhub_invalidate_unplugged_vpdos(vhci->vhub);
 		if (port == 0)
 			DBGI(DBG_PNP, "all the devices are plugged out\n");
 		else
@@ -79,8 +65,9 @@ vhci_unplug_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 }
 
 PAGEABLE NTSTATUS
-vhci_eject_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
+vhci_eject_port(pvhci_dev_t vhci, ULONG port)
 {
+	pvhub_dev_t	vhub = vhci->vhub;
 	NTSTATUS	status;
 
 	PAGED_CODE ();
@@ -90,7 +77,7 @@ vhci_eject_vpdo(ULONG port, pusbip_vhub_dev_t vhub)
 	else
 		DBGI(DBG_PNP, "ejecting device: port: %u\n", port);
 
-	if (vhub->n_vpdos == 0) {
+	if (vhci->vhub->n_vpdos == 0) {
 		ExReleaseFastMutex(&vhub->Mutex);
 		return STATUS_NO_SUCH_DEVICE;
 	}
@@ -176,7 +163,7 @@ GetDeviceCapabilitiesExit:
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryDeviceCaps_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
+vhci_QueryDeviceCaps_vpdo(pvpdo_dev_t vpdo, PIRP irp)
 {
 	PIO_STACK_LOCATION	stack;
 	PDEVICE_CAPABILITIES	deviceCapabilities;
@@ -185,7 +172,7 @@ vhci_QueryDeviceCaps_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
 
 	PAGED_CODE();
 
-	stack = IoGetCurrentIrpStackLocation(Irp);
+	stack = IoGetCurrentIrpStackLocation(irp);
 
 	deviceCapabilities = stack->Parameters.DeviceCapabilities.Capabilities;
 
@@ -200,7 +187,7 @@ vhci_QueryDeviceCaps_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
 	//
 	// Get the device capabilities of the parent
 	//
-	status = get_device_capabilities(vpdo->vhub->NextLowerDriver, &parentCapabilities);
+	status = get_device_capabilities(vpdo->vhub->vhci->devobj_lower, &parentCapabilities);
 	if (!NT_SUCCESS(status)) {
 		DBGI(DBG_PNP, "QueryDeviceCaps failed\n");
 		return status;
@@ -291,7 +278,7 @@ vhci_QueryDeviceCaps_vpdo(pusbip_vpdo_dev_t vpdo, PIRP Irp)
 }
 
 static NTSTATUS
-setup_vpdo_device_id(pusbip_vpdo_dev_t vpdo, PIRP irp)
+setup_vpdo_device_id(pvpdo_dev_t vpdo, PIRP irp)
 {
 	PWCHAR	id_dev;
 
@@ -305,7 +292,7 @@ setup_vpdo_device_id(pusbip_vpdo_dev_t vpdo, PIRP irp)
 }
 
 static NTSTATUS
-setup_vpdo_inst_id(pusbip_vpdo_dev_t vpdo, PIRP irp)
+setup_vpdo_inst_id(pvpdo_dev_t vpdo, PIRP irp)
 {
 	PWCHAR	id_inst;
 
@@ -324,7 +311,7 @@ setup_vpdo_inst_id(pusbip_vpdo_dev_t vpdo, PIRP irp)
 }
 
 static NTSTATUS
-setup_vpdo_hw_ids(pusbip_vpdo_dev_t vpdo, PIRP irp)
+setup_vpdo_hw_ids(pvpdo_dev_t vpdo, PIRP irp)
 {
 	PWCHAR	ids_hw;
 
@@ -340,7 +327,7 @@ setup_vpdo_hw_ids(pusbip_vpdo_dev_t vpdo, PIRP irp)
 }
 
 static NTSTATUS
-setup_vpdo_compat_ids(pusbip_vpdo_dev_t vpdo, PIRP irp)
+setup_vpdo_compat_ids(pvpdo_dev_t vpdo, PIRP irp)
 {
 	PWCHAR	ids_compat;
 
@@ -362,7 +349,7 @@ setup_vpdo_compat_ids(pusbip_vpdo_dev_t vpdo, PIRP irp)
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryDeviceId_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryDeviceId_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	irpstack;
 	NTSTATUS	status;
@@ -402,7 +389,7 @@ vhci_QueryDeviceId_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
  * for their child devices, but this information is optional.
 */
 static PAGEABLE NTSTATUS
-vhci_QueryDeviceText_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryDeviceText_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	PWCHAR	buffer;
 	PIO_STACK_LOCATION	stack;
@@ -455,7 +442,7 @@ vhci_QueryDeviceText_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryResources_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryResources_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	/* A device requires no hardware resources */
 	PAGED_CODE ();
@@ -466,7 +453,7 @@ vhci_QueryResources_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryResourceRequirements_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryResourceRequirements_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	/* A device requires no hardware resources */
 	PAGED_CODE();
@@ -477,7 +464,7 @@ vhci_QueryResourceRequirements_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryDeviceRelations_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryDeviceRelations_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	PIO_STACK_LOCATION	stack;
 	PDEVICE_RELATIONS	deviceRelations;
@@ -525,7 +512,7 @@ vhci_QueryDeviceRelations_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 }
 
 static PAGEABLE NTSTATUS
-vhci_QueryBusInformation_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
+vhci_QueryBusInformation_vpdo(__in pvpdo_dev_t vpdo, __in PIRP Irp)
 {
 	PPNP_BUS_INFORMATION busInfo;
 
@@ -554,173 +541,8 @@ vhci_QueryBusInformation_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
 	return STATUS_SUCCESS;
 }
 
-BOOLEAN USB_BUSIFFN
-IsDeviceHighSpeed(PVOID context)
-{
-	pusbip_vpdo_dev_t	vpdo = context;
-	DBGI(DBG_GENERAL, "IsDeviceHighSpeed called, it is %d\n", vpdo->speed);
-	if (vpdo->speed == USB_SPEED_HIGH)
-		return TRUE;
-	return FALSE;
-}
-
-static NTSTATUS USB_BUSIFFN
-QueryBusInformation(IN PVOID BusContext, IN ULONG Level, IN OUT PVOID BusInformationBuffer,
-	IN OUT PULONG BusInformationBufferLength, OUT PULONG BusInformationActualLength)
-{
-	UNREFERENCED_PARAMETER(BusContext);
-	UNREFERENCED_PARAMETER(Level);
-	UNREFERENCED_PARAMETER(BusInformationBuffer);
-	UNREFERENCED_PARAMETER(BusInformationBufferLength);
-	UNREFERENCED_PARAMETER(BusInformationActualLength);
-
-	DBGI(DBG_GENERAL, "QueryBusInformation called\n");
-	return STATUS_UNSUCCESSFUL;
-}
-
-static NTSTATUS USB_BUSIFFN
-SubmitIsoOutUrb(IN PVOID context, IN PURB urb)
-{
-	UNREFERENCED_PARAMETER(context);
-	UNREFERENCED_PARAMETER(urb);
-
-	DBGI(DBG_GENERAL, "SubmitIsoOutUrb called\n");
-	return STATUS_UNSUCCESSFUL;
-}
-
-static NTSTATUS USB_BUSIFFN
-QueryBusTime(IN PVOID context, IN OUT PULONG currentusbframe)
-{
-	UNREFERENCED_PARAMETER(context);
-	UNREFERENCED_PARAMETER(currentusbframe);
-
-	DBGI(DBG_GENERAL, "QueryBusTime called\n");
-	return STATUS_UNSUCCESSFUL;
-}
-
-static VOID USB_BUSIFFN
-GetUSBDIVersion(IN PVOID context, IN OUT PUSBD_VERSION_INFORMATION inf, IN OUT PULONG HcdCapabilities)
-{
-	UNREFERENCED_PARAMETER(context);
-
-	DBGI(DBG_GENERAL, "GetUSBDIVersion called\n");
-
-	*HcdCapabilities = 0;
-	inf->USBDI_Version=0x600; /* Windows 8 */
-	inf->Supported_USB_Version=0x200; /* USB 2.0 */
-}
-
-static VOID
-InterfaceReference(__in PVOID Context)
-{
-	pusbip_vpdo_dev_t	vpdo = (pusbip_vpdo_dev_t)Context;
-	add_ref_vpdo(vpdo);
-}
-
-static VOID
-InterfaceDereference(__in PVOID Context)
-{
-	pusbip_vpdo_dev_t	vpdo = (pusbip_vpdo_dev_t)Context;
-	del_ref_vpdo(vpdo);
-}
-
-static NTSTATUS
-QueryControllerType(_In_opt_ PVOID Context,
-		    _Out_opt_ PULONG HcdiOptionFlags,
-		    _Out_opt_ PUSHORT PciVendorId,
-		    _Out_opt_ PUSHORT PciDeviceId,
-		    _Out_opt_ PUCHAR PciClass,
-		    _Out_opt_ PUCHAR PciSubClass,
-		    _Out_opt_ PUCHAR PciRevisionId,
-		    _Out_opt_ PUCHAR PciProgIf)
-{
-	UNREFERENCED_PARAMETER(Context);
-
-	if (HcdiOptionFlags != NULL)
-		*HcdiOptionFlags = 0;
-	if (PciVendorId != NULL)
-		*PciVendorId = 0x8086;
-	if (PciDeviceId != NULL)
-		*PciDeviceId = 0xa2af;
-	if (PciClass != NULL)
-		*PciClass = 0x0c;
-	if (PciSubClass != NULL)
-		*PciSubClass = 0x03;
-	if (PciRevisionId != NULL)
-		*PciRevisionId = 0;
-	if (PciProgIf != NULL)
-		*PciProgIf = 0;
-
-	return STATUS_SUCCESS;
-}
-
-static PAGEABLE NTSTATUS
-vhci_QueryInterface_vpdo(__in pusbip_vpdo_dev_t vpdo, __in PIRP Irp)
-{
-	PIO_STACK_LOCATION	irpStack;
-	GUID			*interfaceType;
-	USB_BUS_INTERFACE_USBDI_V3	*bus_intf;
-	unsigned int valid_size[4] = {
-		sizeof(USB_BUS_INTERFACE_USBDI_V0), sizeof(USB_BUS_INTERFACE_USBDI_V1),
-		sizeof(USB_BUS_INTERFACE_USBDI_V2), sizeof(USB_BUS_INTERFACE_USBDI_V3)
-	};
-	unsigned short	size, version;
-
-	PAGED_CODE();
-
-	irpStack = IoGetCurrentIrpStackLocation(Irp);
-	interfaceType = (GUID *) irpStack->Parameters.QueryInterface.InterfaceType;
-
-	if (!IsEqualGUID(interfaceType, (PVOID)&USB_BUS_INTERFACE_USBDI_GUID)){
-		DBGI(DBG_GENERAL, "Query unknown interface GUID: %s\n", dbg_GUID(interfaceType));
-		return Irp->IoStatus.Status;
-	}
-
-	size = irpStack->Parameters.QueryInterface.Size;
-	version = irpStack->Parameters.QueryInterface.Version;
-	if (version > USB_BUSIF_USBDI_VERSION_3) {
-		DBGW(DBG_GENERAL, "unsupported usbdi interface version: %d", version);
-		return STATUS_INVALID_PARAMETER;
-	}
-	if (size < valid_size[version]) {
-		DBGW(DBG_GENERAL, "unsupported usbdi interface version: %d", version);
-		return STATUS_INVALID_PARAMETER;
-	}
-
-	bus_intf = (USB_BUS_INTERFACE_USBDI_V3 *)irpStack->Parameters.QueryInterface.Interface;
-	bus_intf->Size = (USHORT)valid_size[version];
-
-	switch (version) {
-	case USB_BUSIF_USBDI_VERSION_3:
-		bus_intf->QueryControllerType = QueryControllerType;
-		bus_intf->QueryBusTimeEx = NULL;
-		/* passthrough */
-	case USB_BUSIF_USBDI_VERSION_2:
-		bus_intf->EnumLogEntry = NULL;
-		/* passthrough */
-	case USB_BUSIF_USBDI_VERSION_1:
-		bus_intf->IsDeviceHighSpeed = IsDeviceHighSpeed;
-		/* passthrough */
-	case USB_BUSIF_USBDI_VERSION_0:
-		bus_intf->QueryBusInformation = QueryBusInformation;
-		bus_intf->SubmitIsoOutUrb = SubmitIsoOutUrb;
-		bus_intf->QueryBusTime = QueryBusTime;
-		bus_intf->GetUSBDIVersion = GetUSBDIVersion;
-		bus_intf->InterfaceReference   = InterfaceReference;
-		bus_intf->InterfaceDereference = InterfaceDereference;
-		bus_intf->BusContext = vpdo;
-		break;
-	default:
-		DBGE(DBG_GENERAL, "never go here\n");
-		return STATUS_INVALID_PARAMETER;
-	}
-
-	add_ref_vpdo(vpdo);
-	return STATUS_SUCCESS;
-}
-
 PAGEABLE NTSTATUS
-vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusbip_vpdo_dev_t vpdo)
+vhci_pnp_vpdo(pvpdo_dev_t vpdo, PIRP irp, PIO_STACK_LOCATION irpstack)
 {
 	NTSTATUS	status;
 
@@ -729,14 +551,14 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 	// NB: Because we are a bus enumerator, we have no one to whom we could
 	// defer these irps.  Therefore we do not pass them down but merely
 	// return them.
-	switch (IrpStack->MinorFunction) {
+	switch (irpstack->MinorFunction) {
 	case IRP_MN_START_DEVICE:
 		// Here we do what ever initialization and ``turning on'' that is
 		// required to allow others to access this device.
 		// Power up the device.
 		vpdo->common.DevicePowerState = PowerDeviceD0;
 		SET_NEW_PNP_STATE(vpdo, Started);
-		status = IoRegisterDeviceInterface(devobj, &GUID_DEVINTERFACE_USB_DEVICE, NULL, &vpdo->usb_dev_interface);
+		status = IoRegisterDeviceInterface(TO_DEVOBJ(vpdo), &GUID_DEVINTERFACE_USB_DEVICE, NULL, &vpdo->usb_dev_interface);
 		if (status == STATUS_SUCCESS)
 			IoSetDeviceInterfaceState(&vpdo->usb_dev_interface, TRUE);
 		DBGI(DBG_GENERAL, "Device started: %s\n", dbg_ntstatus(status));
@@ -776,7 +598,7 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		// Check to see whether the device can be removed safely.
 		// If not fail this request. This is the last opportunity
 		// to do so.
-		if (vpdo->n_refs > 0) {
+		if (vpdo->common.n_refs > 0) {
 			// Somebody is still using our interface.
 			// We must fail remove.
 			status = STATUS_UNSUCCESSFUL;
@@ -835,36 +657,36 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 			status = STATUS_SUCCESS;
 		}
 		else {
-			DBGE(DBG_GENERAL, "why we are not present\n");
-			status = STATUS_SUCCESS;
+			DBGE(DBG_GENERAL, "why we are not present??: vpdo port: %u\n", vpdo->port);
+			status = STATUS_UNSUCCESSFUL;
 		}
 		break;
 	case IRP_MN_QUERY_CAPABILITIES:
 		// Return the capabilities of a device, such as whether the device
 		// can be locked or ejected..etc
 
-		status = vhci_QueryDeviceCaps_vpdo(vpdo, Irp);
+		status = vhci_QueryDeviceCaps_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_ID:
-		DBGI(DBG_PNP, "QueryId Type: %s\n", dbg_bus_query_id_type(IrpStack->Parameters.QueryId.IdType));
+		DBGI(DBG_PNP, "QueryId Type: %s\n", dbg_bus_query_id_type(irpstack->Parameters.QueryId.IdType));
 
-		status = vhci_QueryDeviceId_vpdo(vpdo, Irp);
+		status = vhci_QueryDeviceId_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_DEVICE_RELATIONS:
-		DBGI(DBG_PNP, "QueryDeviceRelation Type: %s\n", dbg_dev_relation(IrpStack->Parameters.QueryDeviceRelations.Type));
-		status = vhci_QueryDeviceRelations_vpdo(vpdo, Irp);
+		DBGI(DBG_PNP, "QueryDeviceRelation Type: %s\n", dbg_dev_relation(irpstack->Parameters.QueryDeviceRelations.Type));
+		status = vhci_QueryDeviceRelations_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_DEVICE_TEXT:
-		status = vhci_QueryDeviceText_vpdo(vpdo, Irp);
+		status = vhci_QueryDeviceText_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_RESOURCES:
-		status = vhci_QueryResources_vpdo(vpdo, Irp);
+		status = vhci_QueryResources_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
-		status = vhci_QueryResourceRequirements_vpdo(vpdo, Irp);
+		status = vhci_QueryResourceRequirements_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_QUERY_BUS_INFORMATION:
-		status = vhci_QueryBusInformation_vpdo(vpdo, Irp);
+		status = vhci_QueryBusInformation_vpdo(vpdo, irp);
 		break;
 	case IRP_MN_DEVICE_USAGE_NOTIFICATION:
 		// OPTIONAL for bus drivers.
@@ -885,14 +707,6 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 
 		status = STATUS_SUCCESS;
 		break;
-	case IRP_MN_QUERY_INTERFACE:
-		// This request enables a driver to export a direct-call
-		// interface to other drivers. A bus driver that exports
-		// an interface must handle this request for its child
-		// devices.
-
-		status = vhci_QueryInterface_vpdo(vpdo, Irp);
-		break;
 	case IRP_MN_DEVICE_ENUMERATED:
 		//
 		// This request notifies bus drivers that a device object exists and
@@ -901,26 +715,26 @@ vhci_pnp_vpdo(PDEVICE_OBJECT devobj, PIRP Irp, PIO_STACK_LOCATION IrpStack, pusb
 		status = STATUS_SUCCESS;
 		break;
 	case IRP_MN_QUERY_PNP_DEVICE_STATE:
-		Irp->IoStatus.Information = 0;
-		status = Irp->IoStatus.Status = STATUS_SUCCESS;
+		irp->IoStatus.Information = 0;
+		status = irp->IoStatus.Status = STATUS_SUCCESS;
 		break;
 	case IRP_MN_QUERY_LEGACY_BUS_INFORMATION:
 	case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
 		/* not handled */
-		status = Irp->IoStatus.Status;
+		status = irp->IoStatus.Status;
 		break;
 	default:
-		DBGW(DBG_PNP, "not handled: %s\n", dbg_pnp_minor(IrpStack->MinorFunction));
+		DBGW(DBG_PNP, "not handled: %s\n", dbg_pnp_minor(irpstack->MinorFunction));
 
 		// For PnP requests to the vpdo that we do not understand we should
 		// return the IRP WITHOUT setting the status or information fields.
 		// These fields may have already been set by a filter (eg acpi).
-		status = Irp->IoStatus.Status;
+		status = irp->IoStatus.Status;
 		break;
 	}
 
-	Irp->IoStatus.Status = status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	irp->IoStatus.Status = status;
+	IoCompleteRequest(irp, IO_NO_INCREMENT);
 
 	return status;
 }
