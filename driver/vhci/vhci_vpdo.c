@@ -1,5 +1,8 @@
 #include "vhci.h"
 
+#include "vhci_dev.h"
+#include "usbreq.h"
+
 VOID
 add_ref_vpdo(pusbip_vpdo_dev_t vpdo)
 {

@@ -1,10 +1,12 @@
 #include "vhci.h"
 
 #include <wdmguid.h>
+#include <usbdi.h>
 #include <usbbusif.h>
 
 #include "vhci_pnp.h"
 #include "usbip_vhci_api.h"
+#include "usbip_proto.h"
 
 extern PAGEABLE void vhub_invalidate_unplugged_vpdos(pusbip_vhub_dev_t vhub);
 extern PAGEABLE NTSTATUS vhub_unplug_vpdo(pusbip_vhub_dev_t vhub, ULONG port, BOOLEAN is_eject);
