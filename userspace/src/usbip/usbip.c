@@ -94,8 +94,14 @@ static const struct command cmds[] = {
 	{
 		.name  = "install",
 		.fn    = usbip_install,
-		.help  = "Install or reinstall driver for usbip",
+		.help  = "Install or reinstall drivers for usbip",
 		.usage = usbip_install_usage
+	},
+	{
+		.name = "uninstall",
+		.fn = usbip_uninstall,
+		.help = "Uninstall drivers for usbip",
+		.usage = usbip_uninstall_usage
 	},
 #if 0 /* Not implemented yet */
 	{
