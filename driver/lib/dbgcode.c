@@ -3,6 +3,7 @@
 #ifdef DBG
 
 #include <ntstrsafe.h>
+#include "strutil.h"
 
 static namecode_t namecodes_ntstatus[] = {
 	K_V(STATUS_SUCCESS)
@@ -142,17 +143,28 @@ static namecode_t	namecodes_usb_descriptor_type[] = {
 	{0,0}
 };
 
+#define NAMECODE_BUF_MAX	256
+
 const char *
 dbg_namecode(namecode_t *namecodes, const char *codetype, unsigned int code)
 {
-	static char	buf[128];
+	static char	buf[NAMECODE_BUF_MAX];
+	ULONG	nwritten = 0;
+	ULONG	n_codes = 0;
 	int i;
 
+	/* assume: duplicated codes may exist */
 	for (i = 0; namecodes[i].name; i++) {
-		if (code == namecodes[i].code)
-			return namecodes[i].name;
+		if (code == namecodes[i].code) {
+			if (nwritten > 0)
+				nwritten += libdrv_snprintf(buf + nwritten, NAMECODE_BUF_MAX - nwritten, ",%s", namecodes[i].name);
+			else
+				nwritten = libdrv_snprintf(buf, NAMECODE_BUF_MAX, "%s", namecodes[i].name);
+		}
+		n_codes++;
 	}
-	RtlStringCchPrintfA(buf, 128, "Unknown %s code: %x", codetype, code);
+	if (n_codes == 0)
+		libdrv_snprintf(buf, NAMECODE_BUF_MAX, "Unknown %s code: %x", codetype, code);
 	return buf;
 }
 
