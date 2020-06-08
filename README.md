@@ -34,7 +34,7 @@
 
 ### Windows USB/IP server
 
-- Prepare a linux machine as a USB/IP client
+- Prepare a linux machine as a USB/IP client (or windows usbip-win vhci client)  
   - Tested on Ubuntu 16.04
   - Kernel 4.15.0-29 (USB/IP kernel module crash was observed on some other version)
   - `# modprobe vhci-hcd`
@@ -76,10 +76,11 @@ usbip.exe list -l
 
 ### Windows USB/IP client
 
-- Prepare a linux machine as a USB/IP server
+- Prepare a linux machine as a USB/IP server (or windows usbip-win stub server)  
   - tested on Ubuntu 16.04 (Kernerl 4.15.0-29)
   - `# modprobe usbip-host`
-
+  - You can use virtual [usbip-vstub](https://github.com/cezanne/usbip-vstub) as a stub server
+  
 - Run usbipd on a USB/IP server (Linux)
   - `# usbipd -4 -d`
 
@@ -91,22 +92,27 @@ usbip.exe list -l
 - Enable test signing
   - `> bcdedit.exe /set TESTSIGNING ON`
   - reboot the system to apply
-- Copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_vhci.cer`, `usbip_vhci.cat` into a folder in target machine
+- Copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_root.inf`, `usbip_vhci.cat` into a folder in target machine
   - You can find all files in output folder after build or on [release](https://github.com/cezanne/usbip-win/releases) page.
 - Install USB/IP VHCI driver
-  - Command line install
-    - Run PowerShell as an Administrator
-    - call `> usbip.exe install`
-  - Manual install
+  - You can install using usbip.exe or manually
+  - Using usbip.exe install command 
+    - Run PowerShell or CMD as an Administrator
+    - `PS> usbip.exe install`
+  - Install manually
+    - Run PowerShell or CMD as an Administrator
+    - `PS> pnputil /add-driver usbip_vhci.inf`
     - Start Device manager
     - Choose "Add Legacy Hardware" from the "Action" menu.
     - Select "Install the hardware that I manually select from the list".
     - Click "Next".
     - Click "Have Disk", click "Browse", choose the copied folder, and click "OK".
-    - Click on the "USB/IP VHCI", and then click "Next".
+    - Click on the "USB/IP VHCI Root", and then click "Next".
     - Click Finish at "Completing the Add/Remove Hardware Wizard".
 - Attach a remote USB device
   - `> usbip.exe attach -r <usbip server ip> -b 2-2`
+- Uninstall driver
+  - `PS> usbip.exe uninstall`
 
 ### Reporting Bug
 - usbip-win is not yet ready for production use. We could find problems with more detailed logs.
