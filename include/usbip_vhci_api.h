@@ -77,6 +77,18 @@ typedef struct _ioctl_usbip_vhci_plugin
 	wchar_t		winstid[MAX_VHCI_INSTANCE_ID + 1];
 } ioctl_usbip_vhci_plugin;
 
+typedef struct _vhci_pluginfo
+{
+	/* vhci_pluginfo_t structure size */
+	unsigned long	size;
+	unsigned int	devid;
+	signed char	port;
+	wchar_t		winstid[MAX_VHCI_INSTANCE_ID + 1];
+	unsigned char	dscr_dev[18];
+	/* variable length. It's a full-length configuration descriptor */
+	unsigned char	dscr_conf[9];
+} vhci_pluginfo_t, *pvhci_pluginfo_t;
+
 typedef struct _ioctl_usbip_vhci_get_ports_status
 {
 	union {
@@ -90,8 +102,7 @@ typedef struct _ioctl_usbip_vhci_unplug
 {
 	signed char addr;
 	char unused[3];
-
-} ioctl_usbip_vhci_unplug;
+} ioctl_usbip_vhci_unplug, *pvhci_unpluginfo_t;
 
 typedef struct _USBIP_VHCI_EJECT_HARDWARE
 {

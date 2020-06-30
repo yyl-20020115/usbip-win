@@ -157,9 +157,12 @@
   <ItemGroup>
     <ClCompile Include="usbip.c" />
     <ClCompile Include="usbip_attach.c" />
+    <ClCompile Include="usbip_attach_ude.c" />
     <ClCompile Include="usbip_bind.c" />
     <ClCompile Include="usbip_detach.c" />
+    <ClCompile Include="usbip_dscr.c" />
     <ClCompile Include="usbip_install.c" />
+    <ClCompile Include="usbip_install_ude.c" />
     <ClCompile Include="usbip_list.c" />
     <ClCompile Include="usbip_list_local.c" />
     <ClCompile Include="usbip_list_remote.c" />
@@ -170,6 +173,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\config.h" />
     <ClInclude Include="usbip.h" />
+    <ClInclude Include="usbip_dscr.h" />
     <ClInclude Include="usbip_wudev.h" />
     <ClInclude Include="usbip_vhci.h" />
   </ItemGroup>

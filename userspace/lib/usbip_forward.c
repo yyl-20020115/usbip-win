@@ -398,6 +398,9 @@ read_completion(DWORD errcode, DWORD nread, LPOVERLAPPED lpOverlapped)
 		if (nread == 0)
 			rbuff->invalid = TRUE;
 	}
+	else if (errcode == ERROR_DEVICE_NOT_CONNECTED) {
+		rbuff->invalid = TRUE;
+	}
 	rbuff->in_reading = FALSE;
 	SetEvent(rbuff->hEvent);
 }
