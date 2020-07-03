@@ -40,8 +40,8 @@ store_urbr_select_interface(WDFREQUEST req_read, purb_req_t urbr)
 	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->ep->vusb->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_INTERFACE, USB_REQUEST_SET_INTERFACE);
 	csp->wLength = 0;
-	csp->wValue.W = urbr->intf_num;
-	csp->wIndex.W = urbr->alt_setting;
+	csp->wValue.W = urbr->alt_setting;
+	csp->wIndex.W = urbr->intf_num;
 
 	WdfRequestSetInformation(req_read, sizeof(struct usbip_header));
 	return  STATUS_SUCCESS;

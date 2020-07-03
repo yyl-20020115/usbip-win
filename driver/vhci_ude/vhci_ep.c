@@ -139,13 +139,12 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 }
 
 static VOID
-release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params, WDFREQUEST req)
+release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
 	for (ULONG i = 0; i < params->ReleasedEndpointsCount; i++) {
 		pctx_ep_t	ep = TO_EP(params->ReleasedEndpoints[i]);
 		WdfIoQueuePurgeSynchronously(ep->queue);
 	}
-	WdfRequestComplete(req, STATUS_SUCCESS);
 }
 
 static VOID
@@ -166,8 +165,7 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		status = submit_req_select(vusb->ep_default, req, 0, 0, params->InterfaceNumber, params->NewInterfaceSetting);
 		break;
 	case UdecxEndpointsConfigureTypeEndpointsReleasedOnly:
-		release_ep(params, req);
-		status = STATUS_PENDING;
+		release_ep(params);
 		break;
 	default:
 		TRE(VUSB, "unhandled configure type: %!epconf!", params->ConfigureType);
