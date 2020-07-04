@@ -4,6 +4,8 @@
 #include "vhci_urbr.tmh"
 #include "vhci_urbr.h"
 
+static NTSTATUS submit_urbr(purb_req_t urbr);
+
 PVOID
 get_buf(PVOID buf, PMDL bufMDL)
 {
@@ -232,6 +234,17 @@ submit_urbr(purb_req_t urbr)
 	return status;
 }
 
+static NTSTATUS
+submit_urbr_free(purb_req_t urbr)
+{
+	NTSTATUS	status;
+
+	status = submit_urbr(urbr);
+	if (NT_ERROR(status))
+		free_urbr(urbr);
+	return status;
+}
+
 NTSTATUS
 submit_req_urb(pctx_ep_t ep, WDFREQUEST req)
 {
@@ -240,7 +253,7 @@ submit_req_urb(pctx_ep_t ep, WDFREQUEST req)
 	urbr = create_urbr(ep, req, 0);
 	if (urbr == NULL)
 		return STATUS_UNSUCCESSFUL;
-	return submit_urbr(urbr);
+	return submit_urbr_free(urbr);
 }
 
 NTSTATUS
@@ -255,7 +268,7 @@ submit_req_select(pctx_ep_t ep, WDFREQUEST req, UCHAR is_select_conf, UCHAR conf
 	urbr->conf_value = conf_value;
 	urbr->intf_num = intf_num;
 	urbr->alt_setting = alt_setting;
-	return submit_urbr(urbr);
+	return submit_urbr_free(urbr);
 }
 
 void

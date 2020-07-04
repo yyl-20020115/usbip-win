@@ -49,8 +49,6 @@ submit_req_urb(pctx_ep_t ep, WDFREQUEST req);
 extern NTSTATUS
 submit_req_select(pctx_ep_t ep, WDFREQUEST req, UCHAR is_select_conf, UCHAR conf_value, UCHAR intf_num, UCHAR alt_setting);
 extern NTSTATUS
-submit_urbr(purb_req_t urbr);
-extern NTSTATUS
 store_urbr(WDFREQUEST req_read, purb_req_t urbr);
 
 extern void
