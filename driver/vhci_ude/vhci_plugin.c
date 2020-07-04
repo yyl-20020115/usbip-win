@@ -171,7 +171,7 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 	vusb = TO_VUSB(ude_usbdev);
 	vusb->vhci = vhci;
 	vusb->devid = pluginfo->devid;
-
+	vusb->default_conf_value = pluginfo->dscr_conf[5];
 	return vusb;
 }
 

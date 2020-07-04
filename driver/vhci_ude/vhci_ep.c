@@ -157,6 +157,11 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 
 	switch (params->ConfigureType) {
 	case UdecxEndpointsConfigureTypeDeviceInitialize:
+		/* FIXME: UDE framework seems to not call SET CONFIGURATION if a USB has multiple interfaces.
+		 * This enforces the device to be set with the first configuration.
+		 */
+		status = submit_req_select(vusb->ep_default, req, 1, vusb->default_conf_value, 0, 0);
+		TRD(VUSB, "trying to SET CONFIGURATION: %u", (ULONG)vusb->default_conf_value);
 		break;
 	case UdecxEndpointsConfigureTypeDeviceConfigurationChange:
 		status = submit_req_select(vusb->ep_default, req, 1, params->NewConfigurationValue, 0, 0);

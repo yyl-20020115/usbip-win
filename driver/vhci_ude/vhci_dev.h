@@ -46,6 +46,9 @@ typedef struct _ctx_vusb
 	struct _ctx_ep	*ep_default;
 	WDFLOOKASIDE	lookaside_urbr;
 	WDFWAITLOCK	lock;
+
+	/* a first value in configuration descriptor */
+	UCHAR		default_conf_value;
 } ctx_vusb_t, *pctx_vusb_t;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_vusb_t, TO_VUSB)
