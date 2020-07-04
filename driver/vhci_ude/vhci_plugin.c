@@ -69,8 +69,26 @@ vusb_d0_exit(_In_ WDFDEVICE hdev, _In_ UDECXUSBDEVICE ude_usbdev, UDECX_USB_DEVI
 	return STATUS_NOT_SUPPORTED;
 }
 
+static UDECX_USB_DEVICE_SPEED
+get_device_speed(unsigned short bcdUSB)
+{
+	switch (bcdUSB) {
+	case 0x0100:
+		return UdecxUsbLowSpeed;
+	case 0x0110:
+		return UdecxUsbFullSpeed;
+	case 0x0200:
+		return UdecxUsbHighSpeed;
+	case 0x0300:
+		return UdecxUsbSuperSpeed;
+	default:
+		TRE(PLUGIN, "unknown bcdUSB:%x", (ULONG)bcdUSB);
+		return UdecxUsbLowSpeed;
+	}
+}
+
 static PUDECXUSBDEVICE_INIT
-build_vusb_pdinit(pctx_vhci_t vhci)
+build_vusb_pdinit(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 {
 	PUDECXUSBDEVICE_INIT	pdinit;
 	UDECX_USB_DEVICE_STATE_CHANGE_CALLBACKS	callbacks;
@@ -84,7 +102,7 @@ build_vusb_pdinit(pctx_vhci_t vhci)
 	callbacks.EvtUsbDeviceLinkPowerExit = vusb_d0_exit;
 
 	UdecxUsbDeviceInitSetStateChangeCallbacks(pdinit, &callbacks);
-	UdecxUsbDeviceInitSetSpeed(pdinit, UdecxUsbFullSpeed);
+	UdecxUsbDeviceInitSetSpeed(pdinit, get_device_speed(*(unsigned short *)(pluginfo->dscr_dev + 2)));
 	UdecxUsbDeviceInitSetEndpointsType(pdinit, UdecxEndpointTypeDynamic);
 
 	return pdinit;
@@ -124,7 +142,7 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 	WDF_OBJECT_ATTRIBUTES       attrs;
 	NTSTATUS	status;
 
-	pdinit = build_vusb_pdinit(vhci);
+	pdinit = build_vusb_pdinit(vhci, pluginfo);
 	setup_descriptors(pdinit, pluginfo);
 
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, ctx_vusb_t);
