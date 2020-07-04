@@ -22,7 +22,7 @@ store_urbr_get_status(WDFREQUEST req_read, purb_req_t urbr)
 		USBD_SHORT_TRANSFER_OK, urb_status->TransferBufferLength);
 
 	urbfunc = urb_status->Hdr.Function;
-	TRD(READ, "urbr: %!URBR!, func:%!URBFUNC!", urbr, urbfunc);
+	TRD(READ, "urbr: %!URBR!", urbr);
 
 	switch (urbfunc) {
 	case URB_FUNCTION_GET_STATUS_FROM_DEVICE:

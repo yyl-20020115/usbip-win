@@ -128,7 +128,8 @@ dbg_vhci_ioctl_code(unsigned int ioctl_code)
 const char *
 dbg_urbfunc(USHORT urbfunc)
 {
-	return dbg_namecode(namecodes_urb_func, "urb function", (unsigned int)urbfunc);
+	static char	buf[256];
+	return dbg_namecode_buf(namecodes_urb_func, "urb function", (unsigned int)urbfunc, buf, 256);
 }
 
 const char *
@@ -150,7 +151,15 @@ dbg_urbr(purb_req_t urbr)
 
 	if (urbr == NULL)
 		return "[null]";
-	libdrv_snprintf(buf, 128, "[%s,seq:%u]", urbr->urb ? "urb": urbr->req ? "sel": "ulk", urbr->seq_num);
+	if (urbr->urb) {
+		libdrv_snprintf(buf, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->urb->UrbHeader.Function));
+	}
+	else if (urbr->req) {
+		libdrv_snprintf(buf, 128, "[%s,seq:%u]", urbr->is_select_conf ? "slc" : "sli", urbr->seq_num);
+	}
+	else {
+		libdrv_snprintf(buf, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->seq_num_unlink);
+	}
 	return buf;
 }
 

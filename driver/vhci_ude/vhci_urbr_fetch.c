@@ -101,7 +101,7 @@ fetch_urbr_error(purb_req_t urbr, struct usbip_header *hdr)
 		if (urb->UrbHeader.Function == URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER) {
 			urb->UrbBulkOrInterruptTransfer.TransferBufferLength = hdr->u.ret_submit.actual_length;
 		}
-		TRW(WRITE, "%!URBFUNC!: wrong status: %s", urb->UrbHeader.Function, dbg_usbd_status(urb->UrbHeader.Status));
+		TRW(WRITE, "usbd status:%s: %!URBR!:", dbg_usbd_status(urb->UrbHeader.Status), urbr);
 	}
 	return STATUS_UNSUCCESSFUL;
 }
@@ -109,11 +109,18 @@ fetch_urbr_error(purb_req_t urbr, struct usbip_header *hdr)
 NTSTATUS
 fetch_urbr(purb_req_t urbr, struct usbip_header *hdr)
 {
+	NTSTATUS	status;
+
+	TRD(WRITE, "Enter: %!URBR!", urbr);
+
 	if (hdr->u.ret_submit.status != 0)
-		return fetch_urbr_error(urbr, hdr);
+		status = fetch_urbr_error(urbr, hdr);
+	else if (urbr->urb == NULL) {
+		status = STATUS_SUCCESS;
+	}
+	else
+		status = fetch_urbr_urb(urbr->urb, hdr);
 
-	if (urbr->urb == NULL)
-		return STATUS_SUCCESS;
-
-	return fetch_urbr_urb(urbr->urb, hdr);
+	TRD(WRITE, "Leave: %!STATUS!", status);
+	return status;
 }

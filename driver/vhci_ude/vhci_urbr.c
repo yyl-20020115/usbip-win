@@ -228,7 +228,7 @@ submit_urbr(purb_req_t urbr)
 		status = STATUS_INVALID_PARAMETER;
 	}
 
-	TRD(URBR, "urb requested: status:%s", dbg_ntstatus(status));
+	TRD(URBR, "urb requested: %!URBR!: %!STATUS!", urbr, status);
 	return status;
 }
 
