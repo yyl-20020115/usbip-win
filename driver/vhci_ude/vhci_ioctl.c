@@ -21,8 +21,10 @@ get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_stat
 
 	for (i = 0; i != vhci->n_max_ports; i++) {
 		pctx_vusb_t	vusb = vhci->vusbs[i];
-		if (vusb != NULL)
-			ports_status->u.port_status[i] = 1;
+		if (vusb != NULL) {
+			ports_status->u.port_status[i + 1] = 1;
+			ports_status->u.max_used_port = (CHAR)(i + 1);
+		}
 	}
 
 	WdfWaitLockRelease(vhci->lock);
