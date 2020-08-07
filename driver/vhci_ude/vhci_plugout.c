@@ -83,9 +83,8 @@ plugout_all_vusbs(pctx_vhci_t vhci)
 			WdfWaitLockRelease(vhci->lock);
 			return STATUS_UNSUCCESSFUL;
 		}
-
+		vhci->vusbs[i] = NULL;
 	}
-
 	WdfWaitLockRelease(vhci->lock);
 
 	return STATUS_SUCCESS;
