@@ -6,7 +6,7 @@
 NTSTATUS
 store_urbr_get_status(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_GET_STATUS_REQUEST	*urb_status = &urbr->urb->UrbControlGetStatusRequest;
+	struct _URB_CONTROL_GET_STATUS_REQUEST	*urb_status = &urbr->u.urb->UrbControlGetStatusRequest;
 	struct usbip_header	*hdr;
 	USHORT		urbfunc;
 	char		recip;

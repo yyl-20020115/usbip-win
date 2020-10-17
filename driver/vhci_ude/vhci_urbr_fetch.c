@@ -91,19 +91,22 @@ fetch_urbr_urb(PURB urb, struct usbip_header *hdr)
 	return status;
 }
 
-static NTSTATUS
-fetch_urbr_error(purb_req_t urbr, struct usbip_header *hdr)
+static VOID
+handle_urbr_error(purb_req_t urbr, struct usbip_header *hdr)
 {
-	if (urbr->req != NULL && urbr->urb != NULL) {
-		PURB	urb = urbr->urb;
+	PURB	urb = urbr->u.urb;
 
-		urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
-		if (urb->UrbHeader.Function == URB_FUNCTION_BULK_OR_INTERRUPT_TRANSFER) {
-			urb->UrbBulkOrInterruptTransfer.TransferBufferLength = hdr->u.ret_submit.actual_length;
-		}
-		TRW(WRITE, "usbd status:%s: %!URBR!:", dbg_usbd_status(urb->UrbHeader.Status), urbr);
+	urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
+	if (urb->UrbHeader.Status == USBD_STATUS_STALL_PID && urbr->ep->vusb->is_simple_ep_alloc) {
+		/*
+		 * TODO: UDE framework discards URB_FUNCTION_SYNC_RESET_PIPE_AND_CLEAR_STALL for a simple vusb.
+		 * Thus an explicit reset is requested if a STALL occurs.
+		 * This workaround resolved some USB disk problems.
+		 */
+		submit_req_reset_pipe(urbr->ep, NULL);
 	}
-	return STATUS_UNSUCCESSFUL;
+
+	TRW(WRITE, "usbd status:%s: %!URBR!:", dbg_usbd_status(urb->UrbHeader.Status), urbr);
 }
 
 NTSTATUS
@@ -113,13 +116,15 @@ fetch_urbr(purb_req_t urbr, struct usbip_header *hdr)
 
 	TRD(WRITE, "Enter: %!URBR!", urbr);
 
-	if (hdr->u.ret_submit.status != 0)
-		status = fetch_urbr_error(urbr, hdr);
-	else if (urbr->urb == NULL) {
+	if (urbr->type != URBR_TYPE_URB) {
 		status = STATUS_SUCCESS;
 	}
-	else
-		status = fetch_urbr_urb(urbr->urb, hdr);
+	else {
+		if (hdr->u.ret_submit.status != 0)
+			handle_urbr_error(urbr, hdr);
+
+		status = fetch_urbr_urb(urbr->u.urb, hdr);
+	}
 
 	TRD(WRITE, "Leave: %!STATUS!", status);
 	return status;

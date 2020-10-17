@@ -6,7 +6,7 @@
 NTSTATUS
 store_urbr_dscr_dev(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_dscr = &urbr->urb->UrbControlDescriptorRequest;
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_dscr = &urbr->u.urb->UrbControlDescriptorRequest;
 	struct usbip_header	*hdr;
 	usb_cspkt_t	*csp;
 
@@ -46,7 +46,7 @@ store_urbr_dscr_dev(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_dscr_intf(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_dscr = &urbr->urb->UrbControlDescriptorRequest;
+	struct _URB_CONTROL_DESCRIPTOR_REQUEST	*urb_dscr = &urbr->u.urb->UrbControlDescriptorRequest;
 	struct usbip_header	*hdr;
 	usb_cspkt_t	*csp;
 

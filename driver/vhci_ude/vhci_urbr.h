@@ -8,12 +8,27 @@
 
 #include "vhci_dev.h"
 
+typedef enum {
+	URBR_TYPE_URB,
+	URBR_TYPE_UNLINK,
+	URBR_TYPE_SELECT_CONF,
+	URBR_TYPE_SELECT_INTF,
+	URBR_TYPE_RESET_PIPE
+} urbr_type_t;
+
 typedef struct _urb_req {
 	pctx_ep_t	ep;
 	WDFREQUEST	req;
-	PURB		urb;
-	unsigned long	seq_num, seq_num_unlink;
-	UCHAR		is_select_conf, conf_value, intf_num, alt_setting;
+	urbr_type_t	type;
+	unsigned long	seq_num;
+	union {
+		PURB	urb;
+		unsigned long	seq_num_unlink;
+		UCHAR	conf_value;
+		struct {
+			UCHAR	intf_num, alt_setting;
+		} intf;
+	} u;
 	LIST_ENTRY	list_all;
 	LIST_ENTRY	list_state;
 	/* back reference to WDFMEMORY for deletion */
@@ -47,7 +62,9 @@ build_setup_packet(usb_cspkt_t *csp, unsigned char direct_in, unsigned char type
 extern NTSTATUS
 submit_req_urb(pctx_ep_t ep, WDFREQUEST req);
 extern NTSTATUS
-submit_req_select(pctx_ep_t ep, WDFREQUEST req, UCHAR is_select_conf, UCHAR conf_value, UCHAR intf_num, UCHAR alt_setting);
+submit_req_select(pctx_ep_t ep, WDFREQUEST req, BOOLEAN is_select_conf, UCHAR conf_value, UCHAR intf_num, UCHAR alt_setting);
+extern NTSTATUS
+submit_req_reset_pipe(pctx_ep_t ep, WDFREQUEST req);
 extern NTSTATUS
 store_urbr(WDFREQUEST req_read, purb_req_t urbr);
 

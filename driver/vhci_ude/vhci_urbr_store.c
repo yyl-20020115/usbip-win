@@ -36,6 +36,9 @@ store_urbr_select_config(WDFREQUEST req_read, purb_req_t urbr);
 extern NTSTATUS
 store_urbr_select_interface(WDFREQUEST req_read, purb_req_t urbr);
 
+extern NTSTATUS
+store_urbr_reset_pipe(WDFREQUEST req_read, purb_req_t urbr);
+
 NTSTATUS
 store_urbr_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
@@ -91,7 +94,7 @@ store_urbr_urb(WDFREQUEST req_read, purb_req_t urbr)
 	USHORT		urb_func;
 	NTSTATUS	status;
 
-	urb_func = urbr->urb->UrbHeader.Function;
+	urb_func = urbr->u.urb->UrbHeader.Function;
 	TRD(READ, "%!URBR!", urbr);
 
 	switch (urb_func) {
@@ -144,15 +147,6 @@ store_urbr_urb(WDFREQUEST req_read, purb_req_t urbr)
 }
 
 static NTSTATUS
-store_urbr_select(WDFREQUEST req_read, purb_req_t urbr)
-{
-	if (urbr->is_select_conf)
-		return store_urbr_select_config(req_read, urbr);
-	else
-		return store_urbr_select_interface(req_read, urbr);
-}
-
-static NTSTATUS
 store_cancelled_urbr(WDFREQUEST req_read, purb_req_t urbr)
 {
 	struct usbip_header	*hdr;
@@ -163,7 +157,7 @@ store_cancelled_urbr(WDFREQUEST req_read, purb_req_t urbr)
 	if (hdr == NULL)
 		return STATUS_INVALID_PARAMETER;
 
-	set_cmd_unlink_usbip_header(hdr, urbr->seq_num, urbr->ep->vusb->devid, urbr->seq_num_unlink);
+	set_cmd_unlink_usbip_header(hdr, urbr->seq_num, urbr->ep->vusb->devid, urbr->u.seq_num_unlink);
 
 	WdfRequestSetInformation(req_read, sizeof(struct usbip_header));
 	return STATUS_SUCCESS;
@@ -174,11 +168,20 @@ store_urbr(WDFREQUEST req_read, purb_req_t urbr)
 {
 	TRD(READ, "urbr: %s", dbg_urbr(urbr));
 
-	if (urbr->req == NULL) {
+	switch (urbr->type) {
+	case URBR_TYPE_URB:
+		return store_urbr_urb(req_read, urbr);
+	case URBR_TYPE_UNLINK:
 		return store_cancelled_urbr(req_read, urbr);
+	case URBR_TYPE_SELECT_CONF:
+		return store_urbr_select_config(req_read, urbr);
+	case URBR_TYPE_SELECT_INTF:
+		return store_urbr_select_interface(req_read, urbr);
+	case URBR_TYPE_RESET_PIPE:
+		return store_urbr_reset_pipe(req_read, urbr);
+		break;
+	default:
+		TRE(READ, "unknown type: %d", urbr->type);
+		return STATUS_UNSUCCESSFUL;
 	}
-	if (urbr->urb == NULL) {
-		return store_urbr_select(req_read, urbr);
-	}
-	return store_urbr_urb(req_read, urbr);
 }

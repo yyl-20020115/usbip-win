@@ -1,5 +1,4 @@
 #include "vhci_driver.h"
-#include "vhci_urbr_store.tmh"
 
 #include "vhci_urbr.h"
 
@@ -18,7 +17,7 @@ store_urbr_select_config(WDFREQUEST req_read, purb_req_t urbr)
 	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->ep->vusb->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_DEVICE, USB_REQUEST_SET_CONFIGURATION);
 	csp->wLength = 0;
-	csp->wValue.W = urbr->conf_value;
+	csp->wValue.W = urbr->u.conf_value;
 	csp->wIndex.W = 0;
 
 	WdfRequestSetInformation(req_read, sizeof(struct usbip_header));
@@ -40,8 +39,8 @@ store_urbr_select_interface(WDFREQUEST req_read, purb_req_t urbr)
 	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->ep->vusb->devid, 0, 0, 0, 0);
 	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_INTERFACE, USB_REQUEST_SET_INTERFACE);
 	csp->wLength = 0;
-	csp->wValue.W = urbr->alt_setting;
-	csp->wIndex.W = urbr->intf_num;
+	csp->wValue.W = urbr->u.intf.alt_setting;
+	csp->wIndex.W = urbr->u.intf.intf_num;
 
 	WdfRequestSetInformation(req_read, sizeof(struct usbip_header));
 	return  STATUS_SUCCESS;

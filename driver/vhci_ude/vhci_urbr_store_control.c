@@ -6,7 +6,7 @@
 NTSTATUS
 store_urbr_control_transfer_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urbr->urb->UrbControlTransfer;
+	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urbr->u.urb->UrbControlTransfer;
 	PVOID	dst;
 	char	*buf;
 
@@ -31,7 +31,7 @@ store_urbr_control_transfer_partial(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_control_transfer_ex_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_TRANSFER_EX	*urb_ctltrans_ex = &urbr->urb->UrbControlTransferEx;
+	struct _URB_CONTROL_TRANSFER_EX	*urb_ctltrans_ex = &urbr->u.urb->UrbControlTransferEx;
 	PVOID	dst;
 	char	*buf;
 
@@ -56,7 +56,7 @@ store_urbr_control_transfer_ex_partial(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_control_transfer(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urbr->urb->UrbControlTransfer;
+	struct _URB_CONTROL_TRANSFER	*urb_ctltrans = &urbr->u.urb->UrbControlTransfer;
 	struct usbip_header	*hdr;
 	int	in = IS_TRANSFER_FLAGS_IN(urb_ctltrans->TransferFlags);
 	ULONG	nread = 0;
@@ -93,7 +93,7 @@ out:
 NTSTATUS
 store_urbr_control_transfer_ex(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_TRANSFER_EX	*urb_ctltrans_ex = &urbr->urb->UrbControlTransferEx;
+	struct _URB_CONTROL_TRANSFER_EX	*urb_ctltrans_ex = &urbr->u.urb->UrbControlTransferEx;
 	struct usbip_header	*hdr;
 	int	in = IS_TRANSFER_FLAGS_IN(urb_ctltrans_ex->TransferFlags);
 	ULONG	nread = 0;

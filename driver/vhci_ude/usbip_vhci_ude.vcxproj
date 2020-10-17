@@ -38,6 +38,7 @@
     <ClCompile Include="vhci_urbr_store_control.c" />
     <ClCompile Include="vhci_urbr_store_dscr.c" />
     <ClCompile Include="vhci_urbr_store_iso.c" />
+    <ClCompile Include="vhci_urbr_store_reset.c" />
     <ClCompile Include="vhci_urbr_store_select.c" />
     <ClCompile Include="vhci_hc.c" />
     <ClCompile Include="vhci_driver.c" />
@@ -173,7 +174,7 @@
       <WppAdditionalConfigurationFile>custom_wpp.ini</WppAdditionalConfigurationFile>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib;usbd.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
@@ -193,7 +194,7 @@
       <WppAdditionalConfigurationFile>custom_wpp.ini</WppAdditionalConfigurationFile>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib;usbd.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
@@ -213,7 +214,7 @@
       <WppAdditionalConfigurationFile>custom_wpp.ini</WppAdditionalConfigurationFile>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib;usbd.lib</AdditionalDependencies>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Link>
     <PostBuildEvent>
@@ -234,7 +235,7 @@
       <WppAdditionalConfigurationFile>custom_wpp.ini</WppAdditionalConfigurationFile>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);ntstrsafe.lib;usbd.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>

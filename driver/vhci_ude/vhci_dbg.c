@@ -151,14 +151,25 @@ dbg_urbr(purb_req_t urbr)
 
 	if (urbr == NULL)
 		return "[null]";
-	if (urbr->urb) {
-		libdrv_snprintf(buf, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->urb->UrbHeader.Function));
-	}
-	else if (urbr->req) {
-		libdrv_snprintf(buf, 128, "[%s,seq:%u]", urbr->is_select_conf ? "slc" : "sli", urbr->seq_num);
-	}
-	else {
-		libdrv_snprintf(buf, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->seq_num_unlink);
+	switch (urbr->type) {
+	case URBR_TYPE_URB:
+		libdrv_snprintf(buf, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->u.urb->UrbHeader.Function));
+		break;
+	case URBR_TYPE_UNLINK:
+		libdrv_snprintf(buf, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->u.seq_num_unlink);
+		break;
+	case URBR_TYPE_SELECT_CONF:
+		libdrv_snprintf(buf, 128, "[slc,seq:%u,%hhu]", urbr->seq_num, urbr->u.conf_value);
+		break;
+	case URBR_TYPE_SELECT_INTF:
+		libdrv_snprintf(buf, 128, "[sli,seq:%u,%hhu,%hhu]", urbr->seq_num, urbr->u.intf.intf_num, urbr->u.intf.alt_setting);
+		break;
+	case URBR_TYPE_RESET_PIPE:
+		libdrv_snprintf(buf, 128, "[rst,seq:%u,%hhu]", urbr->seq_num, urbr->ep->addr);
+		break;
+	default:
+		libdrv_snprintf(buf, 128, "[unk:seq:%u]", urbr->seq_num);
+		break;
 	}
 	return buf;
 }

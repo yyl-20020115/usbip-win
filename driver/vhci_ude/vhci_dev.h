@@ -27,7 +27,12 @@ typedef struct _ctx_vusb
 	ULONG		port;
 	pctx_vhci_t	vhci;
 	UDECXUSBDEVICE	ude_usbdev;
-
+	/*
+	 * There's 2 endpoint allocation types for UDE device: Simple & Dynamic
+	 * vusb will try to create an EP in a simple way if possible.
+	 * This approach is based on the belief that a simple type is literally simple.
+	 */
+	BOOLEAN		is_simple_ep_alloc;
 	BOOLEAN		invalid;
 	// pending req which doesn't find an available urbr
 	WDFREQUEST	pending_req_read;

@@ -100,13 +100,17 @@ get_urb_from_req(WDFREQUEST req)
 	return NULL;
 }
 
-purb_req_t
-create_urbr(pctx_ep_t ep, WDFREQUEST req, ULONG seq_num_unlink)
+static purb_req_t
+create_urbr(pctx_ep_t ep, urbr_type_t type, WDFREQUEST req)
 {
 	WDFMEMORY	hmem;
 	purb_req_t	urbr;
 	NTSTATUS	status;
 
+	if (ep == NULL || ep->vusb == NULL) {
+		TRE(URBR, "failed to allocate memory for urbr:%p", ep);
+		return NULL;
+	}
 	status = WdfMemoryCreateFromLookaside(ep->vusb->lookaside_urbr, &hmem);
 	if (NT_ERROR(status)) {
 		TRE(URBR, "failed to allocate memory for urbr: %!STATUS!", status);
@@ -115,15 +119,15 @@ create_urbr(pctx_ep_t ep, WDFREQUEST req, ULONG seq_num_unlink)
 
 	urbr = TO_URBR(hmem);
 	RtlZeroMemory(urbr, sizeof(urb_req_t));
+	urbr->type = type;
 	urbr->hmem = hmem;
 	urbr->ep = ep;
 	urbr->req = req;
 	if (req != NULL) {
-		urbr->urb = get_urb_from_req(req);
+		urbr->u.urb = get_urb_from_req(req);
 		WdfRequestSetInformation(req, (ULONG_PTR)urbr);
 	}
 
-	urbr->seq_num_unlink = seq_num_unlink;
 	InitializeListHead(&urbr->list_all);
 	InitializeListHead(&urbr->list_state);
 
@@ -143,9 +147,12 @@ submit_urbr_unlink(pctx_ep_t ep, unsigned long seq_num_unlink)
 {
 	purb_req_t	urbr_unlink;
 
-	urbr_unlink = create_urbr(ep, NULL, seq_num_unlink);
+	urbr_unlink = create_urbr(ep, URBR_TYPE_UNLINK, NULL);
 	if (urbr_unlink != NULL) {
-		NTSTATUS	status = submit_urbr(urbr_unlink);
+		NTSTATUS	status;
+
+		urbr_unlink->u.seq_num_unlink = seq_num_unlink;
+		status = submit_urbr(urbr_unlink);
 		if (NT_ERROR(status)) {
 			TRD(URBR, "failed to submit unlink urb: %!URBR!", urbr_unlink);
 			free_urbr(urbr_unlink);
@@ -183,7 +190,7 @@ submit_urbr(purb_req_t urbr)
 	WdfWaitLockAcquire(vusb->lock, NULL);
 
 	if (vusb->urbr_sent_partial || vusb->pending_req_read == NULL) {
-		if (urbr->urb != NULL) {
+		if (urbr->type == URBR_TYPE_URB) {
 			WdfRequestMarkCancelable(urbr->req, urbr_cancelled);
 		}
 		InsertTailList(&vusb->head_urbr_pending, &urbr->list_state);
@@ -206,7 +213,7 @@ submit_urbr(purb_req_t urbr)
 	WdfWaitLockAcquire(vusb->lock, NULL);
 
 	if (status == STATUS_SUCCESS) {
-		if (urbr->urb != NULL) {
+		if (urbr->type == URBR_TYPE_URB) {
 			WdfRequestMarkCancelable(urbr->req, urbr_cancelled);
 		}
 		if (vusb->len_sent_partial == 0) {
@@ -250,24 +257,40 @@ submit_req_urb(pctx_ep_t ep, WDFREQUEST req)
 {
 	purb_req_t	urbr;
 
-	urbr = create_urbr(ep, req, 0);
+	urbr = create_urbr(ep, URBR_TYPE_URB, req);
 	if (urbr == NULL)
 		return STATUS_UNSUCCESSFUL;
 	return submit_urbr_free(urbr);
 }
 
 NTSTATUS
-submit_req_select(pctx_ep_t ep, WDFREQUEST req, UCHAR is_select_conf, UCHAR conf_value, UCHAR intf_num, UCHAR alt_setting)
+submit_req_select(pctx_ep_t ep, WDFREQUEST req, BOOLEAN is_select_conf, UCHAR conf_value, UCHAR intf_num, UCHAR alt_setting)
 {
 	purb_req_t	urbr;
 
-	urbr = create_urbr(ep, req, 0);
+	urbr = create_urbr(ep, is_select_conf ? URBR_TYPE_SELECT_CONF: URBR_TYPE_SELECT_INTF, req);
 	if (urbr == NULL)
 		return STATUS_UNSUCCESSFUL;
-	urbr->is_select_conf = is_select_conf;
-	urbr->conf_value = conf_value;
-	urbr->intf_num = intf_num;
-	urbr->alt_setting = alt_setting;
+
+	if (is_select_conf) {
+		urbr->u.conf_value = conf_value;
+	}
+	else {
+		urbr->u.intf.intf_num = intf_num;
+		urbr->u.intf.alt_setting = alt_setting;
+	}
+	return submit_urbr_free(urbr);
+}
+
+NTSTATUS
+submit_req_reset_pipe(pctx_ep_t ep, WDFREQUEST req)
+{
+	purb_req_t	urbr;
+
+	urbr = create_urbr(ep, URBR_TYPE_RESET_PIPE, req);
+	if (urbr == NULL)
+		return STATUS_UNSUCCESSFUL;
+
 	return submit_urbr_free(urbr);
 }
 
@@ -278,11 +301,14 @@ complete_urbr(purb_req_t urbr, NTSTATUS status)
 
 	req = urbr->req;
 	if (req != NULL) {
-		if (urbr->urb == NULL)
+		if (urbr->type != URBR_TYPE_URB)
 			WdfRequestComplete(req, status);
 		else {
 			WdfRequestUnmarkCancelable(req);
-			UdecxUrbCompleteWithNtStatus(req, status);
+			if (status == STATUS_SUCCESS)
+				UdecxUrbComplete(req, urbr->u.urb->UrbHeader.Status);
+			else 
+				UdecxUrbCompleteWithNtStatus(req, status);
 		}
 	}
 	free_urbr(urbr);

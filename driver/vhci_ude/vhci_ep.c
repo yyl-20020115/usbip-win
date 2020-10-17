@@ -9,19 +9,9 @@ ep_start(_In_ UDECXUSBENDPOINT ude_ep)
 {
 	pctx_ep_t	ep = TO_EP(ude_ep);
 
-	TRD(VUSB, "Enter");
+	TRD(VUSB, "Enter: %d", ep->addr);
 	WdfIoQueueStart(ep->queue);
 	TRD(VUSB, "Leave");
-}
-
-static VOID
-ep_purge_done(_In_ WDFQUEUE queue, _In_ WDFCONTEXT ctx)
-{
-	UNREFERENCED_PARAMETER(queue);
-
-	UdecxUsbEndpointPurgeComplete((UDECXUSBENDPOINT)ctx);
-
-	TRD(VUSB, "purge completed");
 }
 
 static VOID
@@ -29,9 +19,10 @@ ep_purge(_In_ UDECXUSBENDPOINT ude_ep)
 {
 	pctx_ep_t	ep = TO_EP(ude_ep);
 
-	TRD(VUSB, "Enter");
+	TRD(VUSB, "Enter: %d", ep->addr);
 
-	WdfIoQueuePurge(ep->queue, ep_purge_done, ude_ep);
+	WdfIoQueuePurgeSynchronously(ep->queue);
+	UdecxUsbEndpointPurgeComplete(ude_ep);
 
 	TRD(VUSB, "Leave");
 }
@@ -60,7 +51,7 @@ setup_ep_from_dscr(pctx_ep_t ep, PUSB_ENDPOINT_DESCRIPTOR dscr_ep)
 	}
 }
 
-static NTSTATUS
+NTSTATUS
 add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPTOR dscr_ep)
 {
 	pctx_ep_t	ep;
@@ -75,9 +66,14 @@ add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPT
 	UdecxUsbEndpointInitSetEndpointAddress(*pepinit, ep_addr);
 
 	UDECX_USB_ENDPOINT_CALLBACKS_INIT(&callbacks, ep_reset);
-	callbacks.EvtUsbEndpointStart = ep_start;
-	callbacks.EvtUsbEndpointPurge = ep_purge;
-
+	if (!vusb->is_simple_ep_alloc) {
+		/*
+		 * FIXME: A simple vusb stops working after a purge routine is called.
+		 * The exact reason is unknown.
+		 */
+		callbacks.EvtUsbEndpointStart = ep_start;
+		callbacks.EvtUsbEndpointPurge = ep_purge;
+	}
 	UdecxUsbEndpointInitSetCallbacks(*pepinit, &callbacks);
 
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, ctx_ep_t);

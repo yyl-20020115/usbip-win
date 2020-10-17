@@ -6,7 +6,7 @@
 NTSTATUS
 store_urbr_bulk_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urbr->urb->UrbBulkOrInterruptTransfer;
+	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urbr->u.urb->UrbBulkOrInterruptTransfer;
 	PVOID	dst, src;
 	NTSTATUS	status;
 
@@ -27,7 +27,7 @@ store_urbr_bulk_partial(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_bulk(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urbr->urb->UrbBulkOrInterruptTransfer;
+	struct _URB_BULK_OR_INTERRUPT_TRANSFER	*urb_bi = &urbr->u.urb->UrbBulkOrInterruptTransfer;
 	struct usbip_header	*hdr;
 	int	in, type;
 

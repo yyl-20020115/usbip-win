@@ -6,7 +6,7 @@
 NTSTATUS
 store_urbr_vendor_class_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urbr->urb->UrbControlVendorClassRequest;
+	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urbr->u.urb->UrbControlVendorClassRequest;
 	PVOID	dst;
 	char	*buf;
 
@@ -32,7 +32,7 @@ store_urbr_vendor_class_partial(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_vendor_class(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urbr->urb->UrbControlVendorClassRequest;
+	struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST	*urb_vendor_class = &urbr->u.urb->UrbControlVendorClassRequest;
 	struct usbip_header	*hdr;
 	usb_cspkt_t	*csp;
 	char	type, recip;

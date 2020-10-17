@@ -17,7 +17,7 @@ controller_query_usb_capability(WDFDEVICE UdecxWdfDevice, PGUID CapabilityType,
 	UNREFERENCED_PARAMETER(OutputBuffer);
 	UNREFERENCED_PARAMETER(ResultLength);
 
-	TRD(VHCI, "not supported");
+	TRW(VHCI, "not supported: %!GUID!", CapabilityType);
 
 	return STATUS_NOT_SUPPORTED;
 }
@@ -27,7 +27,7 @@ controller_reset(WDFDEVICE UdecxWdfDevice)
 {
 	UNREFERENCED_PARAMETER(UdecxWdfDevice);
 
-	TRD(VHCI, "Enter");
+	TRW(VHCI, "Enter");
 }
 
 static PAGEABLE BOOLEAN
