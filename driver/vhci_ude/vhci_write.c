@@ -1,6 +1,7 @@
 #include "vhci_driver.h"
 #include "vhci_write.tmh"
 
+#include "usbip_proto.h"
 #include "vhci_urbr.h"
 
 extern purb_req_t

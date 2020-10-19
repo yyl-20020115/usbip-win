@@ -1,6 +1,7 @@
 #include "vhci_driver.h"
 #include "vhci_urbr_store_iso.tmh"
 
+#include "usbip_proto.h"
 #include "vhci_urbr.h"
 
 static NTSTATUS

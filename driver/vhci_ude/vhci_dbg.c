@@ -10,9 +10,57 @@
 
 #include "vhci_urbr.h"
 
-#ifdef DBG
+/*
+ * WPP call requires both a debug message buffer and the length at the same time.
+ * Thus, WPP macros reference global variables, which are manipluated via dbg_xxxx().
+ */
+char	buf_dbg_vhci_ioctl_code[128];
+char	buf_dbg_urbfunc[256];
+char	buf_dbg_setup_packet[128];
+char	buf_dbg_urbr[128];
 
-static namecode_t	namecodes_vhci_ioctl[] = {
+int	len_dbg_vhci_ioctl_code;
+int	len_dbg_urbfunc;
+int	len_dbg_setup_packet;
+int	len_dbg_urbr;
+
+/*
+ * NOTE: WPP tracing requires debug message routines even for a debug configuration.
+ * So, debug routines in this file will be built against a release configuration.
+ */
+#define NAMECODE_BUF_MAX	256
+
+#define K_V(a) {#a, (unsigned int)a},
+
+typedef struct {
+	const char *name;
+	unsigned int	code;
+} namecode_my_t;
+
+static const char *
+dbg_namecode_buf_len(namecode_my_t *namecodes, const char *codetype, unsigned int code, char *buf, int buf_max, int *plen)
+{
+	ULONG	nwritten = 0;
+	ULONG	n_codes = 0;
+	int i;
+
+	/* assume: duplicated codes may exist */
+	for (i = 0; namecodes[i].name; i++) {
+		if (code == namecodes[i].code) {
+			if (nwritten > 0)
+				nwritten += libdrv_snprintf(buf + nwritten, buf_max - nwritten, ",%s", namecodes[i].name);
+			else
+				nwritten = libdrv_snprintf(buf, buf_max, "%s", namecodes[i].name);
+			n_codes++;
+		}
+	}
+	if (n_codes == 0)
+		nwritten += libdrv_snprintf(buf, buf_max, "Unknown %s code: %x", codetype, code);
+	*plen = nwritten + 1;
+	return buf;
+}
+
+static namecode_my_t	namecodes_vhci_ioctl[] = {
 	K_V(IOCTL_USBIP_VHCI_PLUGIN_HARDWARE)
 	K_V(IOCTL_USBIP_VHCI_UNPLUG_HARDWARE)
 	K_V(IOCTL_USBIP_VHCI_EJECT_HARDWARE)
@@ -62,7 +110,7 @@ static namecode_t	namecodes_vhci_ioctl[] = {
 	{0,0}
 };
 
-struct namecode	namecodes_urb_func[] = {
+static namecode_my_t	namecodes_urb_func[] = {
 	K_V(URB_FUNCTION_SELECT_CONFIGURATION)
 	K_V(URB_FUNCTION_SELECT_INTERFACE)
 	K_V(URB_FUNCTION_ABORT_PIPE)
@@ -122,56 +170,67 @@ struct namecode	namecodes_urb_func[] = {
 const char *
 dbg_vhci_ioctl_code(unsigned int ioctl_code)
 {
-	return dbg_namecode(namecodes_vhci_ioctl, "ioctl", ioctl_code);
+	return dbg_namecode_buf_len(namecodes_vhci_ioctl, "ioctl", ioctl_code, buf_dbg_vhci_ioctl_code, 128, &len_dbg_vhci_ioctl_code);
 }
 
 const char *
 dbg_urbfunc(USHORT urbfunc)
 {
-	static char	buf[256];
-	return dbg_namecode_buf(namecodes_urb_func, "urb function", (unsigned int)urbfunc, buf, 256);
+	return dbg_namecode_buf_len(namecodes_urb_func, "urb function", (unsigned int)urbfunc, buf_dbg_urbfunc, 256, &len_dbg_urbfunc);
 }
 
 const char *
 dbg_usb_setup_packet(PCUCHAR packet)
 {
-	static char	buf[1024];
 	PUSB_DEFAULT_PIPE_SETUP_PACKET	pkt = (PUSB_DEFAULT_PIPE_SETUP_PACKET)packet;
 
-	libdrv_snprintf(buf, 1024, "rqtype:%02x,req:%02x,wIndex:%hu,wLength:%hu,wValue:%hu",
+	len_dbg_setup_packet = libdrv_snprintf(buf_dbg_setup_packet, 128, "rqtype:%02x,req:%02x,wIndex:%hu,wLength:%hu,wValue:%hu",
 		pkt->bmRequestType, pkt->bRequest, pkt->wIndex, pkt->wLength, pkt->wValue);
-
-	return buf;
+	len_dbg_setup_packet++;
+	return buf_dbg_setup_packet;
 }
 
 const char *
 dbg_urbr(purb_req_t urbr)
 {
-	static char	buf[128];
-
-	if (urbr == NULL)
-		return "[null]";
-	switch (urbr->type) {
-	case URBR_TYPE_URB:
-		libdrv_snprintf(buf, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->u.urb->UrbHeader.Function));
-		break;
-	case URBR_TYPE_UNLINK:
-		libdrv_snprintf(buf, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->u.seq_num_unlink);
-		break;
-	case URBR_TYPE_SELECT_CONF:
-		libdrv_snprintf(buf, 128, "[slc,seq:%u,%hhu]", urbr->seq_num, urbr->u.conf_value);
-		break;
-	case URBR_TYPE_SELECT_INTF:
-		libdrv_snprintf(buf, 128, "[sli,seq:%u,%hhu,%hhu]", urbr->seq_num, urbr->u.intf.intf_num, urbr->u.intf.alt_setting);
-		break;
-	case URBR_TYPE_RESET_PIPE:
-		libdrv_snprintf(buf, 128, "[rst,seq:%u,%hhu]", urbr->seq_num, urbr->ep->addr);
-		break;
-	default:
-		libdrv_snprintf(buf, 128, "[unk:seq:%u]", urbr->seq_num);
-		break;
+	if (urbr == NULL) {
+		len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[null]");
 	}
-	return buf;
+	else {
+		switch (urbr->type) {
+		case URBR_TYPE_URB:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->u.urb->UrbHeader.Function));
+			break;
+		case URBR_TYPE_UNLINK:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->u.seq_num_unlink);
+			break;
+		case URBR_TYPE_SELECT_CONF:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[slc,seq:%u,%hhu]", urbr->seq_num, urbr->u.conf_value);
+			break;
+		case URBR_TYPE_SELECT_INTF:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[sli,seq:%u,%hhu,%hhu]", urbr->seq_num, urbr->u.intf.intf_num, urbr->u.intf.alt_setting);
+			break;
+		case URBR_TYPE_RESET_PIPE:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[rst,seq:%u,%hhu]", urbr->seq_num, urbr->ep->addr);
+			break;
+		default:
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[unk:seq:%u]", urbr->seq_num);
+			break;
+		}
+	}
+	len_dbg_urbr++;
+	return buf_dbg_urbr;
 }
 
+/*
+ * Dummy dbg_usbd_status() will be used in release mode
+ * so that debug routines commonly shared by a vhci anda stub are intact.
+ */
+#ifndef DBG
+const char *
+dbg_usbd_status(USBD_STATUS status)
+{
+	UNREFERENCED_PARAMETER(status);
+	return "";
+}
 #endif

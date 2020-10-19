@@ -1,6 +1,6 @@
 #include "vhci_driver.h"
-#include "vhci_urbr_store_control.tmh"
 
+#include "usbip_proto.h"
 #include "vhci_urbr.h"
 
 NTSTATUS
@@ -126,31 +126,3 @@ out:
 	WdfRequestSetInformation(req_read, nread);
 	return status;
 }
-
-#if 0 ///DEL
-NTSTATUS
-store_urb_select_config(WDFREQUEST req_read, purb_req_t urbr)
-{
-	struct _URB_SELECT_CONFIGURATION *urb_sc = &urbr->urb->UrbSelectConfiguration;
-	struct usbip_header	*hdr;
-	usb_cspkt_t	*csp;
-
-	hdr = get_hdr_from_req_read(req_read);
-	if (hdr == NULL)
-		return STATUS_BUFFER_TOO_SMALL;
-
-	csp = (usb_cspkt_t *)hdr->u.cmd_submit.setup;
-
-	set_cmd_submit_usbip_header(hdr, urbr->seq_num, urbr->vusb->devid, 0, 0, 0, 0);
-	build_setup_packet(csp, 0, BMREQUEST_STANDARD, BMREQUEST_TO_DEVICE, USB_REQUEST_SET_CONFIGURATION);
-	csp->wLength = 0;
-	if (urb_sc->ConfigurationDescriptor == NULL)
-		csp->wValue.W = 0;
-	else
-		csp->wValue.W = urb_sc->ConfigurationDescriptor->bConfigurationValue;
-	csp->wIndex.W = 0;
-
-	WdfRequestSetInformation(req_read, sizeof(struct usbip_header));
-	return STATUS_SUCCESS;
-}
-#endif
