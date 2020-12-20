@@ -88,7 +88,7 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 	vusb->dsc_conf = NULL;
 	vusb->intf_altsettings = NULL;
 
-	status = WdfWaitLockCreate(&attrs, &vusb->lock);
+	status = WdfSpinLockCreate(&attrs, &vusb->spin_lock);
 	if (NT_ERROR(status)) {
 		TRE(PLUGIN, "failed to create wait lock: %!STATUS!", status);
 		return FALSE;
@@ -97,7 +97,7 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs_hmem, urb_req_t);
 	attrs_hmem.ParentObject = ude_usbdev;
 
-	status = WdfLookasideListCreate(&attrs, sizeof(urb_req_t), PagedPool, &attrs_hmem, 0, &vusb->lookaside_urbr);
+	status = WdfLookasideListCreate(&attrs, sizeof(urb_req_t), NonPagedPool, &attrs_hmem, 0, &vusb->lookaside_urbr);
 	if (NT_ERROR(status)) {
 		TRE(PLUGIN, "failed to create urbr memory: %!STATUS!", status);
 		return FALSE;
@@ -230,14 +230,18 @@ create_endpoints(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 	vusb->ude_usbdev = ude_usbdev;
 	epinit = UdecxUsbSimpleEndpointInitAllocate(ude_usbdev);
 
+	TRD(VUSB, "Enter: epinit=0x%p", epinit);
 	add_ep(vusb, &epinit, NULL);
 
 	start = dsc_conf;
 	while ((dsc_ep = dsc_next_ep(dsc_conf, start)) != NULL) {
 		epinit = UdecxUsbSimpleEndpointInitAllocate(ude_usbdev);
+		TRD(VUSB, "While: epinit=0x%p, dsc_ep->bEndpointAddress=0x%x",
+			epinit, dsc_ep->bEndpointAddress);
 		add_ep(vusb, &epinit, dsc_ep);
 		start = dsc_ep;
 	}
+	TRD(VUSB, "Leave");
 }
 
 static UDECX_ENDPOINT_TYPE
@@ -333,10 +337,10 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 	pctx_vusb_t	vusb;
 	NTSTATUS	status = STATUS_UNSUCCESSFUL;
 
-	WdfWaitLockAcquire(vhci->lock, NULL);
+	WdfSpinLockAcquire(vhci->spin_lock);
 
 	if (vhci->vusbs[pluginfo->port - 1] != NULL) {
-		WdfWaitLockRelease(vhci->lock);
+		WdfSpinLockRelease(vhci->spin_lock);
 		return STATUS_OBJECT_NAME_COLLISION;
 	}
 
@@ -354,9 +358,9 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 		status = STATUS_SUCCESS;
 	}
 
-	WdfWaitLockRelease(vhci->lock);
+	WdfSpinLockRelease(vhci->spin_lock);
 
-	if (vusb->is_simple_ep_alloc) {
+	if ((vusb != NULL) && (vusb->is_simple_ep_alloc)) {
 		/* UDE framework ignores SELECT CONF & INTF for a simple type */
 		submit_req_select(vusb->ep_default, NULL, TRUE, vusb->default_conf_value, 0, 0);
 		submit_req_select(vusb->ep_default, NULL, FALSE, 0, 0, 0);

@@ -13,7 +13,7 @@ typedef struct
 	ULONG		n_max_ports;
 	WDFQUEUE	queue;
 	struct _ctx_vusb	**vusbs;
-	WDFWAITLOCK	lock;
+	WDFSPINLOCK	spin_lock;
 } ctx_vhci_t, *pctx_vhci_t;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_vhci_t, TO_VHCI)
@@ -50,7 +50,7 @@ typedef struct _ctx_vusb
 	ULONG		seq_num;
 	struct _ctx_ep	*ep_default;
 	WDFLOOKASIDE	lookaside_urbr;
-	WDFWAITLOCK	lock;
+	WDFSPINLOCK	spin_lock;
 
 	/* keep these usbip port command */
 	USHORT		id_vendor, id_product, dev_speed;

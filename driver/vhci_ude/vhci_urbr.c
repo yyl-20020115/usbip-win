@@ -72,18 +72,18 @@ find_sent_urbr(pctx_vusb_t vusb, struct usbip_header *hdr)
 {
 	PLIST_ENTRY	le;
 
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	WdfSpinLockAcquire(vusb->spin_lock);
 	for (le = vusb->head_urbr_sent.Flink; le != &vusb->head_urbr_sent; le = le->Flink) {
 		purb_req_t	urbr;
 		urbr = CONTAINING_RECORD(le, urb_req_t, list_state);
 		if (urbr->seq_num == hdr->base.seqnum) {
 			RemoveEntryListInit(&urbr->list_all);
 			RemoveEntryListInit(&urbr->list_state);
-			WdfWaitLockRelease(vusb->lock);
+			WdfSpinLockRelease(vusb->spin_lock);
 			return urbr;
 		}
 	}
-	WdfWaitLockRelease(vusb->lock);
+	WdfSpinLockRelease(vusb->spin_lock);
 
 	return NULL;
 }
@@ -163,17 +163,30 @@ submit_urbr_unlink(pctx_ep_t ep, unsigned long seq_num_unlink)
 static VOID
 urbr_cancelled(_In_ WDFREQUEST req)
 {
-	purb_req_t	urbr = (purb_req_t)WdfRequestGetInformation(req);
-	pctx_vusb_t	vusb = urbr->ep->vusb;
+	purb_req_t	urbr;
+	pctx_vusb_t	vusb;
 
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	if (req == NULL)
+		return;
+
+	urbr = (purb_req_t)WdfRequestGetInformation(req);
+
+	if (urbr == NULL)
+		return;
+
+	vusb = urbr->ep->vusb;
+
+	if (vusb == NULL)
+		return;
+
+	WdfSpinLockAcquire(vusb->spin_lock);
 	RemoveEntryListInit(&urbr->list_state);
 	RemoveEntryListInit(&urbr->list_all);
 	if (vusb->urbr_sent_partial == urbr) {
 		vusb->urbr_sent_partial = NULL;
 		vusb->len_sent_partial = 0;
 	}
-	WdfWaitLockRelease(vusb->lock);
+	WdfSpinLockRelease(vusb->spin_lock);
 
 	submit_urbr_unlink(urbr->ep, urbr->seq_num);
 	TRD(URBR, "cancelled urbr destroyed: %!URBR!", urbr);
@@ -183,19 +196,39 @@ urbr_cancelled(_In_ WDFREQUEST req)
 NTSTATUS
 submit_urbr(purb_req_t urbr)
 {
-	pctx_vusb_t	vusb = urbr->ep->vusb;
+	pctx_vusb_t	vusb;
 	WDFREQUEST	req_read;
 	NTSTATUS	status = STATUS_PENDING;
 
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	if (urbr == NULL) {
+		TRE(URBR, "urbr is NULL");
+		return STATUS_UNSUCCESSFUL;
+	}
+	vusb = urbr->ep->vusb;
+	WdfSpinLockAcquire(vusb->spin_lock);
 
 	if (vusb->urbr_sent_partial || vusb->pending_req_read == NULL) {
 		if (urbr->type == URBR_TYPE_URB) {
-			WdfRequestMarkCancelable(urbr->req, urbr_cancelled);
+			status = WdfRequestMarkCancelableEx(urbr->req, urbr_cancelled);
+			if (!NT_SUCCESS(status)) {
+				RemoveEntryListInit(&urbr->list_state);
+				RemoveEntryListInit(&urbr->list_all);
+				if (vusb->urbr_sent_partial == urbr) {
+					vusb->urbr_sent_partial = NULL;
+					vusb->len_sent_partial = 0;
+				}
+			}
+			WdfSpinLockRelease(vusb->spin_lock);
+			if (!NT_SUCCESS(status)) {
+				WdfRequestComplete(urbr->req, status);
+				submit_urbr_unlink(urbr->ep, urbr->seq_num);
+				TRE(URBR, "cancelled urbr destroyed: %!URBR!, %!STATUS!", urbr, status);
+			}
+			WdfSpinLockAcquire(vusb->spin_lock);
 		}
 		InsertTailList(&vusb->head_urbr_pending, &urbr->list_state);
 		InsertTailList(&vusb->head_urbr, &urbr->list_all);
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		TRD(URBR, "urb pending: %!URBR!", urbr);
 		return STATUS_PENDING;
@@ -206,15 +239,31 @@ submit_urbr(purb_req_t urbr)
 
 	urbr->seq_num = ++(vusb->seq_num);
 
-	WdfWaitLockRelease(vusb->lock);
+	WdfSpinLockRelease(vusb->spin_lock);
 
 	status = store_urbr(req_read, urbr);
+	TRD(URBR, "After 'store_urbu()");
 
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	WdfSpinLockAcquire(vusb->spin_lock);
 
 	if (status == STATUS_SUCCESS) {
 		if (urbr->type == URBR_TYPE_URB) {
-			WdfRequestMarkCancelable(urbr->req, urbr_cancelled);
+			status = WdfRequestMarkCancelableEx(urbr->req, urbr_cancelled);
+			if (!NT_SUCCESS(status)) {
+				RemoveEntryListInit(&urbr->list_state);
+				RemoveEntryListInit(&urbr->list_all);
+				if (vusb->urbr_sent_partial == urbr) {
+					vusb->urbr_sent_partial = NULL;
+					vusb->len_sent_partial = 0;
+				}
+			}
+			WdfSpinLockRelease(vusb->spin_lock);
+			if (!NT_SUCCESS(status)) {
+				WdfRequestComplete(urbr->req, status);
+				submit_urbr_unlink(urbr->ep, urbr->seq_num);
+				TRE(URBR, "cancelled urbr destroyed: %!URBR!, %!STATUS!", urbr, status);
+			}
+			WdfSpinLockAcquire(vusb->spin_lock);
 		}
 		if (vusb->len_sent_partial == 0) {
 			vusb->urbr_sent_partial = NULL;
@@ -224,7 +273,7 @@ submit_urbr(purb_req_t urbr)
 		InsertTailList(&vusb->head_urbr, &urbr->list_all);
 
 		vusb->pending_req_read = NULL;
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		WdfRequestUnmarkCancelable(req_read);
 		WdfRequestComplete(req_read, STATUS_SUCCESS);
@@ -232,7 +281,7 @@ submit_urbr(purb_req_t urbr)
 	}
 	else {
 		vusb->urbr_sent_partial = NULL;
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		status = STATUS_INVALID_PARAMETER;
 	}

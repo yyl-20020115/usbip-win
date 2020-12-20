@@ -5,7 +5,7 @@
 
 #include "usbip_vhci_api.h"
 
-extern VOID create_queue_hc(pctx_vhci_t vhci);
+extern NTSTATUS create_queue_hc(pctx_vhci_t vhci);
 
 static NTSTATUS
 controller_query_usb_capability(WDFDEVICE UdecxWdfDevice, PGUID CapabilityType,
@@ -30,7 +30,7 @@ controller_reset(WDFDEVICE UdecxWdfDevice)
 	TRW(VHCI, "Enter");
 }
 
-static PAGEABLE BOOLEAN
+static BOOLEAN
 create_ucx_controller(WDFDEVICE hdev)
 {
 	UDECX_WDF_DEVICE_CONFIG	conf;
@@ -50,7 +50,7 @@ create_ucx_controller(WDFDEVICE hdev)
 	return TRUE;
 }
 
-static PAGEABLE VOID
+static VOID
 setup_fileobject(PWDFDEVICE_INIT dinit)
 {
 	WDF_OBJECT_ATTRIBUTES	attrs;
@@ -61,7 +61,7 @@ setup_fileobject(PWDFDEVICE_INIT dinit)
 	WdfDeviceInitSetFileObjectConfig(dinit, &conf, &attrs);
 }
 
-static PAGEABLE VOID
+static VOID
 reg_devintf(WDFDEVICE hdev)
 {
 	NTSTATUS	status;
@@ -76,6 +76,8 @@ reg_devintf(WDFDEVICE hdev)
 	}
 }
 
+PVOID vhci_pooltag_begin;
+
 static BOOLEAN
 setup_vhci(pctx_vhci_t vhci)
 {
@@ -84,14 +86,14 @@ setup_vhci(pctx_vhci_t vhci)
 
 	WDF_OBJECT_ATTRIBUTES_INIT(&attrs);
 	attrs.ParentObject = vhci->hdev;
-	status = WdfWaitLockCreate(&attrs, &vhci->lock);
+	status = WdfSpinLockCreate(&attrs, &vhci->spin_lock);
 	if (NT_ERROR(status)) {
-		TRE(VHCI, "failed to create wait lock: %!STATUS!", status);
+		TRE(VHCI, "failed to create spin lock: %!STATUS!", status);
 		return FALSE;
 	}
 	vhci->n_max_ports = MAX_HUB_PORTS;
 
-	vhci->vusbs = ExAllocatePoolWithTag(PagedPool, sizeof(pctx_vusb_t) * vhci->n_max_ports, VHCI_POOLTAG);
+	vhci->vusbs = vhci_pooltag_begin = ExAllocatePoolWithTag(NonPagedPool, sizeof(pctx_vusb_t) * vhci->n_max_ports, VHCI_POOLTAG);
 	if (vhci->vusbs == NULL) {
 		TRE(VHCI, "failed to allocate ports: out of memory");
 		return FALSE;
@@ -139,12 +141,12 @@ evt_add_vhci(_In_ WDFDRIVER drv, _Inout_ PWDFDEVICE_INIT dinit)
 
 	vhci = TO_VHCI(hdev);
 	vhci->hdev = hdev;
-	if (!setup_vhci(vhci))
+	if (!setup_vhci(vhci)) {
+		status = STATUS_UNSUCCESSFUL;
 		goto out;
+	}
 
-	create_queue_hc(vhci);
-
-	status = STATUS_SUCCESS;
+	status = create_queue_hc(vhci);
 out:
 	TRD(VHCI, "Leave: %!STATUS!", status);
 

@@ -28,11 +28,11 @@ req_read_cancelled(WDFREQUEST req_read)
 	TRD(READ, "a pending read req cancelled");
 
 	vusb = *TO_PVUSB(WdfRequestGetFileObject(req_read));
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	WdfSpinLockAcquire(vusb->spin_lock);
 	if (vusb->pending_req_read == req_read) {
 		vusb->pending_req_read = NULL;
 	}
-	WdfWaitLockRelease(vusb->lock);
+	WdfSpinLockRelease(vusb->spin_lock);
 
 	WdfRequestComplete(req_read, STATUS_CANCELLED);
 }
@@ -45,20 +45,20 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 
 	TRD(READ, "Enter");
 
-	WdfWaitLockAcquire(vusb->lock, NULL);
+	WdfSpinLockAcquire(vusb->spin_lock);
 
 	if (vusb->pending_req_read) {
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 	if (vusb->urbr_sent_partial != NULL) {
 		urbr = vusb->urbr_sent_partial;
 
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		status = store_urbr_partial(req, urbr);
 
-		WdfWaitLockAcquire(vusb->lock, NULL);
+		WdfSpinLockAcquire(vusb->spin_lock);
 		vusb->len_sent_partial = 0;
 	}
 	else {
@@ -66,22 +66,31 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 		if (urbr == NULL) {
 			vusb->pending_req_read = req;
 
-			WdfRequestMarkCancelable(req, req_read_cancelled);
-			WdfWaitLockRelease(vusb->lock);
+			status = WdfRequestMarkCancelableEx(req, req_read_cancelled);
+			if (!NT_SUCCESS(status)) {
+				if (vusb->pending_req_read == req) {
+					vusb->pending_req_read = NULL;
+				}
+			}
+			WdfSpinLockRelease(vusb->spin_lock);
+			if (!NT_SUCCESS(status)) {
+				WdfRequestComplete(req, status);
+				TRE(READ, "a pending read req cancelled: %!STATUS!", status);
+			}
 
 			return STATUS_PENDING;
 		}
 		vusb->urbr_sent_partial = urbr;
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		status = store_urbr(req, urbr);
 
-		WdfWaitLockAcquire(vusb->lock, NULL);
+		WdfSpinLockAcquire(vusb->spin_lock);
 	}
 
 	if (status != STATUS_SUCCESS) {
 		RemoveEntryListInit(&urbr->list_all);
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 
 		complete_urbr(urbr, status);
 	}
@@ -90,7 +99,7 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 			InsertTailList(&vusb->head_urbr_sent, &urbr->list_state);
 			vusb->urbr_sent_partial = NULL;
 		}
-		WdfWaitLockRelease(vusb->lock);
+		WdfSpinLockRelease(vusb->spin_lock);
 	}
 	return status;
 }
