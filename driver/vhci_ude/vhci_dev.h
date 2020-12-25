@@ -52,6 +52,10 @@ typedef struct _ctx_vusb
 	WDFLOOKASIDE	lookaside_urbr;
 	WDFWAITLOCK	lock;
 
+	/* Full-length configuration descriptor for finding an interface descriptor of EP */
+	PUCHAR		dsc_conf;
+	/* alt settings for interface. use SHORT for treating unassigned case(-1) */
+	PSHORT		intf_altsettings;
 	/* a first value in configuration descriptor */
 	UCHAR		default_conf_value;
 } ctx_vusb_t, *pctx_vusb_t;
@@ -63,6 +67,11 @@ typedef struct _ctx_ep
 {
 	pctx_vusb_t	vusb;
 	UCHAR		type, addr, interval;
+	/*
+	 * Information for a parent interface.
+	 * These are used for adjusting value of interface alternate setting.
+	 */
+	UCHAR		intf_num, altsetting;
 	UDECXUSBENDPOINT	ude_ep;
 	WDFQUEUE	queue;
 } ctx_ep_t, *pctx_ep_t;

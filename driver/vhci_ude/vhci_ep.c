@@ -1,5 +1,6 @@
 #include "vhci_driver.h"
 #include "vhci_ep.tmh"
+#include "devconf.h"
 
 extern WDFQUEUE
 create_queue_ep(pctx_ep_t ep);
@@ -45,17 +46,30 @@ ep_reset(_In_ UDECXUSBENDPOINT ep, _In_ WDFREQUEST req)
 }
 
 static void
-setup_ep_from_dscr(pctx_ep_t ep, PUSB_ENDPOINT_DESCRIPTOR dscr_ep)
+setup_ep_from_dscr(pctx_ep_t ep, PUSB_ENDPOINT_DESCRIPTOR dsc_ep)
 {
-	if (dscr_ep == NULL) {
+	ep->intf_num = 0;
+	ep->altsetting = 0;
+	if (dsc_ep == NULL) {
 		ep->type = USB_ENDPOINT_TYPE_CONTROL;
 		ep->addr = USB_DEFAULT_DEVICE_ADDRESS;
 		ep->interval = 0;
 	}
 	else {
-		ep->type = dscr_ep->bmAttributes & USB_ENDPOINT_TYPE_MASK;
-		ep->addr = dscr_ep->bEndpointAddress;
-		ep->interval = dscr_ep->bInterval;
+		PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
+
+		ep->type = dsc_ep->bmAttributes & USB_ENDPOINT_TYPE_MASK;
+		ep->addr = dsc_ep->bEndpointAddress;
+		ep->interval = dsc_ep->bInterval;
+
+		dsc_intf = dsc_find_intf_by_ep((PUSB_CONFIGURATION_DESCRIPTOR)ep->vusb->dsc_conf, dsc_ep);
+		if (dsc_intf) {
+			ep->intf_num = dsc_intf->bInterfaceNumber;
+			ep->altsetting = dsc_intf->bAlternateSetting;
+		}
+		else {
+			TRE(VUSB, "weird case: interface for ep not found");
+		}
 	}
 }
 
@@ -151,6 +165,42 @@ release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 	}
 }
 
+static NTSTATUS
+set_intf_for_ep(pctx_vusb_t vusb, WDFREQUEST req, PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
+{
+	UCHAR	intf_num = params->InterfaceNumber;
+	UCHAR	altsetting = params->NewInterfaceSetting;
+
+	if (params->EndpointsToConfigureCount > 0) {
+		pctx_ep_t	ep = TO_EP(params->EndpointsToConfigure[0]);
+		PUSB_CONFIGURATION_DESCRIPTOR	dsc_conf;
+		PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
+		PUSB_ENDPOINT_DESCRIPTOR	dsc_ep = NULL;
+
+		dsc_conf = (PUSB_CONFIGURATION_DESCRIPTOR)vusb->dsc_conf;
+		dsc_intf = dsc_find_intf(dsc_conf, intf_num, altsetting);
+		if (dsc_intf) {
+			dsc_ep = dsc_find_intf_ep(dsc_conf, dsc_intf, ep->addr);
+		}
+
+		if (dsc_ep == NULL) {
+			/* UDE dynamic EP configuration does not seem to provide correct values */
+			/* Use the values of vhci EP which are obtained from the parent interface descriptor */
+			intf_num = ep->intf_num;
+			altsetting = ep->altsetting;
+		}
+	}
+
+	if (vusb->intf_altsettings[intf_num] == altsetting)
+		return STATUS_SUCCESS;
+
+	vusb->intf_altsettings[intf_num] = altsetting;
+
+	TRE(VUSB, "SELECT INTERFACE: NUM:%d Alt:%d", intf_num, altsetting);
+
+	return submit_req_select(vusb->ep_default, req, FALSE, 0, intf_num, altsetting);
+}
+
 static VOID
 ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
@@ -171,7 +221,7 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		status = submit_req_select(vusb->ep_default, req, 1, params->NewConfigurationValue, 0, 0);
 		break;
 	case UdecxEndpointsConfigureTypeInterfaceSettingChange:
-		status = submit_req_select(vusb->ep_default, req, 0, 0, params->InterfaceNumber, params->NewInterfaceSetting);
+		status = set_intf_for_ep(vusb, req, params);
 		break;
 	case UdecxEndpointsConfigureTypeEndpointsReleasedOnly:
 		release_ep(params);

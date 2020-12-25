@@ -11,7 +11,34 @@ extern NTSTATUS
 add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPTOR dscr_ep);
 
 static BOOLEAN
-setup_vusb(UDECXUSBDEVICE ude_usbdev)
+setup_with_dscr_conf(pctx_vusb_t vusb, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
+{
+	vusb->dsc_conf = ExAllocatePoolWithTag(PagedPool, dsc_conf->wTotalLength, VHCI_POOLTAG);
+	if (vusb->dsc_conf == NULL) {
+		TRE(PLUGIN, "failed to allocate configuration descriptor");
+		return FALSE;
+	}
+
+	RtlCopyMemory(vusb->dsc_conf, dsc_conf, dsc_conf->wTotalLength);
+	if (dsc_conf->bNumInterfaces > 0) {
+		int	i;
+
+		vusb->intf_altsettings = (PSHORT)ExAllocatePoolWithTag(PagedPool, dsc_conf->bNumInterfaces * sizeof(SHORT), VHCI_POOLTAG);
+		if (vusb->intf_altsettings == NULL) {
+			TRE(PLUGIN, "failed to allocate alternative settings for interfaces");
+			return FALSE;
+		}
+
+		for (i = 0; i < dsc_conf->bNumInterfaces; i++)
+			vusb->intf_altsettings[i] = -1;
+	}
+	vusb->default_conf_value = dsc_conf->bConfigurationValue;
+
+	return TRUE;
+}
+
+static BOOLEAN
+setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 {
 	pctx_vusb_t	vusb = TO_VUSB(ude_usbdev);
 	WDF_OBJECT_ATTRIBUTES       attrs, attrs_hmem;
@@ -19,6 +46,9 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev)
 
 	WDF_OBJECT_ATTRIBUTES_INIT(&attrs);
 	attrs.ParentObject = ude_usbdev;
+
+	vusb->dsc_conf = NULL;
+	vusb->intf_altsettings = NULL;
 
 	status = WdfWaitLockCreate(&attrs, &vusb->lock);
 	if (NT_ERROR(status)) {
@@ -34,6 +64,12 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev)
 		TRE(PLUGIN, "failed to create urbr memory: %!STATUS!", status);
 		return FALSE;
 	}
+
+	if (!setup_with_dscr_conf(vusb, (PUSB_CONFIGURATION_DESCRIPTOR)pluginfo->dscr_conf)) {
+		TRE(PLUGIN, "failed to create urbr memory: %!STATUS!", status);
+	}
+
+	vusb->devid = pluginfo->devid;
 
 	vusb->ude_usbdev = ude_usbdev;
 	vusb->pending_req_read = NULL;
@@ -129,8 +165,15 @@ setup_descriptors(PUDECXUSBDEVICE_INIT pdinit, pvhci_pluginfo_t pluginfo)
 static VOID
 vusb_cleanup(_In_ WDFOBJECT ude_usbdev)
 {
-	UNREFERENCED_PARAMETER(ude_usbdev);
+	pctx_vusb_t vusb;
+
 	TRD(VUSB, "Enter");
+
+	vusb = TO_VUSB(ude_usbdev);
+	if (vusb->dsc_conf != NULL)
+		ExFreePoolWithTag(vusb->dsc_conf, VHCI_POOLTAG);
+	if (vusb->intf_altsettings != NULL)
+		ExFreePoolWithTag(vusb->intf_altsettings, VHCI_POOLTAG);
 }
 
 static void
@@ -231,7 +274,7 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 	UDECX_USB_DEVICE_PLUG_IN_OPTIONS_INIT(&opts);
 	opts.Usb20PortNumber = pluginfo->port;
 
-	if (!setup_vusb(ude_usbdev)) {
+	if (!setup_vusb(ude_usbdev, pluginfo)) {
 		WdfObjectDelete(ude_usbdev);
 		return NULL;
 	}
@@ -242,9 +285,6 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 		WdfObjectDelete(ude_usbdev);
 		return NULL;
 	}
-
-	vusb->devid = pluginfo->devid;
-	vusb->default_conf_value = pluginfo->dscr_conf[5];
 
 	return vusb;
 }

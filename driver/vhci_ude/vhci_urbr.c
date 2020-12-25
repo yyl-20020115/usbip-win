@@ -304,7 +304,8 @@ complete_urbr(purb_req_t urbr, NTSTATUS status)
 		if (urbr->type != URBR_TYPE_URB)
 			WdfRequestComplete(req, status);
 		else {
-			WdfRequestUnmarkCancelable(req);
+			if (status != STATUS_CANCELLED)
+				WdfRequestUnmarkCancelable(req);
 			if (status == STATUS_SUCCESS)
 				UdecxUrbComplete(req, urbr->u.urb->UrbHeader.Status);
 			else 

@@ -97,7 +97,6 @@ store_urbr_iso(WDFREQUEST req_read, purb_req_t urbr)
 	hdr->u.cmd_submit.start_frame = urb_iso->StartFrame;
 	hdr->u.cmd_submit.number_of_packets = urb_iso->NumberOfPackets;
 
-
 	if (get_read_payload_length(req_read) >= get_iso_payload_len(urb_iso)) {
 		store_iso_data(hdr + 1, urb_iso);
 		WdfRequestSetInformation(req_read, sizeof(struct usbip_header) + get_iso_payload_len(urb_iso));
