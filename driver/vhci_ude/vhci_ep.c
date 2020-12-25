@@ -15,14 +15,22 @@ ep_start(_In_ UDECXUSBENDPOINT ude_ep)
 }
 
 static VOID
+purge_complete(WDFQUEUE queue, WDFCONTEXT ctx)
+{
+	UNREFERENCED_PARAMETER(ctx);
+
+	UdecxUsbEndpointPurgeComplete((*TO_PEP(queue))->ude_ep);
+}
+
+static VOID
 ep_purge(_In_ UDECXUSBENDPOINT ude_ep)
 {
 	pctx_ep_t	ep = TO_EP(ude_ep);
 
 	TRD(VUSB, "Enter: %d", ep->addr);
 
-	WdfIoQueuePurgeSynchronously(ep->queue);
-	UdecxUsbEndpointPurgeComplete(ude_ep);
+	/* WdfIoQueuePurgeSynchronously would suffer from blocking */
+	WdfIoQueuePurge(ep->queue, purge_complete, NULL);
 
 	TRD(VUSB, "Leave");
 }
