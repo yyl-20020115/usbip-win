@@ -94,7 +94,7 @@ process_get_desc(usbip_stub_dev_t *devstub, unsigned int seqnum, usb_cspkt_t *cs
 	if (!res) {
 		DBGW(DBG_READWRITE, "process_get_desc: failed to get descriptor\n");
 		ExFreePool(pdesc);
-		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -1);
+		reply_stub_req_err(devstub, USBIP_RET_SUBMIT, seqnum, -32);
 		return;
 	}
 	reply_stub_req_data(devstub, seqnum, pdesc, len, FALSE);
