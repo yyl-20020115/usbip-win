@@ -70,15 +70,9 @@ usbip_vhci_driver_close(HANDLE hdev)
 }
 
 static int
-usbip_vhci_get_ports_status(HANDLE hdev, char *buf, int l)
+usbip_vhci_get_ports_status(HANDLE hdev, ioctl_usbip_vhci_get_ports_status *st)
 {
-	ioctl_usbip_vhci_get_ports_status	*st;
 	unsigned long len;
-
-	st = (ioctl_usbip_vhci_get_ports_status *)buf;
-
-	if (l != sizeof(ioctl_usbip_vhci_get_ports_status))
-		return -1;
 
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_GET_PORTS_STATUS,
 		NULL, 0, st, sizeof(ioctl_usbip_vhci_get_ports_status), &len, NULL)) {
@@ -91,14 +85,14 @@ usbip_vhci_get_ports_status(HANDLE hdev, char *buf, int l)
 int
 usbip_vhci_get_free_port(HANDLE hdev)
 {
-	char	buf[128];
+	ioctl_usbip_vhci_get_ports_status	status;
 	int	i;
 
-	if (usbip_vhci_get_ports_status(hdev, buf, sizeof(buf)))
+	if (usbip_vhci_get_ports_status(hdev, &status))
 		return -1;
-	for(i = 1;i < sizeof(buf); i++) {
-		if (!buf[i])
-			return i;
+	for(i = 0; i < 127; i++) {
+		if (!status.port_status[i])
+			return (i + 1);
 	}
 	return -1;
 }

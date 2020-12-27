@@ -190,7 +190,8 @@ PAGEABLE NTSTATUS
 vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 {
 	pvpdo_dev_t	vpdo;
-	PLIST_ENTRY		entry;
+	PLIST_ENTRY	entry;
+	unsigned char	n_used_ports = 0;
 
 	PAGED_CODE();
 
@@ -205,10 +206,11 @@ vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 			DBGE(DBG_VHUB, "strange error");
 			continue;
 		}
-		if (st->u.max_used_port < (char)vpdo->port)
-			st->u.max_used_port = (char)vpdo->port;
-		st->u.port_status[vpdo->port] = 1;
+		n_used_ports++;
+		st->port_status[vpdo->port - 1] = 1;
 	}
 	ExReleaseFastMutex(&vhub->Mutex);
+
+	st->n_used_ports = n_used_ports;
 	return STATUS_SUCCESS;
 }

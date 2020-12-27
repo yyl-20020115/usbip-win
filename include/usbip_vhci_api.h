@@ -91,11 +91,9 @@ typedef struct _vhci_pluginfo
 
 typedef struct _ioctl_usbip_vhci_get_ports_status
 {
-	union {
-		signed char max_used_port; /* then it can not be bigger than 127 */
-		unsigned char port_status[128];
-		/* 128 bytes */
-	} u;
+	/* usbip-win assumes max port is 127 */
+	unsigned char n_used_ports;
+	unsigned char port_status[127];
 } ioctl_usbip_vhci_get_ports_status;
 
 typedef struct _ioctl_usbip_vhci_unplug
