@@ -161,30 +161,3 @@ usbip_vhci_detach_device(HANDLE hdev, int port)
 		return 0;
 	return -1;
 }
-
-int
-show_port_status(void)
-{
-	HANDLE fd;
-	int i;
-	char buf[128];
-
-	fd = usbip_vhci_driver_open();
-	if (INVALID_HANDLE_VALUE == fd) {
-		err("open vhci driver");
-		return -1;
-	}
-	if (usbip_vhci_get_ports_status(fd, buf, sizeof(buf))) {
-		err("get port status");
-		return -1;
-	}
-	info("max used port:%d\n", buf[0]);
-	for (i = 1; i <= buf[0]; i++) {
-		if (buf[i])
-			info("port %d: used\n", i);
-		else
-			info("port %d: idle\n", i);
-	}
-	CloseHandle(fd);
-	return 0;
-}

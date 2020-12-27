@@ -7,4 +7,3 @@
 
 int init_socket(void);
 int cleanup_socket(void);
-int show_port_status(void);
