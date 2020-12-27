@@ -262,14 +262,8 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 	vusb = TO_VUSB(ude_usbdev);
 	vusb->vhci = vhci;
 
-	if (eptype == UdecxEndpointTypeSimple) {
-		vusb->is_simple_ep_alloc = TRUE;
-		create_endpoints(ude_usbdev, pluginfo);
-	}
-	else {
-		vusb->is_simple_ep_alloc = FALSE;
-		vusb->ep_default = NULL;
-	}
+	vusb->ep_default = NULL;
+	vusb->is_simple_ep_alloc = (eptype == UdecxEndpointTypeSimple) ? TRUE : FALSE;
 
 	UDECX_USB_DEVICE_PLUG_IN_OPTIONS_INIT(&opts);
 	opts.Usb20PortNumber = pluginfo->port;
@@ -278,6 +272,9 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 		WdfObjectDelete(ude_usbdev);
 		return NULL;
 	}
+
+	if (vusb->is_simple_ep_alloc)
+		create_endpoints(ude_usbdev, pluginfo);
 
 	status = UdecxUsbDevicePlugIn(ude_usbdev, &opts);
 	if (NT_ERROR(status)) {
