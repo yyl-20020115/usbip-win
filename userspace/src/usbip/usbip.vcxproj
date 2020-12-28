@@ -166,6 +166,7 @@
     <ClCompile Include="usbip_list.c" />
     <ClCompile Include="usbip_list_local.c" />
     <ClCompile Include="usbip_list_remote.c" />
+    <ClCompile Include="usbip_port.c" />
     <ClCompile Include="usbip_wudev.c" />
     <ClCompile Include="usbip_unbind.c" />
     <ClCompile Include="usbip_vhci.c" />

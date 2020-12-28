@@ -10,8 +10,45 @@ setup_ep_callbacks(PUDECX_USB_DEVICE_STATE_CHANGE_CALLBACKS pcallbacks);
 extern NTSTATUS
 add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPTOR dscr_ep);
 
+static void
+setup_with_dsc_dev(pctx_vusb_t vusb, PUSB_DEVICE_DESCRIPTOR dsc_dev)
+{
+	if (dsc_dev) {
+		USHORT	dev_speed = 0;
+
+		vusb->id_vendor = dsc_dev->idVendor;
+		vusb->id_product = dsc_dev->idProduct;
+
+		switch (dsc_dev->bcdUSB) {
+		case 0x0100:
+			dev_speed = USB_SPEED_LOW;
+			break;
+		case 0x0110:
+			dev_speed = USB_SPEED_FULL;
+			break;
+		case 0x0200:
+			dev_speed = USB_SPEED_HIGH;
+			break;
+		case 0x0300:
+			dev_speed = USB_SPEED_SUPER;
+			break;
+		case 0x0310:
+			dev_speed = USB_SPEED_SUPER_PLUS;
+			break;
+		default:
+			break;
+		}
+		vusb->dev_speed = dev_speed;
+	}
+	else {
+		vusb->id_vendor = 0;
+		vusb->id_product = 0;
+		vusb->dev_speed = 0;
+	}
+}
+
 static BOOLEAN
-setup_with_dscr_conf(pctx_vusb_t vusb, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
+setup_with_dsc_conf(pctx_vusb_t vusb, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 {
 	vusb->dsc_conf = ExAllocatePoolWithTag(PagedPool, dsc_conf->wTotalLength, VHCI_POOLTAG);
 	if (vusb->dsc_conf == NULL) {
@@ -65,8 +102,11 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 		return FALSE;
 	}
 
-	if (!setup_with_dscr_conf(vusb, (PUSB_CONFIGURATION_DESCRIPTOR)pluginfo->dscr_conf)) {
-		TRE(PLUGIN, "failed to create urbr memory: %!STATUS!", status);
+	setup_with_dsc_dev(vusb, (PUSB_DEVICE_DESCRIPTOR)pluginfo->dscr_dev);
+
+	if (!setup_with_dsc_conf(vusb, (PUSB_CONFIGURATION_DESCRIPTOR)pluginfo->dscr_conf)) {
+		TRE(PLUGIN, "failed to setup usb with configuration descritor");
+		return FALSE;
 	}
 
 	vusb->devid = pluginfo->devid;

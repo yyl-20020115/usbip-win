@@ -52,6 +52,9 @@ typedef struct _ctx_vusb
 	WDFLOOKASIDE	lookaside_urbr;
 	WDFWAITLOCK	lock;
 
+	/* keep these usbip port command */
+	USHORT		id_vendor, id_product, dev_speed;
+
 	/* Full-length configuration descriptor for finding an interface descriptor of EP */
 	PUCHAR		dsc_conf;
 	/* alt settings for interface. use SHORT for treating unassigned case(-1) */

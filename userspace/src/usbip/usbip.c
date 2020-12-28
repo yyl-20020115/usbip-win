@@ -121,14 +121,12 @@ static const struct command cmds[] = {
 		.help = "Uninstall drivers for usbip",
 		.usage = usbip_uninstall_usage
 	},
-#if 0 /* Not implemented yet */
 	{
 		.name  = "port",
 		.fn    = usbip_port_show,
 		.help  = "Show imported USB devices",
 		.usage = NULL
 	},
-#endif
 	{ NULL, NULL, NULL, NULL }
 };
 

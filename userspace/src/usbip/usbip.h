@@ -34,6 +34,7 @@ int usbip_install(int argc, char* argv[]);
 int usbip_uninstall(int argc, char *argv[]);
 int usbip_install_ude(int argc, char *argv[]);
 int usbip_uninstall_ude(int argc, char *argv[]);
+int usbip_port_show(int argc, char* argv[]);
 
 void usbip_attach_usage(void);
 void usbip_detach_usage(void);

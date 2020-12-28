@@ -8,6 +8,7 @@
 
 extern NTSTATUS vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT fo);
 extern NTSTATUS vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st);
+extern NTSTATUS vhub_get_imported_devs(pvhub_dev_t vhub, pioctl_usbip_vhci_imported_dev_t idevs, PULONG poutlen);
 extern NTSTATUS vhci_eject_port(pvhci_dev_t vhci, ULONG port);
 extern NTSTATUS vhci_ioctl_user_request(pvhci_dev_t vhci, PVOID buffer, ULONG inlen, PULONG poutlen);
 
@@ -96,7 +97,10 @@ vhci_ioctl_vhci(pvhci_dev_t vhci, PIO_STACK_LOCATION irpstack, ULONG ioctl_code,
 		break;
 	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
 		if (*poutlen == sizeof(ioctl_usbip_vhci_get_ports_status))
-			status = vhub_get_ports_status(VHUB_FROM_VHCI(vhci), (ioctl_usbip_vhci_get_ports_status*)buffer);
+			status = vhub_get_ports_status(VHUB_FROM_VHCI(vhci), (ioctl_usbip_vhci_get_ports_status *)buffer);
+		break;
+	case IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES:
+		status = vhub_get_imported_devs(VHUB_FROM_VHCI(vhci), (pioctl_usbip_vhci_imported_dev_t)buffer, poutlen);
 		break;
 	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
 		if (inlen == sizeof(ioctl_usbip_vhci_unplug))

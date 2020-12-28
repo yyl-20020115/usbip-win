@@ -72,7 +72,7 @@ usbip_vhci_driver_close(HANDLE hdev)
 static int
 usbip_vhci_get_ports_status(HANDLE hdev, ioctl_usbip_vhci_get_ports_status *st)
 {
-	unsigned long len;
+	unsigned long	len;
 
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_GET_PORTS_STATUS,
 		NULL, 0, st, sizeof(ioctl_usbip_vhci_get_ports_status), &len, NULL)) {
@@ -95,6 +95,48 @@ usbip_vhci_get_free_port(HANDLE hdev)
 			return (i + 1);
 	}
 	return -1;
+}
+
+static int
+get_n_used_ports(HANDLE hdev)
+{
+	ioctl_usbip_vhci_get_ports_status	status;
+
+	if (usbip_vhci_get_ports_status(hdev, &status))
+		return -1;
+	return status.n_used_ports;
+}
+
+ioctl_usbip_vhci_imported_dev *
+usbip_vhci_get_imported_devs(HANDLE hdev)
+{
+	ioctl_usbip_vhci_imported_dev	*idevs;
+	int	n_used_ports;
+	unsigned long	len_out, len_returned;
+
+	n_used_ports = get_n_used_ports(hdev);
+	if (n_used_ports < 0) {
+		err("failed to get the number of used ports");
+		return NULL;
+	}
+
+	len_out = sizeof(ioctl_usbip_vhci_imported_dev) * (n_used_ports + 1);
+	idevs = (ioctl_usbip_vhci_imported_dev *)malloc(len_out);
+	if (idevs == NULL) {
+		err("out of memory");
+		return NULL;
+	}
+
+	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES,
+		NULL, 0, idevs, len_out, &len_returned, NULL)) {
+		return idevs;
+	}
+	else {
+		err("failed to get imported devices: 0x%lx", GetLastError());
+	}
+
+	free(idevs);
+	return NULL;
 }
 
 int

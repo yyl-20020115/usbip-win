@@ -54,6 +54,7 @@ DEFINE_GUID(USBIP_NOTIFY_DEVICE_ARRIVAL_EVENT,
 #define IOCTL_USBIP_VHCI_UNPLUG_HARDWARE	USBIP_VHCI_IOCTL(0x1)
 #define IOCTL_USBIP_VHCI_EJECT_HARDWARE		USBIP_VHCI_IOCTL(0x2)
 #define IOCTL_USBIP_VHCI_GET_PORTS_STATUS	USBIP_VHCI_IOCTL(0x3)
+#define IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES	USBIP_VHCI_IOCTL(0x4)
 
 #define MAX_VHCI_INSTANCE_ID	16
 
@@ -101,6 +102,14 @@ typedef struct _ioctl_usbip_vhci_unplug
 	signed char addr;
 	char unused[3];
 } ioctl_usbip_vhci_unplug, *pvhci_unpluginfo_t;
+
+typedef struct usbip_imported_device {
+	char		port;
+	enum usbip_device_status	status;
+	unsigned short	vendor;
+	unsigned short	product;
+	unsigned char	speed;
+} ioctl_usbip_vhci_imported_dev, *pioctl_usbip_vhci_imported_dev_t;
 
 typedef struct _USBIP_VHCI_EJECT_HARDWARE
 {

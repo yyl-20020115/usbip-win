@@ -54,6 +54,60 @@ ioctl_get_ports_status(WDFQUEUE queue, WDFREQUEST req)
 	return STATUS_SUCCESS;
 }
 
+static VOID
+get_imported_devices(pctx_vhci_t vhci, pioctl_usbip_vhci_imported_dev_t idevs, ULONG n_idevs_max)
+{
+	pioctl_usbip_vhci_imported_dev_t	idev = idevs;
+	ULONG	n_idevs = 0;
+	ULONG	i;
+
+	TRD(IOCTL, "Enter\n");
+
+	WdfWaitLockAcquire(vhci->lock, NULL);
+
+	for (i = 0; i != vhci->n_max_ports && n_idevs < n_idevs_max - 1; i++) {
+		pctx_vusb_t	vusb = vhci->vusbs[i];
+		if (vusb != NULL) {
+			idev->port = (CHAR)(i + 1);
+			idev->status = 2; /* SDEV_ST_USED */;
+			idev->vendor = vusb->id_vendor;
+			idev->product = vusb->id_product;
+			idev->speed = (UCHAR)vusb->dev_speed;
+			idev++;
+		}
+	}
+
+	WdfWaitLockRelease(vhci->lock);
+
+	idev->port = 0xff; /* end of mark */
+
+	TRD(IOCTL, "Leave\n");
+}
+
+static NTSTATUS
+ioctl_get_imported_devices(WDFQUEUE queue, WDFREQUEST req, size_t outlen)
+{
+	pctx_vhci_t	vhci;
+	pioctl_usbip_vhci_imported_dev_t	idevs;
+	ULONG	n_idevs_max;
+	NTSTATUS	status;
+
+	status = WdfRequestRetrieveOutputBuffer(req, outlen, &idevs, NULL);
+	if (NT_ERROR(status))
+		return status;
+
+	n_idevs_max = (ULONG)(outlen / sizeof(ioctl_usbip_vhci_imported_dev));
+	if (n_idevs_max == 0)
+		return STATUS_INVALID_PARAMETER;
+
+	vhci = *TO_PVHCI(queue);
+
+	get_imported_devices(vhci, idevs, n_idevs_max);
+	WdfRequestSetInformation(req, outlen);
+
+	return STATUS_SUCCESS;
+}
+
 static NTSTATUS
 ioctl_plugin_vusb(WDFQUEUE queue, WDFREQUEST req, size_t inlen)
 {
@@ -123,6 +177,9 @@ io_device_control(_In_ WDFQUEUE queue, _In_ WDFREQUEST req,
 	switch (ioctl_code) {
 	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:
 		status = ioctl_get_ports_status(queue, req);
+		break;
+	case IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES:
+		status = ioctl_get_imported_devices(queue, req, outlen);
 		break;
 	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
 		status = ioctl_plugin_vusb(queue, req, inlen);
