@@ -1,6 +1,7 @@
 #include "vhci_driver.h"
 #include "vhci_plugin.tmh"
 
+#include "usbip_proto.h"
 #include "usbip_vhci_api.h"
 #include "devconf.h"
 
