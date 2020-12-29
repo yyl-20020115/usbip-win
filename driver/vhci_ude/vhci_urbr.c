@@ -163,21 +163,8 @@ submit_urbr_unlink(pctx_ep_t ep, unsigned long seq_num_unlink)
 static VOID
 urbr_cancelled(_In_ WDFREQUEST req)
 {
-	purb_req_t	urbr;
-	pctx_vusb_t	vusb;
-
-	if (req == NULL)
-		return;
-
-	urbr = (purb_req_t)WdfRequestGetInformation(req);
-
-	if (urbr == NULL)
-		return;
-
-	vusb = urbr->ep->vusb;
-
-	if (vusb == NULL)
-		return;
+	purb_req_t	urbr = (purb_req_t)WdfRequestGetInformation(req);
+	pctx_vusb_t	vusb = urbr->ep->vusb;
 
 	WdfSpinLockAcquire(vusb->spin_lock);
 	RemoveEntryListInit(&urbr->list_state);
@@ -196,15 +183,10 @@ urbr_cancelled(_In_ WDFREQUEST req)
 NTSTATUS
 submit_urbr(purb_req_t urbr)
 {
-	pctx_vusb_t	vusb;
+	pctx_vusb_t	vusb = urbr->ep->vusb;
 	WDFREQUEST	req_read;
 	NTSTATUS	status = STATUS_PENDING;
 
-	if (urbr == NULL) {
-		TRE(URBR, "urbr is NULL");
-		return STATUS_UNSUCCESSFUL;
-	}
-	vusb = urbr->ep->vusb;
 	WdfSpinLockAcquire(vusb->spin_lock);
 
 	if (vusb->urbr_sent_partial || vusb->pending_req_read == NULL) {

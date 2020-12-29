@@ -115,7 +115,7 @@ add_ep(pctx_vusb_t vusb, PUDECXUSBENDPOINT_INIT *pepinit, PUSB_ENDPOINT_DESCRIPT
 	queue = create_queue_ep(ep);
 	if (queue == NULL) {
 		WdfObjectDelete(ude_ep);
-		TRE(VUSB, "Leave: STATUS_UNSUCCESSFUL");
+		TRE(VUSB, "failed to create queue: STATUS_UNSUCCESSFUL");
 		return STATUS_UNSUCCESSFUL;
 	}
 	UdecxUsbEndpointSetWdfIoQueue(ude_ep, queue);
@@ -149,8 +149,7 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	pctx_vusb_t	vusb = TO_VUSB(udev);
 	NTSTATUS	status;
 
-	TRD(VUSB, "Enter: >bEndpointAddress=0x%x, bInterval: 0x%x",
-		epcreate->EndpointDescriptor->bEndpointAddress,
+	TRD(VUSB, "Enter: epaddr: 0x%x, interval: 0x%x", (ULONG)epcreate->EndpointDescriptor->bEndpointAddress,
 		(ULONG)epcreate->EndpointDescriptor->bInterval);
 
 	status = add_ep(vusb, &epcreate->UdecxUsbEndpointInit, epcreate->EndpointDescriptor);
@@ -160,17 +159,16 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	return status;
 }
 
-static NTSTATUS
+static VOID
 release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
-	TRD(VUSB, "Enter: %!epconf!", params->ReleasedEndpointsCount);
+	TRD(VUSB, "Enter: ReleasedEndpointsCount=%d", params->ReleasedEndpointsCount);
 
 	for (ULONG i = 0; i < params->ReleasedEndpointsCount; i++) {
 		pctx_ep_t	ep = TO_EP(params->ReleasedEndpoints[i]);
 		WdfIoQueuePurgeSynchronously(ep->queue);
 		TRD(VUSB, "Released ep->addr=0x%x!", ep->addr);
 	}
-	return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -213,11 +211,11 @@ static VOID
 ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
 	pctx_vusb_t	vusb = TO_VUSB(udev);
-	NTSTATUS	status = STATUS_UNSUCCESSFUL;
+	NTSTATUS	status = STATUS_SUCCESS;
 
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
 
-	status = release_ep(params);
+	release_ep(params);
 	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE)) {
 		WdfRequestComplete(req, status);
 		TRD(VUSB, "Leave: %!STATUS!", status);
