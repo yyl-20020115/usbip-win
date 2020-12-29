@@ -34,7 +34,7 @@ dsc_find_intf_by_ep(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, PUSB_ENDPOINT_DESCRI
 {
 	PVOID	start = dsc_conf;
 
-	while (TRUE) {
+	while (start != NULL) {
 		PUSB_INTERFACE_DESCRIPTOR	dsc_intf;
 
 		dsc_intf = (PUSB_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, start, USB_INTERFACE_DESCRIPTOR_TYPE);
@@ -79,7 +79,7 @@ dsc_conf_get_n_intfs(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 	PVOID	start = dsc_conf;
 	ULONG	n_intfs = 0;
 
-	while (TRUE) {
+	while (start != NULL) {
 		PUSB_COMMON_DESCRIPTOR	desc = USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, start, USB_INTERFACE_DESCRIPTOR_TYPE);
 		if (desc == NULL)
 			break;
