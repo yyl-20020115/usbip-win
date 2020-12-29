@@ -202,7 +202,7 @@ set_intf_for_ep(pctx_vusb_t vusb, WDFREQUEST req, PUDECX_ENDPOINTS_CONFIGURE_PAR
 
 	vusb->intf_altsettings[intf_num] = altsetting;
 
-	TRE(VUSB, "SELECT INTERFACE: NUM:%d Alt:%d", intf_num, altsetting);
+	TRD(VUSB, "SELECT INTERFACE: NUM:%d Alt:%d", intf_num, altsetting);
 
 	return submit_req_select(vusb->ep_default, req, FALSE, 0, intf_num, altsetting);
 }
