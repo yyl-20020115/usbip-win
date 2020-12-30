@@ -192,21 +192,11 @@ submit_urbr(purb_req_t urbr)
 	if (vusb->urbr_sent_partial || vusb->pending_req_read == NULL) {
 		if (urbr->type == URBR_TYPE_URB) {
 			status = WdfRequestMarkCancelableEx(urbr->req, urbr_cancelled);
-			if (!NT_SUCCESS(status)) {
-				RemoveEntryListInit(&urbr->list_state);
-				RemoveEntryListInit(&urbr->list_all);
-				if (vusb->urbr_sent_partial == urbr) {
-					vusb->urbr_sent_partial = NULL;
-					vusb->len_sent_partial = 0;
-				}
+			if (NT_ERROR(status)) {
+				WdfSpinLockRelease(vusb->spin_lock);
+				TRD(URBR, "failed to go pending. Already cancelled?: %!URBR!, %!STATUS!", urbr, status);
+				return STATUS_CANCELLED;
 			}
-			WdfSpinLockRelease(vusb->spin_lock);
-			if (!NT_SUCCESS(status)) {
-				WdfRequestComplete(urbr->req, status);
-				submit_urbr_unlink(urbr->ep, urbr->seq_num);
-				TRE(URBR, "cancelled urbr destroyed: %!URBR!, %!STATUS!", urbr, status);
-			}
-			WdfSpinLockAcquire(vusb->spin_lock);
 		}
 		InsertTailList(&vusb->head_urbr_pending, &urbr->list_state);
 		InsertTailList(&vusb->head_urbr, &urbr->list_all);
@@ -231,21 +221,11 @@ submit_urbr(purb_req_t urbr)
 	if (status == STATUS_SUCCESS) {
 		if (urbr->type == URBR_TYPE_URB) {
 			status = WdfRequestMarkCancelableEx(urbr->req, urbr_cancelled);
-			if (!NT_SUCCESS(status)) {
-				RemoveEntryListInit(&urbr->list_state);
-				RemoveEntryListInit(&urbr->list_all);
-				if (vusb->urbr_sent_partial == urbr) {
-					vusb->urbr_sent_partial = NULL;
-					vusb->len_sent_partial = 0;
-				}
+			if (NT_ERROR(status)) {
+				WdfSpinLockRelease(vusb->spin_lock);
+				TRD(URBR, "Already cancelled request?: %!URBR!, %!STATUS!", urbr, status);
+				return STATUS_CANCELLED;
 			}
-			WdfSpinLockRelease(vusb->spin_lock);
-			if (!NT_SUCCESS(status)) {
-				WdfRequestComplete(urbr->req, status);
-				submit_urbr_unlink(urbr->ep, urbr->seq_num);
-				TRE(URBR, "cancelled urbr destroyed: %!URBR!, %!STATUS!", urbr, status);
-			}
-			WdfSpinLockAcquire(vusb->spin_lock);
 		}
 		if (vusb->len_sent_partial == 0) {
 			vusb->urbr_sent_partial = NULL;
