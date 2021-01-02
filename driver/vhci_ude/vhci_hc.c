@@ -30,11 +30,13 @@ controller_reset(WDFDEVICE UdecxWdfDevice)
 	TRW(VHCI, "Enter");
 }
 
-static BOOLEAN
+static PAGEABLE BOOLEAN
 create_ucx_controller(WDFDEVICE hdev)
 {
 	UDECX_WDF_DEVICE_CONFIG	conf;
 	NTSTATUS	status;
+
+	PAGED_CODE();
 
 	UDECX_WDF_DEVICE_CONFIG_INIT(&conf, controller_query_usb_capability);
 	conf.EvtUdecxWdfDeviceReset = controller_reset;
@@ -50,21 +52,25 @@ create_ucx_controller(WDFDEVICE hdev)
 	return TRUE;
 }
 
-static VOID
+static PAGEABLE VOID
 setup_fileobject(PWDFDEVICE_INIT dinit)
 {
 	WDF_OBJECT_ATTRIBUTES	attrs;
 	WDF_FILEOBJECT_CONFIG	conf;
+
+	PAGED_CODE();
 
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, pctx_vusb_t);
 	WDF_FILEOBJECT_CONFIG_INIT(&conf, NULL, NULL, NULL);
 	WdfDeviceInitSetFileObjectConfig(dinit, &conf, &attrs);
 }
 
-static VOID
+static PAGEABLE VOID
 reg_devintf(WDFDEVICE hdev)
 {
 	NTSTATUS	status;
+
+	PAGED_CODE();
 
 	status = WdfDeviceCreateDeviceInterface(hdev, &GUID_DEVINTERFACE_VHCI_USBIP, NULL);
 	if (NT_ERROR(status)) {
