@@ -38,6 +38,8 @@ abort_all_pending_urbrs(pctx_vusb_t vusb)
 		urbr = CONTAINING_RECORD(vusb->head_urbr.Flink, urb_req_t, list_all);
 		RemoveEntryListInit(&urbr->list_all);
 		RemoveEntryListInit(&urbr->list_state);
+		if (!unmark_cancelable_urbr(urbr))
+			continue;
 		WdfSpinLockRelease(vusb->spin_lock);
 
 		abort_pending_urbr(urbr);

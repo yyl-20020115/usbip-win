@@ -68,5 +68,7 @@ submit_req_reset_pipe(pctx_ep_t ep, WDFREQUEST req);
 extern NTSTATUS
 store_urbr(WDFREQUEST req_read, purb_req_t urbr);
 
+extern BOOLEAN
+unmark_cancelable_urbr(purb_req_t urbr);
 extern void
 complete_urbr(purb_req_t urbr, NTSTATUS status);

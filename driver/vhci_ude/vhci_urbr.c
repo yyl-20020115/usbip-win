@@ -175,9 +175,14 @@ urbr_cancelled(_In_ WDFREQUEST req)
 	}
 	WdfSpinLockRelease(vusb->spin_lock);
 
-	submit_urbr_unlink(urbr->ep, urbr->seq_num);
-	TRD(URBR, "cancelled urbr destroyed: %!URBR!", urbr);
-	complete_urbr(urbr, STATUS_CANCELLED);
+	if (urbr != NULL && urbr->seq_num != 0) {
+		submit_urbr_unlink(urbr->ep, urbr->seq_num);
+		TRD(URBR, "cancelled urbr destroyed: %!URBR!", urbr);
+		complete_urbr(urbr, STATUS_CANCELLED);
+	}
+	else {
+		UdecxUrbCompleteWithNtStatus(req, STATUS_CANCELLED);
+	}
 }
 
 NTSTATUS
@@ -305,6 +310,23 @@ submit_req_reset_pipe(pctx_ep_t ep, WDFREQUEST req)
 	return submit_urbr_free(urbr);
 }
 
+BOOLEAN
+unmark_cancelable_urbr(purb_req_t urbr)
+{
+	WDFREQUEST	req;
+	NTSTATUS	status;
+
+	req = urbr->req;
+	if (req == NULL)
+		return TRUE;
+	if (urbr->type != URBR_TYPE_URB)
+		return TRUE;
+	status = WdfRequestUnmarkCancelable(req);
+	if (status == STATUS_CANCELLED)
+		return FALSE;
+	return TRUE;
+}
+
 void
 complete_urbr(purb_req_t urbr, NTSTATUS status)
 {
@@ -315,12 +337,11 @@ complete_urbr(purb_req_t urbr, NTSTATUS status)
 		if (urbr->type != URBR_TYPE_URB)
 			WdfRequestComplete(req, status);
 		else {
-			if (status != STATUS_CANCELLED)
-				WdfRequestUnmarkCancelable(req);
 			if (status == STATUS_SUCCESS)
 				UdecxUrbComplete(req, urbr->u.urb->UrbHeader.Status);
-			else 
+			else {
 				UdecxUrbCompleteWithNtStatus(req, status);
+			}
 		}
 	}
 	free_urbr(urbr);

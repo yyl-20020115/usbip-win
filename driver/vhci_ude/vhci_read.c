@@ -89,10 +89,13 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 	}
 
 	if (status != STATUS_SUCCESS) {
+		BOOLEAN	unmarked;
 		RemoveEntryListInit(&urbr->list_all);
+		unmarked = unmark_cancelable_urbr(urbr);
 		WdfSpinLockRelease(vusb->spin_lock);
 
-		complete_urbr(urbr, status);
+		if (unmarked)
+			complete_urbr(urbr, status);
 	}
 	else {
 		if (vusb->len_sent_partial == 0) {

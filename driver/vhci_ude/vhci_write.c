@@ -52,7 +52,15 @@ write_vusb(pctx_vusb_t vusb, WDFREQUEST req_write)
 	}
 
 	status = fetch_urbr(urbr, hdr);
-	complete_urbr(urbr, status);
+
+	WdfSpinLockAcquire(vusb->spin_lock);
+	if (unmark_cancelable_urbr(urbr)) {
+		WdfSpinLockRelease(vusb->spin_lock);
+		complete_urbr(urbr, status);
+	}
+	else {
+		WdfSpinLockRelease(vusb->spin_lock);
+	}
 out:
 	TRD(WRITE, "Leave: %!STATUS!", status);
 }
