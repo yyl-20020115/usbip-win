@@ -51,7 +51,7 @@ setup_with_dsc_dev(pctx_vusb_t vusb, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 static BOOLEAN
 setup_with_dsc_conf(pctx_vusb_t vusb, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 {
-	vusb->dsc_conf = ExAllocatePoolWithTag(NonPagedPool, dsc_conf->wTotalLength, VHCI_POOLTAG);
+	vusb->dsc_conf = ExAllocatePoolWithTag(PagedPool, dsc_conf->wTotalLength, VHCI_POOLTAG);
 	if (vusb->dsc_conf == NULL) {
 		TRE(PLUGIN, "failed to allocate configuration descriptor");
 		return FALSE;
@@ -61,7 +61,7 @@ setup_with_dsc_conf(pctx_vusb_t vusb, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
 	if (dsc_conf->bNumInterfaces > 0) {
 		int	i;
 
-		vusb->intf_altsettings = (PSHORT)ExAllocatePoolWithTag(NonPagedPool, dsc_conf->bNumInterfaces * sizeof(SHORT), VHCI_POOLTAG);
+		vusb->intf_altsettings = (PSHORT)ExAllocatePoolWithTag(PagedPool, dsc_conf->bNumInterfaces * sizeof(SHORT), VHCI_POOLTAG);
 		if (vusb->intf_altsettings == NULL) {
 			TRE(PLUGIN, "failed to allocate alternative settings for interfaces");
 			return FALSE;

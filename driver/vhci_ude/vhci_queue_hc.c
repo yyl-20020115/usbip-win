@@ -33,7 +33,7 @@ create_queue_hc(pctx_vhci_t vhci)
 
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, pctx_vhci_t);
 	attrs.SynchronizationScope = WdfSynchronizationScopeQueue;
-
+	attrs.ExecutionLevel = WdfExecutionLevelPassive;
 	status = WdfIoQueueCreate(vhci->hdev, &conf, &attrs, &queue);
 	if (NT_SUCCESS(status)) {
 		*TO_PVHCI(queue) = vhci;
