@@ -82,8 +82,6 @@ reg_devintf(WDFDEVICE hdev)
 	}
 }
 
-PVOID vhci_pooltag_begin;
-
 static BOOLEAN
 setup_vhci(pctx_vhci_t vhci)
 {
@@ -99,7 +97,7 @@ setup_vhci(pctx_vhci_t vhci)
 	}
 	vhci->n_max_ports = MAX_HUB_PORTS;
 
-	vhci->vusbs = vhci_pooltag_begin = ExAllocatePoolWithTag(NonPagedPool, sizeof(pctx_vusb_t) * vhci->n_max_ports, VHCI_POOLTAG);
+	vhci->vusbs = ExAllocatePoolWithTag(NonPagedPool, sizeof(pctx_vusb_t) * vhci->n_max_ports, VHCI_POOLTAG);
 	if (vhci->vusbs == NULL) {
 		TRE(VHCI, "failed to allocate ports: out of memory");
 		return FALSE;
@@ -107,6 +105,18 @@ setup_vhci(pctx_vhci_t vhci)
 	RtlZeroMemory(vhci->vusbs, sizeof(pctx_vusb_t) * vhci->n_max_ports);
 
 	return TRUE;
+}
+
+static VOID
+vhci_cleanup(_In_ WDFOBJECT hdev)
+{
+	pctx_vhci_t vhci;
+
+	TRD(VHCI, "Enter");
+
+	vhci = TO_VHCI(hdev);
+	if (vhci->vusbs != NULL)
+		ExFreePoolWithTag(vhci->vusbs, VHCI_POOLTAG);
 }
 
 PAGEABLE NTSTATUS
@@ -132,11 +142,15 @@ evt_add_vhci(_In_ WDFDRIVER drv, _Inout_ PWDFDEVICE_INIT dinit)
 	setup_fileobject(dinit);
 
 	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, ctx_vhci_t);
+	attrs.EvtCleanupCallback = vhci_cleanup;
 	status = WdfDeviceCreate(&dinit, &attrs, &hdev);
 	if (!NT_SUCCESS(status)) {
 		TRE(VHCI, "failed to create wdf device: %!STATUS!", status);
 		goto out;
 	}
+
+	vhci = TO_VHCI(hdev);
+	vhci->vusbs = NULL;
 
 	if (!create_ucx_controller(hdev)) {
 		status = STATUS_UNSUCCESSFUL;
@@ -145,7 +159,6 @@ evt_add_vhci(_In_ WDFDRIVER drv, _Inout_ PWDFDEVICE_INIT dinit)
 
 	reg_devintf(hdev);
 
-	vhci = TO_VHCI(hdev);
 	vhci->hdev = hdev;
 	if (!setup_vhci(vhci)) {
 		status = STATUS_UNSUCCESSFUL;

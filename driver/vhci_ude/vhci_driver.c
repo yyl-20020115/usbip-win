@@ -14,15 +14,12 @@ cleanup_vhci(_In_ WDFOBJECT drvobj)
 	WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)drvobj));
 }
 
-extern PVOID vhci_pooltag_begin;
-
 static PAGEABLE VOID
 driver_unload(_In_ WDFDRIVER drvobj)
 {
 	PAGED_CODE();
 	TRD(DRIVER, "Enter");
 
-	ExFreePoolWithTag(vhci_pooltag_begin, VHCI_POOLTAG);
 	WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)drvobj));
 }
 
