@@ -82,4 +82,8 @@ typedef struct _ctx_ep
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_ep_t, TO_EP)
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(pctx_ep_t, TO_PEP)
 
+#define VUSB_CREATING	((pctx_vusb_t)-1)
+#define VUSB_DELETING	((pctx_vusb_t)1)
+#define VUSB_IS_VALID(vusb)	((vusb) != NULL && (vusb) != VUSB_CREATING && (vusb) != VUSB_DELETING)
+
 EXTERN_C_END

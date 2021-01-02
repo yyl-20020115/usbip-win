@@ -344,7 +344,13 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 		return STATUS_OBJECT_NAME_COLLISION;
 	}
 
+	/* assign a temporary non-null value indicating on-going vusb allocation */
+	vhci->vusbs[pluginfo->port - 1] = VUSB_CREATING;
+	WdfSpinLockRelease(vhci->spin_lock);
+
 	vusb = vusb_plugin(vhci, pluginfo);
+
+	WdfSpinLockAcquire(vhci->spin_lock);
 	if (vusb != NULL) {
 		WDFFILEOBJECT	fo = WdfRequestGetFileObject(req);
 		if (fo != NULL) {
@@ -354,10 +360,9 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 		else {
 			TRE(PLUGIN, "empty fileobject. setup failed");
 		}
-		vhci->vusbs[pluginfo->port - 1] = vusb;
 		status = STATUS_SUCCESS;
 	}
-
+	vhci->vusbs[pluginfo->port - 1] = vusb;
 	WdfSpinLockRelease(vhci->spin_lock);
 
 	if ((vusb != NULL) && (vusb->is_simple_ep_alloc)) {

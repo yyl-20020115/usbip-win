@@ -78,8 +78,15 @@ plugout_all_vusbs(pctx_vhci_t vhci)
 		pctx_vusb_t	vusb = vhci->vusbs[i];
 		if (vusb == NULL)
 			continue;
+
+		vhci->vusbs[i] = VUSB_DELETING;
+		WdfSpinLockRelease(vhci->spin_lock);
+
 		status = vusb_plugout(vusb);
+
+		WdfSpinLockAcquire(vhci->spin_lock);
 		if (NT_ERROR(status)) {
+			vhci->vusbs[i] = vusb;
 			WdfSpinLockRelease(vhci->spin_lock);
 			return STATUS_UNSUCCESSFUL;
 		}
@@ -110,8 +117,14 @@ plugout_vusb(pctx_vhci_t vhci, ULONG port)
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
+	vhci->vusbs[port - 1] = VUSB_DELETING;
+	WdfSpinLockRelease(vhci->spin_lock);
+
 	status = vusb_plugout(vusb);
+
+	WdfSpinLockAcquire(vhci->spin_lock);
 	if (NT_ERROR(status)) {
+		vhci->vusbs[port - 1] = vusb;
 		WdfSpinLockRelease(vhci->spin_lock);
 		return STATUS_UNSUCCESSFUL;
 	}

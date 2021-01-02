@@ -67,7 +67,7 @@ get_imported_devices(pctx_vhci_t vhci, pioctl_usbip_vhci_imported_dev_t idevs, U
 
 	for (i = 0; i != vhci->n_max_ports && n_idevs < n_idevs_max - 1; i++) {
 		pctx_vusb_t	vusb = vhci->vusbs[i];
-		if (vusb != NULL) {
+		if (VUSB_IS_VALID(vusb)) {
 			idev->port = (CHAR)(i + 1);
 			idev->status = 2; /* SDEV_ST_USED */;
 			idev->vendor = vusb->id_vendor;
