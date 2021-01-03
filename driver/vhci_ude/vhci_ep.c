@@ -159,18 +159,6 @@ ep_add(_In_ UDECXUSBDEVICE udev, _In_ PUDECX_USB_ENDPOINT_INIT_AND_METADATA epcr
 	return status;
 }
 
-static VOID
-release_ep(PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
-{
-	TRD(VUSB, "Enter: ReleasedEndpointsCount=%d", params->ReleasedEndpointsCount);
-
-	for (ULONG i = 0; i < params->ReleasedEndpointsCount; i++) {
-		pctx_ep_t	ep = TO_EP(params->ReleasedEndpoints[i]);
-		WdfIoQueuePurgeSynchronously(ep->queue);
-		TRD(VUSB, "Released ep->addr=0x%x!", ep->addr);
-	}
-}
-
 static NTSTATUS
 set_intf_for_ep(pctx_vusb_t vusb, WDFREQUEST req, PUDECX_ENDPOINTS_CONFIGURE_PARAMS params)
 {
@@ -215,13 +203,6 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 
 	TRD(VUSB, "Enter: %!epconf!", params->ConfigureType);
 
-	release_ep(params);
-	if ((params->ConfigureType == UdecxEndpointsConfigureTypeEndpointsReleasedOnly) || (vusb->invalid == TRUE)) {
-		WdfRequestComplete(req, status);
-		TRD(VUSB, "Leave: %!STATUS!", status);
-		return;
-	}
-
 	switch (params->ConfigureType) {
 	case UdecxEndpointsConfigureTypeDeviceInitialize:
 		/* FIXME: UDE framework seems to not call SET CONFIGURATION if a USB has multiple interfaces.
@@ -235,6 +216,8 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		break;
 	case UdecxEndpointsConfigureTypeInterfaceSettingChange:
 		status = set_intf_for_ep(vusb, req, params);
+		break;
+	case UdecxEndpointsConfigureTypeEndpointsReleasedOnly:
 		break;
 	default:
 		TRE(VUSB, "unhandled configure type: %!epconf!", params->ConfigureType);

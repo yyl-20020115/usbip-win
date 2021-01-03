@@ -55,15 +55,21 @@ vusb_plugout(pctx_vusb_t vusb)
 {
 	NTSTATUS	status;
 
+	/*
+	 * invalidate first to prevent requests from an upper layer.
+	 * If requests are consistently fed into a vusb about to be plugged out,
+	 * a live deadlock may occur where vusb aborts pending urbs indefinately. 
+	 */
+	vusb->invalid = TRUE;
 	abort_pending_req_read(vusb);
 	abort_all_pending_urbrs(vusb);
 
 	status = UdecxUsbDevicePlugOutAndDelete(vusb->ude_usbdev);
 	if (NT_ERROR(status)) {
+		vusb->invalid = FALSE;
 		TRD(PLUGIN, "failed to plug out: %!STATUS!", status);
 		return status;
 	}
-	vusb->invalid = TRUE;
 	return STATUS_SUCCESS;
 }
 

@@ -16,7 +16,11 @@ internal_device_control(_In_ WDFQUEUE queue, _In_ WDFREQUEST req,
 		TRE(EP, "unexpected ioctl: %!IOCTL!", ioctl_code);
 	}
 	else {
-		status = submit_req_urb(*TO_PEP(queue), req);
+		pctx_ep_t	ep = *TO_PEP(queue);
+		if (ep->vusb->invalid)
+			status = STATUS_DEVICE_DOES_NOT_EXIST;
+		else
+			status = submit_req_urb(*TO_PEP(queue), req);
 	}
 
 	if (status != STATUS_PENDING)
