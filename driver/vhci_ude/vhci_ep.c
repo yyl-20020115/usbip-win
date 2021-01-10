@@ -215,7 +215,13 @@ ep_configure(_In_ UDECXUSBDEVICE udev, _In_ WDFREQUEST req, _In_ PUDECX_ENDPOINT
 		status = submit_req_select(vusb->ep_default, req, 1, params->NewConfigurationValue, 0, 0);
 		break;
 	case UdecxEndpointsConfigureTypeInterfaceSettingChange:
-		status = set_intf_for_ep(vusb, req, params);
+		/*
+		 * When a device is being detached, set_intf for the invalidated device is avoided.
+		 * Error status for set_intf seems to disturb detaching.
+		 */
+		if (!vusb->invalid) {
+			status = set_intf_for_ep(vusb, req, params);
+		}
 		break;
 	case UdecxEndpointsConfigureTypeEndpointsReleasedOnly:
 		break;

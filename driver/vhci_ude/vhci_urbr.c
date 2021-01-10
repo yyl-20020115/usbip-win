@@ -194,6 +194,12 @@ submit_urbr(purb_req_t urbr)
 
 	WdfSpinLockAcquire(vusb->spin_lock);
 
+	if (vusb->invalid) {
+		WdfSpinLockRelease(vusb->spin_lock);
+		TRD(URBR, "failed to submit urbr: invalidated vusb");
+		return STATUS_DEVICE_NOT_CONNECTED;
+	}
+
 	if (vusb->urbr_sent_partial || vusb->pending_req_read == NULL) {
 		if (urbr->type == URBR_TYPE_URB) {
 			status = WdfRequestMarkCancelableEx(urbr->req, urbr_cancelled);
