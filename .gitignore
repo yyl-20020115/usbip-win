@@ -1,4 +1,5 @@
 *~
+*.aps
 *.vcxproj.user
 /.vs
 /Debug
