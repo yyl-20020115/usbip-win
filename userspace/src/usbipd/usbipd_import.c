@@ -79,6 +79,8 @@ recv_request_import(SOCKET sockfd)
 		return -1;
 	}
 
+	usbip_net_set_keepalive(sockfd);
+
 	/* should set TCP_NODELAY for usbip */
 	usbip_net_set_nodelay(sockfd);
 

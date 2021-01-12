@@ -4,6 +4,7 @@
  */
 
 #include <ws2tcpip.h>
+#include <mstcpip.h>
 
 #include "usbip_common.h"
 #include "usbip_network.h"
@@ -203,16 +204,53 @@ int usbip_net_set_nodelay(SOCKET sockfd)
 	return ret;
 }
 
+unsigned
+get_keepalive_timeout(void)
+{
+	char	env_timeout[32];
+	unsigned	timeout;
+	size_t	reqsize;
+
+	if (getenv_s(&reqsize, env_timeout, 32, "KEEPALIVE_TIMEOUT") != 0)
+		return 0;
+
+	if (sscanf_s(env_timeout, "%u", &timeout) == 1)
+		return timeout;
+	return 0;
+}
+
 int usbip_net_set_keepalive(SOCKET sockfd)
 {
-	const int val = 1;
-	int ret;
+	unsigned	timeout;
 
-	ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void *)&val, sizeof(val));
-	if (ret < 0)
-		dbg("setsockopt: SO_KEEPALIVE");
+	timeout = get_keepalive_timeout();
+	if (timeout > 0) {
+		struct tcp_keepalive	keepalive;
+		DWORD	outlen;
+		int	ret;
 
-	return ret;
+		/* windows tries 10 times every keepaliveinterval */
+		keepalive.onoff = 1;
+		keepalive.keepalivetime = timeout * 1000 / 2;
+		keepalive.keepaliveinterval = timeout * 1000 / 10 / 2;
+
+		ret = WSAIoctl(sockfd, SIO_KEEPALIVE_VALS, &keepalive, sizeof(keepalive), NULL, 0, &outlen, NULL, NULL);
+		if (ret != 0) {
+			dbg("failed to set KEEPALIVE via SIO_KEEPALIVE_VALS: 0x%lx", GetLastError());
+			return -1;
+		}
+		return 0;
+	}
+	else {
+		DWORD	val = 1;
+		int	ret;
+
+		ret = setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, (void *)&val, sizeof(val));
+		if (ret < 0) {
+			dbg("failed to set KEEPALIVE via setsockopt: 0x%lx", GetLastError());
+		}
+		return ret;
+	}
 }
 
 int usbip_net_set_v6only(SOCKET sockfd)
