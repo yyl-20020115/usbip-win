@@ -1,6 +1,6 @@
 #pragma once
 
-#include "usb_cspkt.h"
+#include "usb_util.h"
 
 #define CSPKT_DIRECTION(csp)		(csp)->bmRequestType.Dir
 #define CSPKT_REQUEST_TYPE(csp)		(csp)->bmRequestType.Type

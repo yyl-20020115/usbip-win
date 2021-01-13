@@ -24,6 +24,7 @@
     <ClCompile Include="devconf.c" />
     <ClCompile Include="pdu.c" />
     <ClCompile Include="strutil.c" />
+    <ClCompile Include="usb_util.c" />
     <ClCompile Include="usbd_helper.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -184,7 +185,7 @@
     <ClInclude Include="pdu.h" />
     <ClInclude Include="strutil.h" />
     <ClInclude Include="usbd_helper.h" />
-    <ClInclude Include="usb_cspkt.h" />
+    <ClInclude Include="usb_util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -4,7 +4,7 @@
 #include <wdf.h>
 #include <usbdi.h>
 
-#include "usb_cspkt.h"
+#include "usb_util.h"
 
 #include "vhci_dev.h"
 

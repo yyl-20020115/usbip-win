@@ -15,31 +15,9 @@ static void
 setup_with_dsc_dev(pctx_vusb_t vusb, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 {
 	if (dsc_dev) {
-		USHORT	dev_speed = 0;
-
 		vusb->id_vendor = dsc_dev->idVendor;
 		vusb->id_product = dsc_dev->idProduct;
-
-		switch (dsc_dev->bcdUSB) {
-		case 0x0100:
-			dev_speed = USB_SPEED_LOW;
-			break;
-		case 0x0110:
-			dev_speed = USB_SPEED_FULL;
-			break;
-		case 0x0200:
-			dev_speed = USB_SPEED_HIGH;
-			break;
-		case 0x0300:
-			dev_speed = USB_SPEED_SUPER;
-			break;
-		case 0x0310:
-			dev_speed = USB_SPEED_SUPER_PLUS;
-			break;
-		default:
-			break;
-		}
-		vusb->dev_speed = dev_speed;
+		vusb->dev_speed = get_usb_speed(dsc_dev->bcdUSB);
 	}
 	else {
 		vusb->id_vendor = 0;

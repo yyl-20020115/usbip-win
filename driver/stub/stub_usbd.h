@@ -3,7 +3,7 @@
 #include "stub_dev.h"
 
 #include "usbip_proto.h"
-#include "usb_cspkt.h"
+#include "usb_util.h"
 
 BOOLEAN get_usb_status(usbip_stub_dev_t *devstub, USHORT op, USHORT idx, PVOID buff, PUCHAR plen);
 BOOLEAN get_usb_device_desc(usbip_stub_dev_t *devstub, PUSB_DEVICE_DESCRIPTOR pdesc);
