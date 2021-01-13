@@ -3,6 +3,12 @@
 #include <usbdlib.h>
 
 PUSB_INTERFACE_DESCRIPTOR
+dsc_find_first_intf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
+{
+	return (PUSB_INTERFACE_DESCRIPTOR)USBD_ParseDescriptors(dsc_conf, dsc_conf->wTotalLength, dsc_conf, USB_INTERFACE_DESCRIPTOR_TYPE);
+}
+
+PUSB_INTERFACE_DESCRIPTOR
 dsc_find_intf(PUSB_CONFIGURATION_DESCRIPTOR dsc_conf, UCHAR intf_num, USHORT alt_setting)
 {
 	return USBD_ParseConfigurationDescriptorEx(dsc_conf, dsc_conf, intf_num, alt_setting, -1, -1, -1);

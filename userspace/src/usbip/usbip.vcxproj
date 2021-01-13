@@ -157,7 +157,6 @@
   <ItemGroup>
     <ClCompile Include="usbip.c" />
     <ClCompile Include="usbip_attach.c" />
-    <ClCompile Include="usbip_attach_ude.c" />
     <ClCompile Include="usbip_bind.c" />
     <ClCompile Include="usbip_detach.c" />
     <ClCompile Include="usbip_dscr.c" />
@@ -167,7 +166,6 @@
     <ClCompile Include="usbip_list_local.c" />
     <ClCompile Include="usbip_list_remote.c" />
     <ClCompile Include="usbip_port.c" />
-    <ClCompile Include="usbip_wudev.c" />
     <ClCompile Include="usbip_unbind.c" />
     <ClCompile Include="usbip_vhci.c" />
   </ItemGroup>
@@ -176,7 +174,6 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="usbip.h" />
     <ClInclude Include="usbip_dscr.h" />
-    <ClInclude Include="usbip_wudev.h" />
     <ClInclude Include="usbip_vhci.h" />
   </ItemGroup>
   <ItemGroup>

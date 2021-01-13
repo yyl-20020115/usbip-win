@@ -6,7 +6,7 @@
 #include "usbip_vhci_api.h"
 #include "vhci_pnp.h"
 
-extern NTSTATUS vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT fo);
+extern NTSTATUS vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE_OBJECT fo);
 extern NTSTATUS vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st);
 extern NTSTATUS vhub_get_imported_devs(pvhub_dev_t vhub, pioctl_usbip_vhci_imported_dev_t idevs, PULONG poutlen);
 extern NTSTATUS vhci_eject_port(pvhci_dev_t vhci, ULONG port);
@@ -91,8 +91,7 @@ vhci_ioctl_vhci(pvhci_dev_t vhci, PIO_STACK_LOCATION irpstack, ULONG ioctl_code,
 
 	switch (ioctl_code) {
 	case IOCTL_USBIP_VHCI_PLUGIN_HARDWARE:
-		if (inlen == sizeof(ioctl_usbip_vhci_plugin))
-			status = vhci_plugin_vpdo(vhci, (ioctl_usbip_vhci_plugin *)buffer, irpstack->FileObject);
+		status = vhci_plugin_vpdo(vhci, (pvhci_pluginfo_t)buffer, inlen, irpstack->FileObject);
 		*poutlen = 0;
 		break;
 	case IOCTL_USBIP_VHCI_GET_PORTS_STATUS:

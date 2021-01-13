@@ -2,7 +2,6 @@
 
 #include "usbip_common.h"
 #include "usbip_windows.h"
-#include "usbip_wudev.h"
 
 #include <stdlib.h>
 
@@ -140,39 +139,7 @@ usbip_vhci_get_imported_devs(HANDLE hdev)
 }
 
 int
-usbip_vhci_attach_device(HANDLE hdev, int port, const char *instid, usbip_wudev_t *wudev)
-{
-	ioctl_usbip_vhci_plugin  plugin;
-	unsigned long	unused;
-
-	plugin.devid = wudev->devid;
-	plugin.vendor = wudev->idVendor;
-	plugin.product = wudev->idProduct;
-	plugin.version = wudev->bcdDevice;
-	plugin.speed = wudev->speed;
-	plugin.inum = wudev->bNumInterfaces;
-	plugin.class = wudev->bDeviceClass;
-	plugin.subclass = wudev->bDeviceSubClass;
-	plugin.protocol = wudev->bDeviceProtocol;
-
-	plugin.port = port;
-
-	if (instid != NULL)
-		mbstowcs_s(NULL, plugin.winstid, MAX_VHCI_INSTANCE_ID, instid, _TRUNCATE);
-	else
-		plugin.winstid[0] = L'\0';
-
-	if (!DeviceIoControl(hdev, IOCTL_USBIP_VHCI_PLUGIN_HARDWARE,
-		&plugin, sizeof(plugin), NULL, 0, &unused, NULL)) {
-		err("usbip_vhci_attach_device: DeviceIoControl failed: err: 0x%lx", GetLastError());
-		return -1;
-	}
-
-	return 0;
-}
-
-int
-usbip_vhci_attach_device_ude(HANDLE hdev, pvhci_pluginfo_t pluginfo)
+usbip_vhci_attach_device(HANDLE hdev, pvhci_pluginfo_t pluginfo)
 {
 	unsigned long	unused;
 

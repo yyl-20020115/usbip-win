@@ -45,20 +45,85 @@ vhci_init_vpdo(pvpdo_dev_t vpdo)
 	TO_DEVOBJ(vpdo)->Flags &= ~DO_DEVICE_INITIALIZING;
 }
 
-PAGEABLE NTSTATUS
-vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT fo)
+static void
+setup_vpdo_with_dsc_dev(pvpdo_dev_t vpdo, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 {
-	PDEVICE_OBJECT		devobj;
+	if (dsc_dev) {
+		vpdo->vendor = dsc_dev->idVendor;
+		vpdo->product = dsc_dev->idProduct;
+		vpdo->revision = dsc_dev->bcdDevice;
+		vpdo->usbclass = dsc_dev->bDeviceClass;
+		vpdo->subclass = dsc_dev->bDeviceSubClass;
+		vpdo->protocol = dsc_dev->bDeviceProtocol;
+		vpdo->speed = (UCHAR)get_usb_speed(dsc_dev->bcdUSB);
+	}
+	else {
+		vpdo->vendor = 0;
+		vpdo->product = 0;
+		vpdo->revision = 0;
+		vpdo->usbclass = 0;
+		vpdo->subclass = 0;
+		vpdo->protocol = 0;
+		vpdo->speed = USB_SPEED_LOW;
+	}
+}
+
+static void
+setup_vpdo_with_dsc_conf(pvpdo_dev_t vpdo, PUSB_CONFIGURATION_DESCRIPTOR dsc_conf)
+{
+	if (dsc_conf) {
+		vpdo->inum = dsc_conf->bNumInterfaces;
+
+		/* Many devices have 0 usb class number in a device descriptor.
+		 * 0 value means that class number is determined at interface level.
+		 * USB class, subclass and protocol numbers should be setup before importing.
+		 * Because windows vhci driver builds a device compatible id with those numbers.
+		 */
+		if (vpdo->usbclass == 0 && vpdo->subclass == 0 && vpdo->protocol == 0) {
+			/* buf[4] holds the number of interfaces in USB configuration.
+			 * Supplement class/subclass/protocol only if there exists only single interface.
+			 * A device with multiple interfaces will be detected as a composite by vhci.
+			 */
+			if (vpdo->inum == 1) {
+				PUSB_INTERFACE_DESCRIPTOR	dsc_intf = dsc_find_first_intf(dsc_conf);
+				if (dsc_intf) {
+					vpdo->usbclass = dsc_intf->bInterfaceClass;
+					vpdo->subclass = dsc_intf->bInterfaceSubClass;
+					vpdo->protocol = dsc_intf->bInterfaceProtocol;
+				}
+			}
+		}
+	}
+	else {
+		vpdo->inum = 0;
+	}
+}
+
+PAGEABLE NTSTATUS
+vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE_OBJECT fo)
+{
+	PDEVICE_OBJECT	devobj;
 	pvpdo_dev_t	vpdo, devpdo_old;
+	PUSHORT		pdscr_fullsize;
 
 	PAGED_CODE();
 
-	DBGI(DBG_VPDO, "Plugin vpdo: port: %hhd, vendor:product: %04hx:%04hx\n", plugin->port, plugin->vendor, plugin->product);
+	if (inlen < sizeof(vhci_pluginfo_t)) {
+		DBGE(DBG_IOCTL, "too small input length: %lld < %lld", inlen, sizeof(vhci_pluginfo_t));
+		return STATUS_INVALID_PARAMETER;
+	}
+	pdscr_fullsize = (PUSHORT)pluginfo->dscr_conf + 1;
+	if (inlen != sizeof(vhci_pluginfo_t) + *pdscr_fullsize - 9) {
+		DBGE(DBG_IOCTL, "invalid pluginfo format: %lld != %lld", inlen, sizeof(vhci_pluginfo_t) + *pdscr_fullsize - 9);
+		return STATUS_INVALID_PARAMETER;
+	}
 
-	if (plugin->port <= 0)
+	DBGI(DBG_VPDO, "Plugin vpdo: port: %hhd\n", pluginfo->port);
+
+	if (pluginfo->port <= 0)
 		return STATUS_INVALID_PARAMETER;
 
-	if (!vhub_is_empty_port(VHUB_FROM_VHCI(vhci), plugin->port))
+	if (!vhub_is_empty_port(VHUB_FROM_VHCI(vhci), pluginfo->port))
 		return STATUS_INVALID_PARAMETER;
 
 	if ((devobj = vdev_create(TO_DEVOBJ(vhci)->DriverObject, VDEV_VPDO)) == NULL)
@@ -67,15 +132,11 @@ vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT
 	vpdo = DEVOBJ_TO_VPDO(devobj);
 	vpdo->common.parent = &VHUB_FROM_VHCI(vhci)->common;
 
-	vpdo->vendor = plugin->vendor;
-	vpdo->product = plugin->product;
-	vpdo->revision = plugin->version;
-	vpdo->usbclass = plugin->class;
-	vpdo->subclass = plugin->subclass;
-	vpdo->protocol = plugin->protocol;
-	vpdo->inum = plugin->inum;
-	if (plugin->winstid[0] != L'\0')
-		vpdo->winstid = libdrv_strdupW(plugin->winstid);
+	setup_vpdo_with_dsc_dev(vpdo, (PUSB_DEVICE_DESCRIPTOR)pluginfo->dscr_dev);
+	setup_vpdo_with_dsc_conf(vpdo, (PUSB_CONFIGURATION_DESCRIPTOR)pluginfo->dscr_conf);
+
+	if (pluginfo->winstid[0] != L'\0')
+		vpdo->winstid = libdrv_strdupW(pluginfo->winstid);
 	else
 		vpdo->winstid = NULL;
 
@@ -85,10 +146,9 @@ vhci_plugin_vpdo(pvhci_dev_t vhci, ioctl_usbip_vhci_plugin *plugin, PFILE_OBJECT
 		IoDeleteDevice(devobj);
 		return STATUS_INVALID_PARAMETER;
 	}
-	vpdo->port = plugin->port;
+	vpdo->port = pluginfo->port;
 	vpdo->fo = fo;
-	vpdo->devid = plugin->devid;
-	vpdo->speed = plugin->speed;
+	vpdo->devid = pluginfo->devid;
 
 	vhci_init_vpdo(vpdo);
 

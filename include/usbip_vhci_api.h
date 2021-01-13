@@ -56,27 +56,7 @@ DEFINE_GUID(USBIP_NOTIFY_DEVICE_ARRIVAL_EVENT,
 #define IOCTL_USBIP_VHCI_GET_PORTS_STATUS	USBIP_VHCI_IOCTL(0x3)
 #define IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES	USBIP_VHCI_IOCTL(0x4)
 
-#define MAX_VHCI_INSTANCE_ID	16
-
-typedef struct _ioctl_usbip_vhci_plugin
-{
-	unsigned int	devid;
-
-	unsigned short	vendor;
-	unsigned short	product;
-
-	unsigned short	version;
-	unsigned char	speed;
-	unsigned char	inum;
-
-	unsigned char	class;
-	unsigned char	subclass;
-	unsigned char	protocol;
-
-	signed char	port;
-
-	wchar_t		winstid[MAX_VHCI_INSTANCE_ID + 1];
-} ioctl_usbip_vhci_plugin;
+#define MAX_VHCI_INSTANCE_ID	31
 
 typedef struct _vhci_pluginfo
 {

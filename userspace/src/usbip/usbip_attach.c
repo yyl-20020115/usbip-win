@@ -18,11 +18,14 @@
 
 #include "usbip_windows.h"
 
+#include <stdlib.h>
+
 #include "usbip_common.h"
 #include "usbip_network.h"
 #include "usbip_vhci.h"
 #include "usbip_forward.h"
-#include "usbip_wudev.h"
+
+#include "usbip_dscr.h"
 
 static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
@@ -36,7 +39,7 @@ void usbip_attach_usage(void)
 }
 
 static int
-import_device(SOCKET sockfd, usbip_wudev_t *wudev, const char *instid, HANDLE *phdev)
+import_device(SOCKET sockfd, pvhci_pluginfo_t pluginfo, HANDLE *phdev)
 {
 	HANDLE hdev;
 	int rc;
@@ -57,7 +60,9 @@ import_device(SOCKET sockfd, usbip_wudev_t *wudev, const char *instid, HANDLE *p
 
 	dbg("got free port %d", port);
 
-	rc = usbip_vhci_attach_device(hdev, port, instid, wudev);
+	pluginfo->port = port;
+
+	rc = usbip_vhci_attach_device(hdev, pluginfo);
 
 	if (rc < 0) {
 		err("import device");
@@ -70,13 +75,50 @@ import_device(SOCKET sockfd, usbip_wudev_t *wudev, const char *instid, HANDLE *p
 	return port;
 }
 
-static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char *instid)
+static pvhci_pluginfo_t
+build_pluginfo(SOCKET sockfd, unsigned devid)
 {
-	int rc;
+	pvhci_pluginfo_t	pluginfo;
+	unsigned long	pluginfo_size;
+	unsigned short	conf_dscr_len;
+
+	if (fetch_conf_descriptor(sockfd, devid, NULL, &conf_dscr_len) < 0) {
+		err("failed to get configuration descriptor size");
+		return NULL;
+	}
+
+	pluginfo_size = sizeof(vhci_pluginfo_t) + conf_dscr_len - 9;
+	pluginfo = (pvhci_pluginfo_t)malloc(pluginfo_size);
+	if (pluginfo == NULL) {
+		err("out of memory or invalid vhci pluginfo size");
+		return NULL;
+	}
+	if (fetch_device_descriptor(sockfd, devid, pluginfo->dscr_dev) < 0) {
+		err("failed to fetch device descriptor");
+		free(pluginfo);
+		return NULL;
+	}
+	if (fetch_conf_descriptor(sockfd, devid, pluginfo->dscr_conf, &conf_dscr_len) < 0) {
+		err("failed to fetch configuration descriptor");
+		free(pluginfo);
+		return NULL;
+	}
+
+	pluginfo->size = pluginfo_size;
+	pluginfo->devid = devid;
+
+	return pluginfo;
+}
+
+static int
+query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char *instid)
+{
 	struct op_import_request request;
 	struct op_import_reply   reply;
-	usbip_wudev_t	wuDev;
+	pvhci_pluginfo_t	pluginfo;
 	uint16_t code = OP_REP_IMPORT;
+	unsigned	devid;
+	int	rc;
 
 	memset(&request, 0, sizeof(request));
 	memset(&reply, 0, sizeof(reply));
@@ -119,10 +161,20 @@ static int query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, 
 		return 1;
 	}
 
-	get_wudev(sockfd, &wuDev, &reply.udev);
+	devid = reply.udev.busnum << 16 | reply.udev.devnum;
+	pluginfo = build_pluginfo(sockfd, devid);
+	if (pluginfo == NULL)
+		return 2;
+
+	if (instid != NULL)
+		mbstowcs_s(NULL, pluginfo->winstid, MAX_VHCI_INSTANCE_ID, instid, _TRUNCATE);
+	else
+		pluginfo->winstid[0] = L'\0';
 
 	/* import a device */
-	return import_device(sockfd, &wuDev, instid, phdev);
+	rc = import_device(sockfd, pluginfo, phdev);
+	free(pluginfo);
+	return rc;
 }
 
 static int

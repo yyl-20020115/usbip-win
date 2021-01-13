@@ -1,18 +1,10 @@
 #include "usbip_windows.h"
 
-#include "usbip_wudev.h"
 #include "usbip_proto.h"
+#include "usbip_network.h"
 
 /* sufficient large enough seq used to avoid conflict with normal vhci operation */
 static unsigned	seqnum = 0x7ffffff;
-
-static BOOL
-is_zero_class(usbip_wudev_t *wudev)
-{
-	if (wudev->bDeviceClass == 0 && wudev->bDeviceSubClass == 0 && wudev->bDeviceProtocol == 0)
-		return TRUE;
-	return FALSE;
-}
 
 static int
 fetch_descriptor(SOCKET sockfd, UINT8 dscr_type, unsigned devid, char *dscr, unsigned short dscr_size)
