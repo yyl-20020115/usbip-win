@@ -94,25 +94,13 @@ static const struct command cmds[] = {
 	{
 		.name  = "install",
 		.fn    = usbip_install,
-		.help  = "Install or reinstall drivers for usbip",
+		.help  = "Install usbip vhci driver",
 		.usage = usbip_install_usage
 	},
 	{
 		.name = "uninstall",
 		.fn = usbip_uninstall,
-		.help = "Uninstall drivers for usbip",
-		.usage = usbip_uninstall_usage
-	},
-	{
-		.name = "install_ude",
-		.fn = usbip_install_ude,
-		.help = "Install or reinstall drivers for usbip",
-		.usage = usbip_install_usage
-	},
-	{
-		.name = "uninstall_ude",
-		.fn = usbip_uninstall_ude,
-		.help = "Uninstall drivers for usbip",
+		.help = "Uninstall usbip vhci driver",
 		.usage = usbip_uninstall_usage
 	},
 	{
