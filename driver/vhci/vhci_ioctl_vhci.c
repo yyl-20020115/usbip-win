@@ -9,7 +9,6 @@
 extern NTSTATUS vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE_OBJECT fo);
 extern NTSTATUS vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st);
 extern NTSTATUS vhub_get_imported_devs(pvhub_dev_t vhub, pioctl_usbip_vhci_imported_dev_t idevs, PULONG poutlen);
-extern NTSTATUS vhci_eject_port(pvhci_dev_t vhci, ULONG port);
 extern NTSTATUS vhci_ioctl_user_request(pvhci_dev_t vhci, PVOID buffer, ULONG inlen, PULONG poutlen);
 
 static PAGEABLE NTSTATUS
@@ -104,11 +103,6 @@ vhci_ioctl_vhci(pvhci_dev_t vhci, PIO_STACK_LOCATION irpstack, ULONG ioctl_code,
 	case IOCTL_USBIP_VHCI_UNPLUG_HARDWARE:
 		if (inlen == sizeof(ioctl_usbip_vhci_unplug))
 			status = vhci_unplug_port(vhci, ((ioctl_usbip_vhci_unplug *)buffer)->addr);
-		*poutlen = 0;
-		break;
-	case IOCTL_USBIP_VHCI_EJECT_HARDWARE:
-		if (inlen == sizeof(USBIP_VHCI_EJECT_HARDWARE) && ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->Size == inlen)
-			status = vhci_eject_port(vhci, ((PUSBIP_VHCI_EJECT_HARDWARE)buffer)->port);
 		*poutlen = 0;
 		break;
 	case IOCTL_GET_HCD_DRIVERKEY_NAME:

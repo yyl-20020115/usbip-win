@@ -63,7 +63,6 @@ dbg_namecode_buf_len(namecode_my_t *namecodes, const char *codetype, unsigned in
 static namecode_my_t	namecodes_vhci_ioctl[] = {
 	K_V(IOCTL_USBIP_VHCI_PLUGIN_HARDWARE)
 	K_V(IOCTL_USBIP_VHCI_UNPLUG_HARDWARE)
-	K_V(IOCTL_USBIP_VHCI_EJECT_HARDWARE)
 	K_V(IOCTL_USBIP_VHCI_GET_PORTS_STATUS)
 	K_V(IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES)
 	K_V(IOCTL_INTERNAL_USB_CYCLE_PORT)

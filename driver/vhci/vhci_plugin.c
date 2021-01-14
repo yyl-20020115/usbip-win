@@ -10,7 +10,6 @@ extern BOOLEAN vhub_is_empty_port(pvhub_dev_t vhub, ULONG port);
 extern void vhub_attach_vpdo(pvhub_dev_t vhub, pvpdo_dev_t vpdo);
 
 extern void vhub_mark_unplugged_all_vpdos(pvhub_dev_t vhub);
-extern void vhub_eject_all_vpdos(pvhub_dev_t vhub);
 
 static PAGEABLE void
 vhci_init_vpdo(pvpdo_dev_t vpdo)
@@ -188,39 +187,6 @@ vhci_unplug_port(pvhci_dev_t vhci, ULONG port)
 	}
 
 	vhub_mark_unplugged_vpdo(vhub, vpdo);
-	vdev_del_ref((pvdev_t)vpdo);
-
-	return STATUS_SUCCESS;
-}
-
-PAGEABLE NTSTATUS
-vhci_eject_port(pvhci_dev_t vhci, ULONG port)
-{
-	pvhub_dev_t	vhub = VHUB_FROM_VHCI(vhci);
-	pvpdo_dev_t	vpdo;
-
-	PAGED_CODE();
-
-	if (vhub == NULL) {
-		DBGI(DBG_PNP, "vhub has gone\n");
-		return STATUS_NO_SUCH_DEVICE;
-	}
-
-	if (port == 0) {
-		DBGI(DBG_PNP, "ejecting all the devices!\n");
-		vhub_eject_all_vpdos(vhub);
-		return STATUS_SUCCESS;
-	}
-
-	DBGI(DBG_PNP, "ejecting device: port: %u\n", port);
-
-	vpdo = vhub_find_vpdo(vhub, port);
-	if (vpdo == NULL) {
-		DBGI(DBG_PNP, "no matching vpdo: port: %u\n", port);
-		return STATUS_NO_SUCH_DEVICE;
-	}
-
-	IoRequestDeviceEject(vpdo->common.pdo);
 	vdev_del_ref((pvdev_t)vpdo);
 
 	return STATUS_SUCCESS;

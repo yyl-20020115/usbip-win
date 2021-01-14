@@ -171,21 +171,6 @@ vhub_mark_unplugged_all_vpdos(pvhub_dev_t vhub)
 	ExReleaseFastMutex(&vhub->Mutex);
 }
 
-PAGEABLE void
-vhub_eject_all_vpdos(pvhub_dev_t vhub)
-{
-	PLIST_ENTRY	entry;
-
-	ExAcquireFastMutex(&vhub->Mutex);
-
-	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
-		pvpdo_dev_t	vpdo = CONTAINING_RECORD(entry, vpdo_dev_t, Link);
-
-		IoRequestDeviceEject(vpdo->common.Self);
-	}
-	ExReleaseFastMutex(&vhub->Mutex);
-}
-
 PAGEABLE NTSTATUS
 vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 {

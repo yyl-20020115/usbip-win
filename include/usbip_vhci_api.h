@@ -52,7 +52,7 @@ DEFINE_GUID(USBIP_NOTIFY_DEVICE_ARRIVAL_EVENT,
 
 #define IOCTL_USBIP_VHCI_PLUGIN_HARDWARE	USBIP_VHCI_IOCTL(0x0)
 #define IOCTL_USBIP_VHCI_UNPLUG_HARDWARE	USBIP_VHCI_IOCTL(0x1)
-#define IOCTL_USBIP_VHCI_EJECT_HARDWARE		USBIP_VHCI_IOCTL(0x2)
+/* EJECT(0x2) removed. 0x2 will be used later */
 #define IOCTL_USBIP_VHCI_GET_PORTS_STATUS	USBIP_VHCI_IOCTL(0x3)
 #define IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES	USBIP_VHCI_IOCTL(0x4)
 
@@ -90,13 +90,3 @@ typedef struct usbip_imported_device {
 	unsigned short	product;
 	unsigned char	speed;
 } ioctl_usbip_vhci_imported_dev, *pioctl_usbip_vhci_imported_dev_t;
-
-typedef struct _USBIP_VHCI_EJECT_HARDWARE
-{
-	// sizeof (struct _EJECT_HARDWARE)
-	ULONG	Size;
-
-	// port number of the device to be ejected
-	ULONG	port;
-	ULONG	Reserved[2];
-} USBIP_VHCI_EJECT_HARDWARE, *PUSBIP_VHCI_EJECT_HARDWARE;
