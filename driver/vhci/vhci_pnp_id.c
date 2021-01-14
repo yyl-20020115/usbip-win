@@ -103,14 +103,14 @@ setup_inst_id(pvdev_t vdev, PIRP irp)
 
 	vpdo = (pvpdo_dev_t)vdev;
 
-	id_inst = ExAllocatePoolWithTag(PagedPool, (MAX_VHCI_INSTANCE_ID + 1) * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
+	id_inst = ExAllocatePoolWithTag(PagedPool, (MAX_VHCI_SERIAL_ID + 1) * sizeof(wchar_t), USBIP_VHCI_POOL_TAG);
 	if (id_inst == NULL) {
 		DBGE(DBG_PNP, "vpdo: query instance id: out of memory\n");
 		return STATUS_INSUFFICIENT_RESOURCES;
 	}
 
 	if (vpdo->winstid != NULL)
-		RtlStringCchCopyW(id_inst, MAX_VHCI_INSTANCE_ID + 1, vpdo->winstid);
+		RtlStringCchCopyW(id_inst, MAX_VHCI_SERIAL_ID + 1, vpdo->winstid);
 	else
 		RtlStringCchPrintfW(id_inst, 5, L"%04hx", vpdo->port);
 

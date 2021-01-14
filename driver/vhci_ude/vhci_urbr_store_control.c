@@ -1,7 +1,11 @@
 #include "vhci_driver.h"
 
+#include "vhci_urbr_store_control.tmh"
+
 #include "usbip_proto.h"
 #include "vhci_urbr.h"
+
+#include "strutil.h"
 
 NTSTATUS
 store_urbr_control_transfer_partial(WDFREQUEST req_read, purb_req_t urbr)
@@ -90,14 +94,59 @@ out:
 	return status;
 }
 
+static BOOLEAN
+is_serial_setup_pkt(UCHAR iSerial, PUCHAR setup)
+{
+	if (setup[0] != 0x80 || setup[1] != 0x06 || setup[3] != 0x03 || setup[2] != iSerial)
+		return FALSE;
+	return TRUE;
+}
+
+static NTSTATUS
+fetch_done_urbr_control_transfer_ex(pctx_vusb_t vusb, struct _URB_CONTROL_TRANSFER_EX *urb_ctltrans_ex)
+{
+	PWCHAR	dsc_serial;
+	size_t	len;
+	NTSTATUS	status;
+
+	len = libdrv_strlenW(vusb->wserial) * sizeof(WCHAR) + 2;
+	dsc_serial = ExAllocatePoolWithTag(PagedPool, len, VHCI_POOLTAG);
+	*(PUCHAR)dsc_serial = (UCHAR)len;
+	((PUCHAR)dsc_serial)[1] = 0x03;
+	RtlCopyMemory((PUCHAR)dsc_serial + 2, vusb->wserial, len - 2);
+
+	if (urb_ctltrans_ex->TransferBufferLength < len)
+		len = urb_ctltrans_ex->TransferBufferLength;
+	status = copy_to_transfer_buffer(urb_ctltrans_ex->TransferBuffer, urb_ctltrans_ex->TransferBufferMDL,
+		urb_ctltrans_ex->TransferBufferLength, dsc_serial, (int)len);
+	ExFreePoolWithTag(dsc_serial, VHCI_POOLTAG);
+
+	if (status == STATUS_SUCCESS) {
+		urb_ctltrans_ex->TransferBufferLength = (ULONG)len;
+		/* this status code lets urbr be completed without fetching */
+		return STATUS_FLT_IO_COMPLETE;
+	}
+	return status;
+}
+
 NTSTATUS
 store_urbr_control_transfer_ex(WDFREQUEST req_read, purb_req_t urbr)
 {
+	pctx_vusb_t	vusb = urbr->ep->vusb;
 	struct _URB_CONTROL_TRANSFER_EX	*urb_ctltrans_ex = &urbr->u.urb->UrbControlTransferEx;
 	struct usbip_header	*hdr;
 	int	in = IS_TRANSFER_FLAGS_IN(urb_ctltrans_ex->TransferFlags);
 	ULONG	nread = 0;
 	NTSTATUS	status = STATUS_SUCCESS;
+
+	/*
+	 * overwrite USB serial if applicable
+	 * UDE vhub seems to request a serial string via URB_FUNCTION_CONTROL_TRANSFER_EX.
+	 */
+	if (vusb->iSerial > 0 && vusb->wserial && is_serial_setup_pkt(vusb->iSerial, urb_ctltrans_ex->SetupPacket)) {
+		TRD(READ, "overwrite serial string: %S", vusb->wserial);
+		return fetch_done_urbr_control_transfer_ex(vusb, urb_ctltrans_ex);
+	}
 
 	hdr = get_hdr_from_req_read(req_read);
 	if (hdr == NULL)

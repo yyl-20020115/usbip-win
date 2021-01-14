@@ -6,6 +6,20 @@
 
 ULONG	libdrv_pooltag = 'dbil';
 
+size_t
+libdrv_strlenW(LPCWSTR cwstr)
+{
+	size_t	len;
+	NTSTATUS	status;
+
+	if (cwstr == NULL)
+		return 0;
+	status = RtlStringCchLengthW(cwstr, NTSTRSAFE_MAX_CCH, &len);
+	if (NT_ERROR(status))
+		return 0;
+	return len;
+}
+
 LPWSTR
 libdrv_strdupW(LPCWSTR cwstr)
 {
@@ -87,4 +101,11 @@ libdrv_asprintfW(PWCHAR *pbuf, LPCWSTR fmt, ...)
 	if (*pbuf == NULL)
 		return 0;
 	return (int)len;
+}
+
+VOID
+libdrv_free(PVOID data)
+{
+	if (data)
+		ExFreePoolWithTag(data, libdrv_pooltag);
 }

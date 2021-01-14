@@ -55,6 +55,11 @@ typedef struct _ctx_vusb
 	/* keep these usbip port command */
 	USHORT		id_vendor, id_product, dev_speed;
 
+	// string index for USB serial
+	UCHAR		iSerial;
+	// USB serial string
+	PWCHAR		wserial;
+
 	/* Full-length configuration descriptor for finding an interface descriptor of EP */
 	PUCHAR		dsc_conf;
 	/* alt settings for interface. use SHORT for treating unassigned case(-1) */

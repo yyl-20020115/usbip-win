@@ -31,7 +31,7 @@ static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
 	"    -r, --remote=<host>    The machine with exported USB devices\n"
 	"    -b, --busid=<busid>    Busid of the device on <host>\n"
-	"    -i, --instid=<instid>  (Optional) Serial number to use as instance ID\n";
+	"    -s, --serial=<USB serial>  (Optional) USB serial to be overwritten\n";
 
 void usbip_attach_usage(void)
 {
@@ -111,7 +111,7 @@ build_pluginfo(SOCKET sockfd, unsigned devid)
 }
 
 static int
-query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char *instid)
+query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char *serial)
 {
 	struct op_import_request request;
 	struct op_import_reply   reply;
@@ -166,10 +166,10 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 	if (pluginfo == NULL)
 		return 2;
 
-	if (instid != NULL)
-		mbstowcs_s(NULL, pluginfo->winstid, MAX_VHCI_INSTANCE_ID, instid, _TRUNCATE);
+	if (serial != NULL)
+		mbstowcs_s(NULL, pluginfo->wserial, MAX_VHCI_SERIAL_ID, serial, _TRUNCATE);
 	else
-		pluginfo->winstid[0] = L'\0';
+		pluginfo->wserial[0] = L'\0';
 
 	/* import a device */
 	rc = import_device(sockfd, pluginfo, phdev);
@@ -178,7 +178,7 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 }
 
 static int
-attach_device(const char *host, const char *busid, const char *instid)
+attach_device(const char *host, const char *busid, const char *serial)
 {
 	SOCKET	sockfd;
 	int	rhport;
@@ -190,7 +190,7 @@ attach_device(const char *host, const char *busid, const char *instid)
 		return 1;
 	}
 
-	rhport = query_import_device(sockfd, busid, &hdev, instid);
+	rhport = query_import_device(sockfd, busid, &hdev, serial);
 	if (rhport < 0) {
 		err("query");
 		return 1;
@@ -212,17 +212,17 @@ int usbip_attach(int argc, char *argv[])
 	static const struct option opts[] = {
 		{ "remote", required_argument, NULL, 'r' },
 		{ "busid", required_argument, NULL, 'b' },
-		{ "instid", optional_argument, NULL, 'i' },
+		{ "serial", optional_argument, NULL, 's' },
 		{ NULL, 0, NULL, 0 }
 	};
 	char *host = NULL;
 	char *busid = NULL;
-	char *instid = NULL;
+	char *serial = NULL;
 	int opt;
 	int ret = -1;
 
 	for (;;) {
-		opt = getopt_long(argc, argv, "r:b:i:", opts, NULL);
+		opt = getopt_long(argc, argv, "r:b:s:", opts, NULL);
 
 		if (opt == -1)
 			break;
@@ -234,8 +234,8 @@ int usbip_attach(int argc, char *argv[])
 		case 'b':
 			busid = optarg;
 			break;
-		case 'i':
-			instid = optarg;
+		case 's':
+			serial = optarg;
 			break;
 		default:
 			goto err_out;
@@ -245,7 +245,7 @@ int usbip_attach(int argc, char *argv[])
 	if (!host || !busid)
 		goto err_out;
 
-	ret = attach_device(host, busid, instid);
+	ret = attach_device(host, busid, serial);
 	goto out;
 
 err_out:

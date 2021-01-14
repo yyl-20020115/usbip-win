@@ -1,6 +1,8 @@
 #include "vhci_driver.h"
 #include "vhci_plugin.tmh"
 
+#include "strutil.h"
+
 #include "usbip_proto.h"
 #include "usbip_vhci_api.h"
 #include "devconf.h"
@@ -18,11 +20,13 @@ setup_with_dsc_dev(pctx_vusb_t vusb, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 		vusb->id_vendor = dsc_dev->idVendor;
 		vusb->id_product = dsc_dev->idProduct;
 		vusb->dev_speed = get_usb_speed(dsc_dev->bcdUSB);
+		vusb->iSerial = dsc_dev->iSerialNumber;
 	}
 	else {
 		vusb->id_vendor = 0;
 		vusb->id_product = 0;
 		vusb->dev_speed = 0;
+		vusb->iSerial = 0;
 	}
 }
 
@@ -65,6 +69,7 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 
 	vusb->dsc_conf = NULL;
 	vusb->intf_altsettings = NULL;
+	vusb->wserial = NULL;
 
 	status = WdfSpinLockCreate(&attrs, &vusb->spin_lock);
 	if (NT_ERROR(status)) {
@@ -96,6 +101,11 @@ setup_vusb(UDECXUSBDEVICE ude_usbdev, pvhci_pluginfo_t pluginfo)
 	vusb->len_sent_partial = 0;
 	vusb->seq_num = 0;
 	vusb->invalid = FALSE;
+
+	if (vusb->iSerial > 0 && pluginfo->wserial[0] != L'\0')
+		vusb->wserial = libdrv_strdupW(pluginfo->wserial);
+	else
+		vusb->wserial = NULL;
 
 	InitializeListHead(&vusb->head_urbr);
 	InitializeListHead(&vusb->head_urbr_pending);
@@ -193,6 +203,7 @@ vusb_cleanup(_In_ WDFOBJECT ude_usbdev)
 		ExFreePoolWithTag(vusb->dsc_conf, VHCI_POOLTAG);
 	if (vusb->intf_altsettings != NULL)
 		ExFreePoolWithTag(vusb->intf_altsettings, VHCI_POOLTAG);
+	libdrv_free(vusb->wserial);
 }
 
 static void

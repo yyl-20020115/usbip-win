@@ -225,7 +225,6 @@ submit_urbr(purb_req_t urbr)
 	WdfSpinLockRelease(vusb->spin_lock);
 
 	status = store_urbr(req_read, urbr);
-	TRD(URBR, "After 'store_urbu()");
 
 	WdfSpinLockAcquire(vusb->spin_lock);
 
@@ -256,7 +255,10 @@ submit_urbr(purb_req_t urbr)
 		vusb->urbr_sent_partial = NULL;
 		WdfSpinLockRelease(vusb->spin_lock);
 
-		status = STATUS_INVALID_PARAMETER;
+		if (status == STATUS_FLT_IO_COMPLETE)
+			status = STATUS_SUCCESS;
+		else
+			status = STATUS_INVALID_PARAMETER;
 	}
 
 	TRD(URBR, "urb requested: %!URBR!: %!STATUS!", urbr, status);

@@ -134,8 +134,8 @@ vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE
 	setup_vpdo_with_dsc_dev(vpdo, (PUSB_DEVICE_DESCRIPTOR)pluginfo->dscr_dev);
 	setup_vpdo_with_dsc_conf(vpdo, (PUSB_CONFIGURATION_DESCRIPTOR)pluginfo->dscr_conf);
 
-	if (pluginfo->winstid[0] != L'\0')
-		vpdo->winstid = libdrv_strdupW(pluginfo->winstid);
+	if (pluginfo->wserial[0] != L'\0')
+		vpdo->winstid = libdrv_strdupW(pluginfo->wserial);
 	else
 		vpdo->winstid = NULL;
 
