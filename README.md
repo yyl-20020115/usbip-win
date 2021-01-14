@@ -74,11 +74,11 @@ usbip.exe list -l
 
 ### Windows USB/IP client
 - Currently, there are 2 versions for a vhci driver
-	  - vhci(WDM): original version, implemented via WDM(Windows Driver Model)
+	  - vhci(wdm): original version, implemented via WDM(Windows Driver Model)
 	  - vhci(ude): newly developed version to fully support USB applications and implemented via UDE(USB Device Emulation) which is MS provided USB virtualization framework over KMDF(Kernel-Model Driver Framework)
 	  - Installation procedures for 2 versions are different.
 - Prepare a linux machine as a USB/IP server (or windows usbip-win stub server)
-  - tested on Ubuntu 16.04 (Kernerl 4.15.0-29)
+  - tested on Ubuntu 16.04(Kernel 4.15.0-29), 18.04, 20.04
   - `# modprobe usbip-host`
   - You can use virtual [usbip-vstub](https://github.com/cezanne/usbip-vstub) as a stub server
 - Run usbipd on a USB/IP server (Linux)
@@ -94,14 +94,14 @@ usbip.exe list -l
 - Copy vhci driver files into a folder in target machine
 
   - If you're testing vhci(ude), copy `usbip.exe`, `usbip_vhci_udf.sys`, `usbip_vhci_udf.inf`, `usbip_vhci_udf.cat` into a folder in target machine
-  - If you're testing vhci(WDM), copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_root.inf`, `usbip_vhci.cat` into a folder in target machine
+  - If you're testing vhci(wdm), copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_root.inf`, `usbip_vhci.cat` into a folder in target machine
   - You can find all files in output folder after build or on [release](https://github.com/cezanne/usbip-win/releases) page.
 - Install USB/IP VHCI driver
   - You can install using usbip.exe or manually
   - Using usbip.exe install command
      - Run PowerShell or CMD as an Administrator
-     - if using vhci(ude), `PS> usbip.exe install_ude`
-     - if using vhci(WDM), `PS> usbip.exe install`
+     - `PS> usbip.exe install`
+     - Upper command will install a ude driver, a wdm driver or both depending on the available files
   - Manual Installation for vhci(ude)
      - Run PowerShell or CMD as an Administrator
      - `PS> pnputil /add-driver usbip_vhci_ude.inf`
@@ -112,7 +112,7 @@ usbip.exe list -l
      - Click "Have Disk", click "Browse", choose the copied folder, and click "OK".
      - Click on the "usbip-win VHCI(ude)", and then click "Next".
      - Click Finish at "Completing the Add/Remove Hardware Wizard".	 
-  - Manual Installation for vhci(WDM)
+  - Manual Installation for vhci(wdm)
      - Run PowerShell or CMD as an Administrator
      - `PS> pnputil /add-driver usbip_vhci.inf`
      - Start Device manager
@@ -123,11 +123,9 @@ usbip.exe list -l
      - Click on the "USB/IP VHCI Root", and then click "Next".
      - Click Finish at "Completing the Add/Remove Hardware Wizard".
 - Attach a remote USB device
-  - if using vhci(ude), `PS> usbip.exe attach_ude -r <usbip server ip> -b 2-2`
-  - if using vhci(WDM), `PS> usbip.exe attach -r <usbip server ip> -b 2-2`
+  - `PS> usbip.exe attach -r <usbip server ip> -b 2-2`
 - Uninstall driver
-  - if using vhci(ude), `PS> usbip.exe uninstall_ude`
-  - if using vhci(WDM),`PS> usbip.exe uninstall`
+  - `PS> usbip.exe uninstall`
 - Disable test signing
   - `> bcdedit.exe /set TESTSIGNING OFF`
   - reboot the system to apply
@@ -135,7 +133,7 @@ usbip.exe list -l
 ### Reporting Bug
 - usbip-win is not yet ready for production use. We could find problems with more detailed logs.
 
-#### How to get windows kernel log for vhci(WDM)
+#### How to get windows kernel log for vhci(wdm)
 - Set registry key to enable a debug filter
   - usbip-win uses [DbgPrintEx API for kernel logging](https://docs.microsoft.com/en-us/windows-hardware/drivers/devtest/reading-and-filtering-debugging-messages).
   - save following as .reg and run or manually insert a registry key
