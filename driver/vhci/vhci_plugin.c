@@ -119,7 +119,7 @@ vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE
 
 	DBGI(DBG_VPDO, "Plugin vpdo: port: %hhd\n", pluginfo->port);
 
-	if (pluginfo->port <= 0)
+	if (pluginfo->port < 0)
 		return STATUS_INVALID_PARAMETER;
 
 	if (!vhub_is_empty_port(VHUB_FROM_VHCI(vhci), pluginfo->port))
@@ -160,7 +160,7 @@ vhci_plugin_vpdo(pvhci_dev_t vhci, pvhci_pluginfo_t pluginfo, ULONG inlen, PFILE
 }
 
 PAGEABLE NTSTATUS
-vhci_unplug_port(pvhci_dev_t vhci, ULONG port)
+vhci_unplug_port(pvhci_dev_t vhci, CHAR port)
 {
 	pvhub_dev_t	vhub = VHUB_FROM_VHCI(vhci);
 	pvpdo_dev_t	vpdo;
@@ -172,7 +172,7 @@ vhci_unplug_port(pvhci_dev_t vhci, ULONG port)
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
-	if (port == 0) {
+	if (port < 0) {
 		DBGI(DBG_PNP, "plugging out all the devices!\n");
 		vhub_mark_unplugged_all_vpdos(vhub);
 		return STATUS_SUCCESS;

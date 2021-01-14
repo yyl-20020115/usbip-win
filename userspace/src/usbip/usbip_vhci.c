@@ -89,9 +89,9 @@ usbip_vhci_get_free_port(HANDLE hdev)
 
 	if (usbip_vhci_get_ports_status(hdev, &status))
 		return -1;
-	for(i = 0; i < 127; i++) {
+	for (i = 0; i < 127; i++) {
 		if (!status.port_status[i])
-			return (i + 1);
+			return i;
 	}
 	return -1;
 }
@@ -158,7 +158,7 @@ usbip_vhci_detach_device(HANDLE hdev, int port)
 	ioctl_usbip_vhci_unplug  unplug;
 	unsigned long	unused;
 
-	unplug.addr = port;
+	unplug.addr = (char)port;
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_UNPLUG_HARDWARE,
 		&unplug, sizeof(unplug), NULL, 0, &unused, NULL))
 		return 0;

@@ -101,7 +101,7 @@ cleanup_vpdo(pvhci_dev_t vhci, PIRP irp)
 		vpdo->fo = NULL;
 		irpstack->FileObject->FsContext = NULL;
 		if (vpdo->plugged)
-			vhci_unplug_port(vhci, vpdo->port);
+			vhci_unplug_port(vhci, (CHAR)vpdo->port);
 	}
 }
 

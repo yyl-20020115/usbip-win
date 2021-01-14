@@ -33,12 +33,14 @@ void usbip_detach_usage(void)
 
 static int detach_port(const char *portstr)
 {
-	HANDLE hdev;
-	uint8_t portnum;
-	int ret;
+	HANDLE	hdev;
+	int	port;
+	int	ret;
 
-	if (sscanf_s(portstr, "%hhu", &portnum) != 1) {
-		err("invalid port %s", portstr);
+	if (*portstr == '*' && portstr[1] == '\0')
+		port = -1;
+	else if (sscanf_s(portstr, "%d", &port) != 1) {
+		err("invalid port: %s", portstr);
 		return 1;
 	}
 	hdev = usbip_vhci_driver_open();
@@ -47,7 +49,7 @@ static int detach_port(const char *portstr)
 		return 1;
 	}
 
-	ret = usbip_vhci_detach_device(hdev, portnum);
+	ret = usbip_vhci_detach_device(hdev, port);
 	usbip_vhci_driver_close(hdev);
 	return (ret == 0) ? 0: 1;
 }
@@ -81,4 +83,3 @@ err_out:
 out:
 	return ret;
 }
-

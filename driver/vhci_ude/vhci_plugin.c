@@ -289,7 +289,7 @@ vusb_plugin(pctx_vhci_t vhci, pvhci_pluginfo_t pluginfo)
 	vusb->is_simple_ep_alloc = (eptype == UdecxEndpointTypeSimple) ? TRUE : FALSE;
 
 	UDECX_USB_DEVICE_PLUG_IN_OPTIONS_INIT(&opts);
-	opts.Usb20PortNumber = pluginfo->port;
+	opts.Usb20PortNumber = pluginfo->port + 1;
 
 	if (!setup_vusb(ude_usbdev, pluginfo)) {
 		WdfObjectDelete(ude_usbdev);
@@ -317,13 +317,13 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 
 	WdfSpinLockAcquire(vhci->spin_lock);
 
-	if (vhci->vusbs[pluginfo->port - 1] != NULL) {
+	if (vhci->vusbs[pluginfo->port] != NULL) {
 		WdfSpinLockRelease(vhci->spin_lock);
 		return STATUS_OBJECT_NAME_COLLISION;
 	}
 
 	/* assign a temporary non-null value indicating on-going vusb allocation */
-	vhci->vusbs[pluginfo->port - 1] = VUSB_CREATING;
+	vhci->vusbs[pluginfo->port] = VUSB_CREATING;
 	WdfSpinLockRelease(vhci->spin_lock);
 
 	vusb = vusb_plugin(vhci, pluginfo);
@@ -340,7 +340,7 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 		}
 		status = STATUS_SUCCESS;
 	}
-	vhci->vusbs[pluginfo->port - 1] = vusb;
+	vhci->vusbs[pluginfo->port] = vusb;
 	WdfSpinLockRelease(vhci->spin_lock);
 
 	if ((vusb != NULL) && (vusb->is_simple_ep_alloc)) {

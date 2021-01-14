@@ -52,7 +52,7 @@ import_device(SOCKET sockfd, pvhci_pluginfo_t pluginfo, HANDLE *phdev)
 	}
 
 	port = usbip_vhci_get_free_port(hdev);
-	if (port <= 0) {
+	if (port < 0) {
 		err("no free port");
 		usbip_vhci_driver_close(hdev);
 		return 1;

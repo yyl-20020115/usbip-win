@@ -187,12 +187,12 @@ vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 
 	for (entry = vhub->head_vpdo.Flink; entry != &vhub->head_vpdo; entry = entry->Flink) {
 		vpdo = CONTAINING_RECORD (entry, vpdo_dev_t, Link);
-		if (vpdo->port > 127 || vpdo->port == 0) {
-			DBGE(DBG_VHUB, "strange error");
+		if (vpdo->port >= 127) {
+			DBGE(DBG_VHUB, "strange port");
 			continue;
 		}
 		n_used_ports++;
-		st->port_status[vpdo->port - 1] = 1;
+		st->port_status[vpdo->port] = 1;
 	}
 	ExReleaseFastMutex(&vhub->Mutex);
 

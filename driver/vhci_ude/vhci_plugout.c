@@ -106,37 +106,37 @@ plugout_all_vusbs(pctx_vhci_t vhci)
 }
 
 NTSTATUS
-plugout_vusb(pctx_vhci_t vhci, ULONG port)
+plugout_vusb(pctx_vhci_t vhci, CHAR port)
 {
 	pctx_vusb_t	vusb;
 	NTSTATUS	status;
 
-	if (port == 0)
+	if (port < 0)
 		return plugout_all_vusbs(vhci);
 
 	TRD(IOCTL, "plugging out device: port: %u", port);
 
 	WdfSpinLockAcquire(vhci->spin_lock);
 
-	vusb = vhci->vusbs[port - 1];
+	vusb = vhci->vusbs[port];
 	if (vusb == NULL) {
 		TRD(PLUGIN, "no matching vusb: port: %u", port);
 		WdfSpinLockRelease(vhci->spin_lock);
 		return STATUS_NO_SUCH_DEVICE;
 	}
 
-	vhci->vusbs[port - 1] = VUSB_DELETING;
+	vhci->vusbs[port] = VUSB_DELETING;
 	WdfSpinLockRelease(vhci->spin_lock);
 
 	status = vusb_plugout(vusb);
 
 	WdfSpinLockAcquire(vhci->spin_lock);
 	if (NT_ERROR(status)) {
-		vhci->vusbs[port - 1] = vusb;
+		vhci->vusbs[port] = vusb;
 		WdfSpinLockRelease(vhci->spin_lock);
 		return STATUS_UNSUCCESSFUL;
 	}
-	vhci->vusbs[port - 1] = NULL;
+	vhci->vusbs[port] = NULL;
 
 	WdfSpinLockRelease(vhci->spin_lock);
 
