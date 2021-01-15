@@ -142,7 +142,7 @@ static int usbip_help(int argc, char *argv[])
 
 static int usbip_version(int argc, char *argv[])
 {
-	printf(PROGNAME " (%s)\n", usbip_version_string);
+	printf("usbip (%s)\n", usbip_version_string);
 	return 0;
 }
 
@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 	int	opt;
 	int	rc = 1;
 
+	usbip_progname = "usbip";
 	usbip_use_stderr = 1;
 
 	opterr = 0;

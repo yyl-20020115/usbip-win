@@ -44,13 +44,13 @@ walker_edev_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t dev
 
 	edev = (edev_t *)malloc(sizeof(edev_t));
 	if (edev == NULL) {
-		err("%s: out of memory", __FUNCTION__);
+		dbg("out of memory");
 		return 0;
 	}
 	if (!is_stub_devno(devno))
 		return 0;
 	if (!build_udev(devno, &edev->udev)) {
-		err("%s: cannot build usbip dev", __FUNCTION__);
+		dbg("cannot build usbip dev");
 		free(edev);
 		return 0;
 	}
@@ -94,7 +94,7 @@ send_reply_devlist(SOCKET connfd)
 	int	rc;
 
 	get_edev_list(&edev_list, &n_edevs);
-	info("exportable devices: %d", n_edevs);
+	dbg("exportable devices: %d", n_edevs);
 
 	reply.ndev = n_edevs;
 

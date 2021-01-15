@@ -53,7 +53,7 @@ get_device_path(const char *id_inst)
 	devpath_ctx.id_inst = id_inst;
 	rc = traverse_intfdevs(walker_devpath, &GUID_DEVINTERFACE_STUB_USBIP, &devpath_ctx);
 	if (rc != -1) {
-		err("%s: traverse_intfdevs failed, returned: %d", __FUNCTION__, rc);
+		dbg("%s: traverse_intfdevs failed, returned: %d", __FUNCTION__, rc);
 		return NULL;
 	}
 
@@ -68,18 +68,18 @@ get_devinfo(const char *devpath, ioctl_usbip_stub_devinfo_t *devinfo)
 
 	hdev = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("get_devinfo: cannot open device: %s", devpath);
+		dbg("get_devinfo: cannot open device: %s", devpath);
 		return FALSE;
 	}
 	if (!DeviceIoControl(hdev, IOCTL_USBIP_STUB_GET_DEVINFO, NULL, 0, devinfo, sizeof(ioctl_usbip_stub_devinfo_t), &len, NULL)) {
-		err("get_devinfo: DeviceIoControl failed: err: 0x%lx", GetLastError());
+		dbg("get_devinfo: DeviceIoControl failed: err: 0x%lx", GetLastError());
 		CloseHandle(hdev);
 		return FALSE;
 	}
 	CloseHandle(hdev);
 
 	if (len != sizeof(ioctl_usbip_stub_devinfo_t)) {
-		err("get_devinfo: DeviceIoControl failed: invalid size: len: %d", len);
+		dbg("get_devinfo: DeviceIoControl failed: invalid size: len: %d", len);
 		return FALSE;
 	}
 
@@ -113,7 +113,7 @@ get_devpath_from_devno(devno_t devno)
 	ctx.devno = devno;
 	rc = traverse_usbdevs(walker_get_id_inst, TRUE, &ctx);
 	if (rc != -1) {
-		err("%s: traverse_usbdevs failed. traverse_usbdevs returned %d.", __FUNCTION__, rc);
+		dbg("traverse_usbdevs failed. traverse_usbdevs returned %d.", rc);
 		return NULL;
 	}
 
@@ -152,7 +152,7 @@ build_udev(devno_t devno, struct usbip_usb_device *pudev)
 
 	devpath = get_devpath_from_devno(devno);
 	if (devpath == NULL) {
-		err("%s: invalid devno: %hhu. devpath returned %s", __FUNCTION__, devno, devpath);
+		dbg("invalid devno: %hhu. devpath returned %s", devno, devpath);
 		return FALSE;
 	}
 
@@ -185,7 +185,7 @@ open_stub_dev(devno_t devno)
 
 	devpath = get_devpath_from_devno(devno);
 	if (devpath == NULL) {
-		err("%s: invalid devno: %hhu", __FUNCTION__, devno);
+		dbg("invalid devno: %hhu", devno);
 		return INVALID_HANDLE_VALUE;
 	}
 
@@ -193,12 +193,12 @@ open_stub_dev(devno_t devno)
 	free(devpath);
 
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("%s: cannot open device: %s", __FUNCTION__, devpath);
+		dbg("cannot open device: %s", devpath);
 		return INVALID_HANDLE_VALUE;
 	}
 
 	if (!DeviceIoControl(hdev, IOCTL_USBIP_STUB_EXPORT, NULL, 0, NULL, 0, &len, NULL)) {
-		err("%s: DeviceIoControl failed: err: 0x%lx", __FUNCTION__, GetLastError());
+		dbg("DeviceIoControl failed: err: 0x%lx", GetLastError());
 		CloseHandle(hdev);
 		return INVALID_HANDLE_VALUE;
 	}

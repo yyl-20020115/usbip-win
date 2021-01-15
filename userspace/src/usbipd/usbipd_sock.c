@@ -44,20 +44,20 @@ build_sockfd(struct addrinfo *ainfo)
 		usbip_net_set_v6only(sockfd);
 
 		if (bind(sockfd, ainfo->ai_addr, (int)ainfo->ai_addrlen) == SOCKET_ERROR) {
-			err("failed to bind: %s: err: %d", desc, WSAGetLastError());
+			dbg("failed to bind: %s: err: %d", desc, WSAGetLastError());
 			closesocket(sockfd);
 			return INVALID_SOCKET;
 		}
 
 		if (listen(sockfd, SOMAXCONN) == SOCKET_ERROR) {
-			err("failed to listen: %s: err: %d", desc, WSAGetLastError());
+			dbg("failed to listen: %s: err: %d", desc, WSAGetLastError());
 			closesocket(sockfd);
 			return INVALID_SOCKET;
 		}
 		info("listening on %s", desc);
 	}
 	else {
-		err("socket error: %s: err: (%d)", desc, WSAGetLastError());
+		dbg("socket error: %s: err: (%d)", desc, WSAGetLastError());
 	}
 
 	return sockfd;
@@ -108,7 +108,7 @@ get_listen_sockfds(int family)
 
 	rc = getaddrinfo(NULL, usbip_port_string, &hints, &ainfos);
 	if (rc != 0) {
-		err("failed to get a network address %s: %s", usbip_port_string, gai_strerror(rc));
+		dbg("failed to get a network address %s: %s", usbip_port_string, gai_strerror(rc));
 		return NULL;
 	}
 

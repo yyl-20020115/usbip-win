@@ -57,9 +57,9 @@ enum usbip_device_status{
 extern int usbip_use_stderr;
 extern int usbip_use_debug ;
 
-#define PROGNAME	"usbip"
+extern const char	*usbip_progname;
 
-#define pr_fmt(fmt)	"%s: %s: " fmt "\n", PROGNAME
+#define pr_fmt(fmt)	"%s: %s: " fmt "\n", usbip_progname
 #define dbg_fmt(fmt)	pr_fmt("%s:%d:[%s] " fmt), "debug",	\
 		        strrchr(__FILE__, '\\') + 1, __LINE__, __func__
 

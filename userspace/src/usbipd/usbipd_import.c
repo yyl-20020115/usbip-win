@@ -36,21 +36,22 @@ export_device(devno_t devno, SOCKET sockfd)
 
 	pctx = (forwarder_ctx_t *)malloc(sizeof(forwarder_ctx_t));
 	if (pctx == NULL) {
-		err("export_device: out of memory");
-		return -1;
+		dbg("out of memory");
+		return ERR_GENERAL;
 	}
 	pctx->hdev = open_stub_dev(devno);
 	if (pctx->hdev == INVALID_HANDLE_VALUE) {
-		err("export_device: cannot open devno: %hhu", devno);
-		return -1;
+		dbg("cannot open devno: %hhu", devno);
+		return ERR_NOTEXIST;
 	}
 	pctx->sockfd = sockfd;
 
 	work = CreateThreadpoolWork(forwarder_stub, pctx, NULL);
 	if (work == NULL) {
-		err("export_device: thread pool error: %lx", GetLastError());
+		dbg("failed to create thread pool work: error: %lx", GetLastError());
 		CloseHandle(pctx->hdev);
 		free(pctx);
+		return ERR_GENERAL;
 	}
 	SubmitThreadpoolWork(work);
 	return 0;
@@ -75,7 +76,7 @@ recv_request_import(SOCKET sockfd)
 
 	devno = get_devno_from_busid(req.busid);
 	if (devno == 0) {
-		err("invalid bus id: %s", req.busid);
+		dbg("invalid bus id: %s", req.busid);
 		usbip_net_send_op_common(sockfd, OP_REP_IMPORT, ST_NODEV);
 		return -1;
 	}
@@ -88,7 +89,7 @@ recv_request_import(SOCKET sockfd)
 	/* export device needs a TCP/IP socket descriptor */
 	rc = export_device(devno, sockfd);
 	if (rc < 0) {
-		err("failed to export device: %s, err:%d", req.busid, rc);
+		dbg("failed to export device: %s, err:%d", req.busid, rc);
 		usbip_net_send_op_common(sockfd, OP_REP_IMPORT, ST_NA);
 		return -1;
 	}

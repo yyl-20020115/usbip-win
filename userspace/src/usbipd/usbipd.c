@@ -92,6 +92,7 @@ do_standalone_mode(void)
 	fd_set	fds;
 	SOCKET	*sockfds;
 	int	n_sockfds;
+	int	ret = 0;
 
 	init_socket();
 
@@ -103,7 +104,7 @@ do_standalone_mode(void)
 	if (sockfds == NULL) {
 		err("failed to open a listening socket");
 		cleanup_socket();
-		return 1;
+		return 2;
 	}
 
 	n_sockfds = setup_fds(sockfds, &fds);
@@ -117,6 +118,8 @@ do_standalone_mode(void)
 		rc = select(n_sockfds, &fds, NULL, NULL, &timeout);
 		if (rc == SOCKET_ERROR) {
 			dbg("failed to select: err: %d", WSAGetLastError());
+			err("operation halted by socket error");
+			ret = 2;
 			break;
 		}
 		else if (rc > 0) {
@@ -195,6 +198,7 @@ parse_args(int argc, char *argv[])
 int
 main(int argc, char *argv[])
 {
+	usbip_progname = "usbipd";
 	usbip_use_stderr = 1;
 
 	if (!parse_args(argc, argv))

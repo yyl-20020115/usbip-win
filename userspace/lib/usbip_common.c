@@ -10,6 +10,8 @@
 
 #include "usbip_proto.h"
 
+const char	*usbip_progname;
+
 int usbip_use_stderr;
 int usbip_use_debug;
 
