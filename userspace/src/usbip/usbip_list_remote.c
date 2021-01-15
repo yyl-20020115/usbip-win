@@ -28,7 +28,8 @@ static int get_exported_devices(const char *host, SOCKET sockfd)
 	struct op_devlist_reply reply;
 	uint16_t code = OP_REP_DEVLIST;
 	unsigned int i;
-	int rc;
+	int	status;
+	int	rc;
 
 	rc = usbip_net_send_op_common(sockfd, OP_REQ_DEVLIST, 0);
 	if (rc < 0) {
@@ -36,9 +37,9 @@ static int get_exported_devices(const char *host, SOCKET sockfd)
 		return -1;
 	}
 
-	rc = usbip_net_recv_op_common(sockfd, &code);
+	rc = usbip_net_recv_op_common(sockfd, &code, &status);
 	if (rc < 0) {
-		dbg("usbip_net_recv_op_common failed");
+		dbg("usbip_net_recv_op_common failed: %x", status);
 		return -1;
 	}
 

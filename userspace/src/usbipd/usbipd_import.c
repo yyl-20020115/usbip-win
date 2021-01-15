@@ -76,6 +76,7 @@ recv_request_import(SOCKET sockfd)
 	devno = get_devno_from_busid(req.busid);
 	if (devno == 0) {
 		err("invalid bus id: %s", req.busid);
+		usbip_net_send_op_common(sockfd, OP_REP_IMPORT, ST_NODEV);
 		return -1;
 	}
 

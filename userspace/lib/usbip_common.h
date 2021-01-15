@@ -8,14 +8,15 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#ifndef VHCI_STATE_PATH
-#define VHCI_STATE_PATH "/var/run/vhci_hcd"
-#endif
-
-/* kernel module names */
-#define USBIP_CORE_MOD_NAME	"usbip-core"
-#define USBIP_HOST_DRV_NAME	"usbip-host"
-#define USBIP_VHCI_DRV_NAME	"vhci_hcd"
+/* Defines for op_code status in server/client op_common PDUs */
+#define ST_OK	0x00
+#define ST_NA	0x01
+	/* Device requested for import is not available */
+#define ST_DEV_BUSY	0x02
+	/* Device requested for import is in error state */
+#define ST_DEV_ERR	0x03
+#define ST_NODEV	0x04
+#define ST_ERROR	0x05
 
 /* FIXME: how to sync with drivers/usbip_common.h ? */
 enum usbip_device_status{

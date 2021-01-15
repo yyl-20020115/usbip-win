@@ -31,9 +31,6 @@ struct op_common {
 #define OP_REPLY	(0x00 << 8)
 	uint16_t code;
 
-	/* add more error code */
-#define ST_OK	0x00
-#define ST_NA	0x01
 	uint32_t status; /* op_code status (for reply) */
 };
 
@@ -174,7 +171,7 @@ void usbip_net_pack_usb_interface(int pack, struct usbip_usb_interface *uinf);
 int usbip_net_recv(SOCKET sockfd, void *buff, size_t bufflen);
 int usbip_net_send(SOCKET sockfd, void *buff, size_t bufflen);
 int usbip_net_send_op_common(SOCKET sockfd, uint32_t code, uint32_t status);
-int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code);
+int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code, int *pstatus);
 int usbip_net_set_reuseaddr(SOCKET sockfd);
 int usbip_net_set_nodelay(SOCKET sockfd);
 int usbip_net_set_keepalive(SOCKET sockfd);

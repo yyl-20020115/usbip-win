@@ -118,6 +118,7 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 	pvhci_pluginfo_t	pluginfo;
 	uint16_t code = OP_REP_IMPORT;
 	unsigned	devid;
+	int	status;
 	int	rc;
 
 	memset(&request, 0, sizeof(request));
@@ -141,9 +142,9 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 	}
 
 	/* recieve a reply */
-	rc = usbip_net_recv_op_common(sockfd, &code);
+	rc = usbip_net_recv_op_common(sockfd, &code, &status);
 	if (rc < 0) {
-		err("recv op_common");
+		err("recv op_common: %x", status);
 		return 1;
 	}
 

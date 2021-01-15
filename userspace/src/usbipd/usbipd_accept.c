@@ -9,13 +9,14 @@ static void
 recv_pdu(SOCKET connfd, BOOL *pneed_close_sockfd)
 {
 	uint16_t	code = OP_UNSPEC;
+	int	status;
 	int	ret;
 
 	*pneed_close_sockfd = TRUE;
 
-	ret = usbip_net_recv_op_common(connfd, &code);
+	ret = usbip_net_recv_op_common(connfd, &code, &status);
 	if (ret < 0) {
-		dbg("%s: could not receive opcode: %#0x", __FUNCTION__, code);
+		dbg("%s: could not receive opcode: %#0x, %x", __FUNCTION__, code, status);
 		return;
 	}
 

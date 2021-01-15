@@ -138,7 +138,7 @@ int usbip_net_send_op_common(SOCKET sockfd, uint32_t code, uint32_t status)
 	return 0;
 }
 
-int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code)
+int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code, int *pstatus)
 {
 	struct op_common op_common;
 	int rc;
@@ -167,6 +167,8 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code)
 			goto err;
 		}
 	}
+
+	*pstatus = op_common.status;
 
 	if (op_common.status != ST_OK) {
 		dbg("request failed: status: %d", op_common.status);
