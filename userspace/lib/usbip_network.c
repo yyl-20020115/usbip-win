@@ -8,6 +8,7 @@
 
 #include "usbip_common.h"
 #include "usbip_network.h"
+#include "dbgcode.h"
 
 int usbip_port = 3240;
 char *usbip_port_string = "3240";
@@ -171,7 +172,7 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code, int *pstatus)
 	*pstatus = op_common.status;
 
 	if (op_common.status != ST_OK) {
-		dbg("request failed: status: %d", op_common.status);
+		dbg("request failed: status: %s", dbg_opcode_status(op_common.status));
 		goto err;
 	}
 

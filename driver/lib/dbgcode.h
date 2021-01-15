@@ -5,12 +5,7 @@
 #include <ntddk.h>
 #include <usb.h>
 
-#define K_V(a) {#a, (unsigned int)a},
-
-typedef struct namecode {
-	const char		*name;
-	unsigned int	code;
-} namecode_t;
+#include "namecode.h"
 
 const char *dbg_namecode(namecode_t *namecodes, const char *codetype, unsigned int code);
 const char *dbg_namecode_buf(namecode_t *namecodes, const char *codetype, unsigned int code, char *buf, int buf_max);
