@@ -222,7 +222,7 @@ swap_usbip_header_cmd(unsigned int cmd, struct usbip_header *hdr)
 		break;
 	default:
 		/* NOTREACHED */
-		err("unknown command in pdu header: %d", cmd);
+		dbg("unknown command in pdu header: %d", cmd);
 		break;
 	}
 }
@@ -311,7 +311,7 @@ get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 		if (hdr->base.direction)
 			return 0;
 		if (!record_outq_seqnum(hdr->base.seqnum)) {
-			err("failed to record. out queue full");
+			dbg("failed to record. out queue full");
 		}
 		return hdr->u.cmd_submit.transfer_buffer_length;
 	}
@@ -417,7 +417,7 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 
 			bufnew = (char *)realloc(rbuff->bufp, rbuff->bufmaxp + nmore);
 			if (bufnew == NULL) {
-				err("%s: failed to reallocate buffer: %s", __FUNCTION__, rbuff->desc);
+				dbg("%s: failed to reallocate buffer: %s", rbuff->desc);
 				return FALSE;
 			}
 			rbuff->bufp = bufnew;
@@ -428,7 +428,7 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 
 			bufnew = (char *)malloc(nreq + nexist);
 			if (bufnew == NULL) {
-				err("%s: failed to allocate buffer: %s", __FUNCTION__, rbuff->desc);
+				dbg("failed to allocate buffer: %s", rbuff->desc);
 				return FALSE;
 			}
 			if (nexist > 0) {
@@ -445,9 +445,9 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 	if (!rbuff->in_reading) {
 		if (!ReadFileEx(rbuff->hdev, BUFCUR_P(rbuff), nreq, &rbuff->ovs[0], read_completion)) {
 			DWORD error = GetLastError();
-			err("%s: failed to read: err: 0x%lx", __FUNCTION__, error);
+			dbg("failed to read: err: 0x%lx", error);
 			if (error == ERROR_NETNAME_DELETED) {
-				err("%s: could the client have dropped the connection?", __FUNCTION__);
+				dbg("could the client have dropped the connection?");
 			}
 			return FALSE;
 		}
@@ -488,7 +488,7 @@ write_devbuf(devbuf_t *wbuff, devbuf_t *rbuff)
 	}
 	if (!wbuff->in_writing && BUFREMAIN_C(rbuff) > 0) {
 		if (!WriteFileEx(wbuff->hdev, BUFCUR_C(rbuff), BUFREMAIN_C(rbuff), &wbuff->ovs[1], write_completion)) {
-			err("%s: failed to write sock: err: 0x%lx", __FUNCTION__, GetLastError());
+			dbg("failed to write sock: err: 0x%lx", GetLastError());
 			return FALSE;
 		}
 		wbuff->in_writing = TRUE;
@@ -596,18 +596,18 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 
 	hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (hEvent == NULL) {
-		err("failed to create event");
+		dbg("failed to create event");
 		return;
 	}
 
 	if (!init_devbuf(&buff_src, desc_src, TRUE, swap_req_src, hdev_src, hEvent)) {
 		CloseHandle(hEvent);
-		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_src);
+		dbg("failed to initialize %s buffer", desc_src);
 		return;
 	}
 	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst, hEvent)) {
 		CloseHandle(hEvent);
-		err("%s: failed to initialize %s buffer", __FUNCTION__, desc_dst);
+		dbg("%s: failed to initialize %s buffer", desc_dst);
 		cleanup_devbuf(&buff_src);
 		return;
 	}

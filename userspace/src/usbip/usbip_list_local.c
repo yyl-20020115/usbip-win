@@ -57,16 +57,16 @@ add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 	usbdev_t	*usbdevs, *usbdev;
 
 	if (usbdev_list->n_usbdevs == 255) {
-		dbg("%s: exceed maximum usb devices", __FUNCTION__);
+		dbg("exceed maximum usb devices");
 		return;
 	}
 	if (!get_usbdev_info(id_hw, &vendor, &product)) {
-		dbg("%s: drop hub or multifunction interface: %s", __FUNCTION__, id_hw);
+		dbg("drop hub or multifunction interface: %s", id_hw);
 		return;
 	}
 	usbdevs = (usbdev_t *)realloc(usbdev_list->usbdevs, sizeof(usbdev_t) * (usbdev_list->n_usbdevs + 1));
 	if (usbdevs == NULL) {
-		dbg("%s: out of memory", __FUNCTION__);
+		dbg("out of memory");
 		return;
 	}
 	usbdev_list->n_usbdevs++;
@@ -115,7 +115,7 @@ walker_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 
 	id_hw = get_id_hw(dev_info, pdev_info_data);
 	if (id_hw == NULL) {
-		dbg("%s: failed to get hw id\n", __FUNCTION__);
+		dbg("failed to get hw id\n");
 		return 0;
 	}
 

@@ -19,17 +19,17 @@ void usbip_setup_port_number(char *arg)
 	unsigned long int port = strtoul(arg, &end, 10);
 
 	if (end == arg) {
-		err("port: could not parse '%s' as a decimal integer", arg);
+		dbg("port: could not parse '%s' as a decimal integer", arg);
 		return;
 	}
 
 	if (*end != '\0') {
-		err("port: garbage at end of '%s'", arg);
+		dbg("port: garbage at end of '%s'", arg);
 		return;
 	}
 
 	if (port > UINT16_MAX) {
-		err("port: %s too high (max=%d)",
+		dbg("port: %s too high (max=%d)",
 		    arg, UINT16_MAX);
 		return;
 	}

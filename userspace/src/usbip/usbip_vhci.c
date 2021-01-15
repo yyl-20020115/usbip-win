@@ -19,7 +19,7 @@ walker_devpath(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno
 
 	id_hw = get_id_hw(dev_info, pdev_info_data);
 	if (id_hw == NULL || (_stricmp(id_hw, "usbipwin\\vhci") != 0 && _stricmp(id_hw, "root\\vhci_ude") != 0)) {
-		err("%s: invalid hw id: %s\n", __FUNCTION__, id_hw ? id_hw : "");
+		dbg("invalid hw id: %s", id_hw ? id_hw : "");
 		if (id_hw != NULL)
 			free(id_hw);
 		return 0;

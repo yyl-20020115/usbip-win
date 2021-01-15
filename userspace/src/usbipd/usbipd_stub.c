@@ -53,7 +53,7 @@ get_device_path(const char *id_inst)
 	devpath_ctx.id_inst = id_inst;
 	rc = traverse_intfdevs(walker_devpath, &GUID_DEVINTERFACE_STUB_USBIP, &devpath_ctx);
 	if (rc != -1) {
-		dbg("%s: traverse_intfdevs failed, returned: %d", __FUNCTION__, rc);
+		dbg("traverse_intfdevs failed, returned: %d", rc);
 		return NULL;
 	}
 

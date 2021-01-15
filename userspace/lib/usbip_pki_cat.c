@@ -52,11 +52,11 @@ calc_hash(LPCSTR fpath, PBYTE pbHash)
 
 	hFile = CreateFile(fpath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile == INVALID_HANDLE_VALUE) {
-		err("calc_hash: path not found: %s", fpath);
+		dbg("calc_hash: path not found: %s", fpath);
 		return FALSE;
 	}
 	if ((!CryptCATAdminCalcHashFromFileHandle(hFile, &cbHash, pbHash, 0))) {
-		err("calc_hash: failed to hash: %s", fpath);
+		dbg("calc_hash: failed to hash: %s", fpath);
 		CloseHandle(hFile);
 		return FALSE;
 	}
@@ -101,13 +101,13 @@ add_file_hash(HANDLE hCat, LPCSTR path, LPCSTR fname, BOOL isPEType)
 		sSPCImageData.Flags.pbData = (BYTE*)&fImageData;
 		sSPCImageData.pFile = &sSPCLink;
 		if (!CryptEncodeObject(X509_ASN_ENCODING, OBJID_SPC_PE_IMAGE, &sSPCImageData, pbEncoded, &cbEncoded)) {
-			err("failed to encode SPC for pe image: %s", fname);
+			dbg("failed to encode SPC for pe image: %s", fname);
 			return FALSE;
 		}
 	}
 	else {
 		if (!CryptEncodeObject(X509_ASN_ENCODING, OBJID_SPC_CAB_DATA, &sSPCLink, pbEncoded, &cbEncoded)) {
-			err("failed to encode SPC for data: %s", fname);
+			dbg("failed to encode SPC for data: %s", fname);
 			return FALSE;
 		}
 	}
@@ -122,7 +122,7 @@ add_file_hash(HANDLE hCat, LPCSTR path, LPCSTR fname, BOOL isPEType)
 
 	pCatMember = CryptCATPutMemberInfo(hCat, NULL, wstrHash, (GUID*)(isPEType ? &pe_guid : &inf_guid), 0x200, sizeof(sSIPData), (BYTE*)&sSIPData);
 	if (pCatMember == NULL) {
-		err("failed to add cat entry: %s", fname);
+		dbg("failed to add cat entry: %s", fname);
 		return FALSE;
 	}
 
@@ -131,7 +131,7 @@ add_file_hash(HANDLE hCat, LPCSTR path, LPCSTR fname, BOOL isPEType)
 	if (CryptCATPutAttrInfo(hCat, pCatMember, L"File", ATTR_FLAGS, 2 * ((DWORD)wcslen(wfname) + 1), (BYTE*)wfname) == NULL ||
 		CryptCATPutAttrInfo(hCat, pCatMember, L"OSAttr", ATTR_FLAGS, 2 * ((DWORD)wcslen(wszOSAttr) + 1), (BYTE*)wszOSAttr) == NULL) {
 		free(wfname);
-		err("unable to create attributes: %s", fname);
+		dbg("unable to create attributes: %s", fname);
 		return FALSE;
 	}
 	free(wfname);
@@ -149,7 +149,7 @@ build_cat(LPCSTR path, LPCSTR catname, LPCSTR hwid)
 	LPCWSTR		wOS = L"7_X86,7_X64,8_X86,8_X64,8_ARM,10_X86,10_X64,10_ARM";
 
 	if (!CryptAcquireContextW(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-		err("unable to acquire crypt context for cat creation");
+		dbg("unable to acquire crypt context for cat creation");
 		return FALSE;
 	}
 
@@ -159,7 +159,7 @@ build_cat(LPCSTR path, LPCSTR catname, LPCSTR hwid)
 	hCat = CryptCATOpen(wpath_cat, CRYPTCAT_OPEN_CREATENEW, hProv, 0, 0);
 	free(wpath_cat);
 	if (hCat == INVALID_HANDLE_VALUE) {
-		err("unable to create cat: %s", path);
+		dbg("unable to create cat: %s", path);
 		CryptReleaseContext(hProv, 0);
 		return FALSE;
 	}
@@ -167,7 +167,7 @@ build_cat(LPCSTR path, LPCSTR catname, LPCSTR hwid)
 	whwid = utf8_to_wchar(hwid);
 	if (CryptCATPutCatAttrInfo(hCat, L"HWID1", CRYPTCAT_ATTR_AUTHENTICATED | CRYPTCAT_ATTR_NAMEASCII | CRYPTCAT_ATTR_DATAASCII,
 		2 * ((DWORD)wcslen(whwid) + 1), (BYTE*)whwid) == NULL) {
-		err("failed to set HWID1 cat attribute");
+		dbg("failed to set HWID1 cat attribute");
 		free(whwid);
 		goto out;
 	}
@@ -175,7 +175,7 @@ build_cat(LPCSTR path, LPCSTR catname, LPCSTR hwid)
 
 	if (CryptCATPutCatAttrInfo(hCat, L"OS", CRYPTCAT_ATTR_AUTHENTICATED | CRYPTCAT_ATTR_NAMEASCII | CRYPTCAT_ATTR_DATAASCII,
 		2 * ((DWORD)wcslen(wOS) + 1), (BYTE*)wOS) == NULL) {
-		err("failed to set OS cat attribute");
+		dbg("failed to set OS cat attribute");
 		goto out;
 	}
 
@@ -183,7 +183,7 @@ build_cat(LPCSTR path, LPCSTR catname, LPCSTR hwid)
 	add_file_hash(hCat, path, "usbip_stub.inf", FALSE);
 
 	if (!CryptCATPersistStore(hCat)) {
-		err("unable to sort cat: %s", path);
+		dbg("unable to sort cat: %s", path);
 		goto out;
 	}
 	res = TRUE;

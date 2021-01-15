@@ -8,13 +8,13 @@ load_mssign32_lib(HMODULE	*phMod, SignerSignEx_t *pfSignerSignEx, SignerFreeSign
 {
 	*phMod = LoadLibrary("MSSign32.dll");
 	if (*phMod == NULL) {
-		err("cannot load mssign32.dll");
+		dbg("cannot load mssign32.dll");
 		return FALSE;
 	}
 	*pfSignerSignEx = (SignerSignEx_t)GetProcAddress(*phMod, "SignerSignEx");
 	*pfSignerFreeSignerContext = (SignerFreeSignerContext_t)GetProcAddress(*phMod, "SignerFreeSignerContext");
 	if (*pfSignerSignEx == NULL || *pfSignerFreeSignerContext == NULL) {
-		err("cannot get functions from mssign32.dll");
+		dbg("cannot get functions from mssign32.dll");
 		FreeLibrary(*phMod);
 		return FALSE;
 	}
@@ -31,26 +31,26 @@ load_cert_context(LPCSTR subject)
 
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV)NULL, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"Root");
 	if (hCertStore == NULL) {
-		err("load_cert_context: failed to open certificate store: %lx", GetLastError());
+		dbg("load_cert_context: failed to open certificate store: %lx", GetLastError());
 		return NULL;
 	}
 
 	asprintf(&cn_subject, "CN=%s", subject);
 	if (!CertStrToName(X509_ASN_ENCODING, cn_subject, CERT_X500_NAME_STR, NULL, NULL, &blob.cbData, NULL)) {
-		err("load_cert_context: failed to allocate subject string");
+		dbg("load_cert_context: failed to allocate subject string");
 		free(cn_subject);
 		return NULL;
 	}
 
 	blob.pbData = malloc(blob.cbData);
 	if (blob.pbData == NULL) {
-		err("load_cert_context: out of memory");
+		dbg("load_cert_context: out of memory");
 		free(cn_subject);
 		return NULL;
 	}
 
 	if (!CertStrToName(X509_ASN_ENCODING, cn_subject, CERT_X500_NAME_STR, NULL, blob.pbData, &blob.cbData, NULL)) {
-		err("load_cert_context: failed to allocate subject string");
+		dbg("load_cert_context: failed to allocate subject string");
 		free(cn_subject);
 		free(blob.pbData);
 		return NULL;
@@ -91,7 +91,7 @@ sign_file(LPCSTR subject, LPCSTR fpath)
 
 	pCertContext = load_cert_context(subject);
 	if (pCertContext == NULL) {
-		err("cannot load certificate: subject: %s", subject);
+		dbg("cannot load certificate: subject: %s", subject);
 		FreeLibrary(hMod);
 		return FALSE;
 	}
@@ -147,7 +147,7 @@ sign_file(LPCSTR subject, LPCSTR fpath)
 	// Sign file with cert
 	hres = funcSignerSignEx(0, &signerSubjectInfo, &signerCert, &signerSignatureInfo, NULL, NULL, NULL, NULL, &pSignerContext);
 	if (hres != S_OK) {
-		err("SignerSignEx failed. hResult #%X", hres);
+		dbg("SignerSignEx failed. hResult #%X", hres);
 		goto out;
 	}
 	res = TRUE;

@@ -363,19 +363,19 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!isxdigit(*cp)) {
-				err("Invalid class spec at line %u", linectr);
+				dbg("Invalid class spec at line %u", linectr);
 				continue;
 			}
 			u = strtoul(cp, &cp, 16);
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				err("Invalid class spec at line %u", linectr);
+				dbg("Invalid class spec at line %u", linectr);
 				continue;
 			}
-			if (new_class(cp, u))
-				err("Duplicate class spec at line %u class %04x %s",
-				    linectr, u, cp);
+			if (new_class(cp, u)) {
+				dbg("Duplicate class spec at line %u class %04x %s", linectr, u, cp);
+			}
 			dbg("line %5u class %02x %s", linectr, u, cp);
 			lasthut = lastlang = lastvendor = lastsubclass = -1;
 			lastclass = u;
@@ -396,12 +396,12 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				err("Invalid vendor spec at line %u", linectr);
+				dbg("Invalid vendor spec at line %u", linectr);
 				continue;
 			}
-			if (new_vendor(cp, u))
-				err("Duplicate vendor spec at line %u vendor %04x %s",
-				    linectr, u, cp);
+			if (new_vendor(cp, u)) {
+				dbg("Duplicate vendor spec at line %u vendor %04x %s", linectr, u, cp);
+			}
 			dbg("line %5u vendor %04x %s", linectr, u, cp);
 			lastvendor = u;
 			lasthut = lastlang = lastclass = lastsubclass = -1;
@@ -413,22 +413,23 @@ static void parse(FILE *f)
 			while (isspace((unsigned char)*cp))
 				cp++;
 			if (!*cp) {
-				err("Invalid product/subclass spec at line %u",
-				    linectr);
+				dbg("Invalid product/subclass spec at line %u", linectr);
 				continue;
 			}
 			if (lastvendor != -1) {
-				if (new_product(cp, lastvendor, u))
-					err("Duplicate product spec at line %u product %04x:%04x %s",
+				if (new_product(cp, lastvendor, u)) {
+					dbg("Duplicate product spec at line %u product %04x:%04x %s",
 					    linectr, lastvendor, u, cp);
+				}
 				dbg("line %5u product %04x:%04x %s", linectr,
 				    lastvendor, u, cp);
 				continue;
 			}
 			if (lastclass != -1) {
-				if (new_subclass(cp, lastclass, u))
-					err("Duplicate subclass spec at line %u class %02x:%02x %s",
+				if (new_subclass(cp, lastclass, u)) {
+					dbg("err: Duplicate subclass spec at line %u class %02x:%02x %s",
 					    linectr, lastclass, u, cp);
+				}
 				dbg("line %5u subclass %02x:%02x %s", linectr,
 				    lastclass, u, cp);
 				lastsubclass = u;
@@ -442,8 +443,7 @@ static void parse(FILE *f)
 				/* do not store langid */
 				continue;
 			}
-			err("Product/Subclass spec without prior Vendor/Class spec at line %u",
-			    linectr);
+			dbg("err: Product/Subclass spec without prior Vendor/Class spec at line %u", linectr);
 			continue;
 		}
 		if (buf[0] == '\t' && buf[1] == '\t' && isxdigit(buf[2])) {
@@ -452,21 +452,20 @@ static void parse(FILE *f)
 			while (isspace(*cp))
 				cp++;
 			if (!*cp) {
-				err("Invalid protocol spec at line %u",
+				dbg("Invalid protocol spec at line %u",
 				    linectr);
 				continue;
 			}
 			if (lastclass != -1 && lastsubclass != -1) {
-				if (new_protocol(cp, lastclass, lastsubclass,
-						 u))
-					err("Duplicate protocol spec at line %u class %02x:%02x:%02x %s",
-					    linectr, lastclass, lastsubclass,
-					    u, cp);
+				if (new_protocol(cp, lastclass, lastsubclass, u)) {
+					dbg("Duplicate protocol spec at line %u class %02x:%02x:%02x %s",
+					    linectr, lastclass, lastsubclass, u, cp);
+				}
 				dbg("line %5u protocol %02x:%02x:%02x %s",
 				    linectr, lastclass, lastsubclass, u, cp);
 				continue;
 			}
-			err("Protocol spec without prior Class and Subclass spec at line %u",
+			dbg("err: Protocol spec without prior Class and Subclass spec at line %u",
 			    linectr);
 			continue;
 		}
@@ -490,7 +489,7 @@ static void parse(FILE *f)
 		if (buf[0] == 'V' && buf[1] == 'T')
 			continue;
 
-		err("Unknown line at line %u", linectr);
+		dbg("err: Unknown line at line %u", linectr);
 	}
 }
 
