@@ -8,6 +8,8 @@
 #include "usbip_setupdi.h"
 #include "usbip_vhci_api.h"
 
+#include "dbgcode.h"
+
 static int
 walker_devpath(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, void *ctx)
 {
@@ -78,7 +80,7 @@ usbip_vhci_get_ports_status(HANDLE hdev, ioctl_usbip_vhci_get_ports_status *st)
 		if (len == sizeof(ioctl_usbip_vhci_get_ports_status))
 			return 0;
 	}
-	return -1;
+	return ERR_GENERAL;
 }
 
 int
@@ -100,14 +102,16 @@ static int
 get_n_used_ports(HANDLE hdev)
 {
 	ioctl_usbip_vhci_get_ports_status	status;
+	int	res;
 
-	if (usbip_vhci_get_ports_status(hdev, &status))
-		return -1;
+	res = usbip_vhci_get_ports_status(hdev, &status);
+	if (res < 0)
+		return res;
 	return status.n_used_ports;
 }
 
-ioctl_usbip_vhci_imported_dev *
-usbip_vhci_get_imported_devs(HANDLE hdev)
+int
+usbip_vhci_get_imported_devs(HANDLE hdev, pioctl_usbip_vhci_imported_dev_t *pidevs)
 {
 	ioctl_usbip_vhci_imported_dev	*idevs;
 	int	n_used_ports;
@@ -115,27 +119,28 @@ usbip_vhci_get_imported_devs(HANDLE hdev)
 
 	n_used_ports = get_n_used_ports(hdev);
 	if (n_used_ports < 0) {
-		err("failed to get the number of used ports");
-		return NULL;
+		dbg("failed to get the number of used ports: %s", dbg_errcode(n_used_ports));
+		return ERR_GENERAL;
 	}
 
 	len_out = sizeof(ioctl_usbip_vhci_imported_dev) * (n_used_ports + 1);
 	idevs = (ioctl_usbip_vhci_imported_dev *)malloc(len_out);
 	if (idevs == NULL) {
-		err("out of memory");
-		return NULL;
+		dbg("out of memory");
+		return ERR_GENERAL;
 	}
 
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_GET_IMPORTED_DEVICES,
 		NULL, 0, idevs, len_out, &len_returned, NULL)) {
-		return idevs;
+		*pidevs = idevs;
+		return 0;
 	}
 	else {
-		err("failed to get imported devices: 0x%lx", GetLastError());
+		dbg("failed to get imported devices: 0x%lx", GetLastError());
 	}
 
 	free(idevs);
-	return NULL;
+	return ERR_GENERAL;
 }
 
 int

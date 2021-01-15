@@ -43,23 +43,28 @@ list_imported_devices(void)
 {
 	HANDLE hdev;
 	ioctl_usbip_vhci_imported_dev	*idevs;
+	int	res;
 	int	i;
 
 	hdev = usbip_vhci_driver_open();
 	if (hdev == INVALID_HANDLE_VALUE) {
 		err("failed to open vhci driver");
-		return -1;
+		return 3;
 	}
 
-	idevs = usbip_vhci_get_imported_devs(hdev);
-	if (idevs == NULL)
-		return -1;
+	res = usbip_vhci_get_imported_devs(hdev, &idevs);
+	if (res < 0) {
+		usbip_vhci_driver_close(hdev);
+		err("failed to get attach information");
+		return 2;
+	}
 
 	printf("Imported USB devices\n");
 	printf("====================\n");
 
-	if (usbip_names_init())
-		err("failed to open usb id database");
+	if (usbip_names_init()) {
+		dbg("failed to open usb id database");
+	}
 
 	for (i = 0; i < 127; i++) {
 		if (idevs[i].port < 0)
@@ -78,11 +83,5 @@ list_imported_devices(void)
 int
 usbip_port_show(int argc, char *argv[])
 {
-	int	ret;
-
-	ret = list_imported_devices();
-	if (ret < 0)
-		err("list imported devices");
-
-	return ret;
+	return list_imported_devices();
 }
