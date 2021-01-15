@@ -11,20 +11,20 @@
 
 int init_socket(void)
 {
-    WSADATA wsaData;
-    int err;
+	WSADATA	wsaData;
+	int	err;
 
-    err = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (err != 0) {
-        err("WSAStartup failed with error: %d\n", err);
-        return -1;
-    }
+	err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (err != 0) {
+		dbg("WSAStartup failed: error: 0x%lx", err);
+		return -1;
+	}
 
-    if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
-        err("Could not find a usable version of Winsock.dll\n");
-        WSACleanup();
-        return -1;
-    }
+	if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
+		dbg("cannot find a winsock 2.2 version");
+		WSACleanup();
+		return -1;
+	}
 	return 0;
 }
 

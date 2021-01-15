@@ -20,6 +20,7 @@
 
 #include "usbip_common.h"
 #include "usbip_network.h"
+#include "dbgcode.h"
 
 #include "usbip_windows.h"
 
@@ -33,21 +34,21 @@ static int get_exported_devices(const char *host, SOCKET sockfd)
 
 	rc = usbip_net_send_op_common(sockfd, OP_REQ_DEVLIST, 0);
 	if (rc < 0) {
-		dbg("usbip_net_send_op_common failed");
-		return -1;
+		dbg("failed to send common header: %s", dbg_errcode(rc));
+		return ERR_NETWORK;
 	}
 
 	rc = usbip_net_recv_op_common(sockfd, &code, &status);
 	if (rc < 0) {
-		dbg("usbip_net_recv_op_common failed: %x", status);
-		return -1;
+		dbg("failed to recv common header: %s", dbg_errcode(rc));
+		return rc;
 	}
 
 	memset(&reply, 0, sizeof(reply));
 	rc = usbip_net_recv(sockfd, &reply, sizeof(reply));
 	if (rc < 0) {
-		dbg("usbip_net_recv_op_devlist failed");
-		return -1;
+		dbg("failed to recv devlist: %s", dbg_errcode(rc));
+		return rc;
 	}
 
 	PACK_OP_DEVLIST_REPLY(0, &reply);
@@ -72,8 +73,8 @@ static int get_exported_devices(const char *host, SOCKET sockfd)
 
 		rc = usbip_net_recv(sockfd, &udev, sizeof(udev));
 		if (rc < 0) {
-			dbg("usbip_net_recv failed: usbip_usb_device[%d]", i);
-			return -1;
+			dbg("failed to recv devlist: usbip_usb_device[%d]: %s", i, dbg_errcode(rc));
+			return ERR_NETWORK;
 		}
 		usbip_net_pack_usb_device(0, &udev);
 
@@ -92,8 +93,8 @@ static int get_exported_devices(const char *host, SOCKET sockfd)
 
 			rc = usbip_net_recv(sockfd, &uintf, sizeof(uintf));
 			if (rc < 0) {
-				err("usbip_net_recv failed: usbip_usb_intf[%d]", j);
-				return -1;
+				dbg("failed to recv devlist: usbip_usb_intf[%d]: %s", j, dbg_errcode(rc));
+				return ERR_NETWORK;
 			}
 
 			usbip_net_pack_usb_interface(0, &uintf);
@@ -120,16 +121,15 @@ list_exported_devices(const char *host)
 
 	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
 	if (sockfd == INVALID_SOCKET) {
-		err("unable to connect to %s port %s: %s\n", host,
-		    usbip_port_string, gai_strerror((int)sockfd));
-		return -1;
+		err("failed to connect a remote host: %s", host);
+		return 3;
 	}
 	dbg("connected to %s:%s\n", host, usbip_port_string);
 
 	rc = get_exported_devices(host, sockfd);
 	if (rc < 0) {
 		err("failed to get device list from %s", host);
-		return -1;
+		return 4;
 	}
 
 	closesocket(sockfd);

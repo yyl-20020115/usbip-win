@@ -18,6 +18,18 @@
 #define ST_NODEV	0x04
 #define ST_ERROR	0x05
 
+/* error codes for userspace tools and library */
+#define ERR_GENERAL	(-1)
+#define ERR_INVARG	(-2)
+#define ERR_NETWORK	(-3)
+#define ERR_VERSION	(-4)
+#define ERR_PROTOCOL	(-5)
+#define ERR_STATUS	(-6)
+#define ERR_EXIST	(-7)
+#define ERR_NOTEXIST	(-8)
+#define ERR_DRIVER	(-9)
+#define ERR_PORTFULL	(-10)
+
 /* FIXME: how to sync with drivers/usbip_common.h ? */
 enum usbip_device_status{
 	/* dev status unknown. */
@@ -48,7 +60,7 @@ extern int usbip_use_debug ;
 
 #define pr_fmt(fmt)	"%s: %s: " fmt "\n", PROGNAME
 #define dbg_fmt(fmt)	pr_fmt("%s:%d:[%s] " fmt), "debug",	\
-		        __FILE__, __LINE__, __func__
+		        strrchr(__FILE__, '\\') + 1, __LINE__, __func__
 
 #define err(fmt, ...)								\
 	do {									\

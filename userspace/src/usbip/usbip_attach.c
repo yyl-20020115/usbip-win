@@ -24,6 +24,7 @@
 #include "usbip_network.h"
 #include "usbip_vhci.h"
 #include "usbip_forward.h"
+#include "dbgcode.h"
 
 #include "usbip_dscr.h"
 
@@ -41,37 +42,35 @@ void usbip_attach_usage(void)
 static int
 import_device(SOCKET sockfd, pvhci_pluginfo_t pluginfo, HANDLE *phdev)
 {
-	HANDLE hdev;
-	int rc;
-	int port;
+	HANDLE	hdev;
+	int	port;
+	int	rc;
 
 	hdev = usbip_vhci_driver_open();
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("open vhci driver");
-		return 1;
+		dbg("failed to open vhci driver");
+		return ERR_DRIVER;
 	}
 
 	port = usbip_vhci_get_free_port(hdev);
 	if (port < 0) {
-		err("no free port");
+		dbg("no free port");
 		usbip_vhci_driver_close(hdev);
-		return 1;
+		return ERR_PORTFULL;
 	}
 
-	dbg("got free port %d", port);
+	dbg("got free port: %d", port);
 
 	pluginfo->port = port;
 
 	rc = usbip_vhci_attach_device(hdev, pluginfo);
-
 	if (rc < 0) {
-		err("import device");
+		dbg("failed to attach device: %d", rc);
 		usbip_vhci_driver_close(hdev);
-		return 1;
+		return ERR_GENERAL;
 	}
 
 	*phdev = hdev;
-
 	return port;
 }
 
@@ -83,23 +82,23 @@ build_pluginfo(SOCKET sockfd, unsigned devid)
 	unsigned short	conf_dscr_len;
 
 	if (fetch_conf_descriptor(sockfd, devid, NULL, &conf_dscr_len) < 0) {
-		err("failed to get configuration descriptor size");
+		dbg("failed to get configuration descriptor size");
 		return NULL;
 	}
 
 	pluginfo_size = sizeof(vhci_pluginfo_t) + conf_dscr_len - 9;
 	pluginfo = (pvhci_pluginfo_t)malloc(pluginfo_size);
 	if (pluginfo == NULL) {
-		err("out of memory or invalid vhci pluginfo size");
+		dbg("out of memory or invalid vhci pluginfo size");
 		return NULL;
 	}
 	if (fetch_device_descriptor(sockfd, devid, pluginfo->dscr_dev) < 0) {
-		err("failed to fetch device descriptor");
+		dbg("failed to fetch device descriptor");
 		free(pluginfo);
 		return NULL;
 	}
 	if (fetch_conf_descriptor(sockfd, devid, pluginfo->dscr_conf, &conf_dscr_len) < 0) {
-		err("failed to fetch configuration descriptor");
+		dbg("failed to fetch configuration descriptor");
 		free(pluginfo);
 		return NULL;
 	}
@@ -127,8 +126,8 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 	/* send a request */
 	rc = usbip_net_send_op_common(sockfd, OP_REQ_IMPORT, 0);
 	if (rc < 0) {
-		err("send op_common");
-		return 1;
+		dbg("failed to send common header: %s", dbg_errcode(rc));
+		return ERR_NETWORK;
 	}
 
 	strncpy_s(request.busid, USBIP_BUS_ID_SIZE, busid, sizeof(request.busid));
@@ -137,35 +136,47 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 
 	rc = usbip_net_send(sockfd, (void *)&request, sizeof(request));
 	if (rc < 0) {
-		err("send op_import_request");
-		return 1;
+		dbg("failed to send import request: %s", dbg_errcode(rc));
+		return ERR_NETWORK;
 	}
 
 	/* recieve a reply */
 	rc = usbip_net_recv_op_common(sockfd, &code, &status);
 	if (rc < 0) {
-		err("recv op_common: %x", status);
-		return 1;
+		dbg("failed to recv common header: %s", dbg_errcode(rc));
+		if (rc == ERR_STATUS) {
+			dbg("op code error: %s", dbg_opcode_status(status));
+
+			switch (status) {
+			case ST_NODEV:
+				return ERR_NOTEXIST;
+			case ST_DEV_BUSY:
+				return ERR_EXIST;
+			default:
+				break;
+			}
+		}
+		return rc;
 	}
 
 	rc = usbip_net_recv(sockfd, (void *)&reply, sizeof(reply));
 	if (rc < 0) {
-		err("recv op_import_reply");
-		return 1;
+		dbg("failed to recv import reply: %s", dbg_errcode(rc));
+		return ERR_NETWORK;
 	}
 
 	PACK_OP_IMPORT_REPLY(0, &reply);
 
 	/* check the reply */
-	if (strncmp(reply.udev.busid, busid, sizeof(reply.udev.busid))) {
-		err("recv different busid %s", reply.udev.busid);
-		return 1;
+	if (strncmp(reply.udev.busid, busid, sizeof(reply.udev.busid)) != 0) {
+		dbg("recv different busid: %s", reply.udev.busid);
+		return ERR_PROTOCOL;
 	}
 
 	devid = reply.udev.busnum << 16 | reply.udev.devnum;
 	pluginfo = build_pluginfo(sockfd, devid);
 	if (pluginfo == NULL)
-		return 2;
+		return ERR_GENERAL;
 
 	if (serial != NULL)
 		mbstowcs_s(NULL, pluginfo->wserial, MAX_VHCI_SERIAL_ID, serial, _TRUNCATE);
@@ -187,14 +198,27 @@ attach_device(const char *host, const char *busid, const char *serial)
 
 	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
 	if (sockfd == INVALID_SOCKET) {
-		err("tcp connect");
-		return 1;
+		err("failed to connect a remote host: %s", host);
+		return 2;
 	}
 
 	rhport = query_import_device(sockfd, busid, &hdev, serial);
 	if (rhport < 0) {
-		err("query");
-		return 1;
+		switch (rhport) {
+		case ERR_DRIVER:
+			err("vhci driver is not loaded");
+			break;
+		case ERR_EXIST:
+			err("already used bus id: %s", busid);
+			break;
+		case ERR_NOTEXIST:
+			err("non-existent bus id: %s", busid);
+			break;
+		default:
+			err("failed to attach");
+			break;
+		}
+		return 3;
 	}
 
 	usbip_forward(hdev, (HANDLE)sockfd, FALSE);
@@ -219,11 +243,9 @@ int usbip_attach(int argc, char *argv[])
 	char *host = NULL;
 	char *busid = NULL;
 	char *serial = NULL;
-	int opt;
-	int ret = -1;
 
 	for (;;) {
-		opt = getopt_long(argc, argv, "r:b:s:", opts, NULL);
+		int	opt = getopt_long(argc, argv, "r:b:s:", opts, NULL);
 
 		if (opt == -1)
 			break;
@@ -239,18 +261,22 @@ int usbip_attach(int argc, char *argv[])
 			serial = optarg;
 			break;
 		default:
-			goto err_out;
+			err("invalid option: %c", opt);
+			usbip_attach_usage();
+			return 1;
 		}
 	}
 
-	if (!host || !busid)
-		goto err_out;
+	if (host == NULL) {
+		err("empty remote host");
+		usbip_attach_usage();
+		return 1;
+	}
+	if (busid == NULL) {
+		err("empty busid");
+		usbip_attach_usage();
+		return 1;
+	}
 
-	ret = attach_device(host, busid, serial);
-	goto out;
-
-err_out:
-	usbip_attach_usage();
-out:
-	return ret;
+	return attach_device(host, busid, serial);
 }

@@ -12,6 +12,20 @@ static namecode_t	namecodes_op_code_status[] = {
 	{0,0}
 };
 
+static namecode_t	namecodes_err[] = {
+	K_V(ERR_GENERAL)
+	K_V(ERR_INVARG)
+	K_V(ERR_NETWORK)
+	K_V(ERR_VERSION)
+	K_V(ERR_PROTOCOL)
+	K_V(ERR_STATUS)
+	K_V(ERR_EXIST)
+	K_V(ERR_NOTEXIST)
+	K_V(ERR_DRIVER)
+	K_V(ERR_PORTFULL)
+	{0,0}
+};
+
 static const char *
 dbg_namecode(char *buf, int buf_max, namecode_t *namecodes, const char *codetype, int code)
 {
@@ -34,4 +48,12 @@ dbg_opcode_status(int status)
 	static char	buf[128];
 
 	return dbg_namecode(buf, 128, namecodes_op_code_status, "op_code_status", status);
+}
+
+const char *
+dbg_errcode(int err)
+{
+	static char	buf[128];
+
+	return dbg_namecode(buf, 128, namecodes_err, "err code", err);
 }

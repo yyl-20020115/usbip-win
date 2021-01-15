@@ -45,13 +45,31 @@ static int detach_port(const char *portstr)
 	}
 	hdev = usbip_vhci_driver_open();
 	if (hdev == INVALID_HANDLE_VALUE) {
-		err("open vhci_driver");
-		return 1;
+		err("vhci driver is not loaded");
+		return 2;
 	}
 
 	ret = usbip_vhci_detach_device(hdev, port);
 	usbip_vhci_driver_close(hdev);
-	return (ret == 0) ? 0: 1;
+	if (ret == 0) {
+		if (port < 0)
+			printf("all ports are detached\n");
+		else
+			printf("port %d is succesfully detached\n", port);
+		return 0;
+	}
+	switch (ret) {
+	case ERR_INVARG:
+		err("invalid port: %d", port);
+		break;
+	case ERR_NOTEXIST:
+		err("non-existent port: %d", port);
+		break;
+	default:
+		err("failed to detach");
+		break;
+	}
+	return 3;
 }
 
 int usbip_detach(int argc, char *argv[])
@@ -60,26 +78,23 @@ int usbip_detach(int argc, char *argv[])
 		{ "port", required_argument, NULL, 'p' },
 		{ NULL, 0, NULL, 0 }
 	};
-	int opt;
-	int ret = -1;
 
 	for (;;) {
-		opt = getopt_long(argc, argv, "p:", opts, NULL);
+		int	opt = getopt_long(argc, argv, "p:", opts, NULL);
 
 		if (opt == -1)
 			break;
 
 		switch (opt) {
 		case 'p':
-			ret = detach_port(optarg);
-			goto out;
+			return detach_port(optarg);
 		default:
-			goto err_out;
+			break;
 		}
 	}
 
-err_out:
+	err("port is required");
 	usbip_detach_usage();
-out:
-	return ret;
+
+	return 1;
 }

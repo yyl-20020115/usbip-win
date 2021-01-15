@@ -149,23 +149,23 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code, int *pstatus)
 	rc = usbip_net_recv(sockfd, &op_common, sizeof(op_common));
 	if (rc < 0) {
 		dbg("usbip_net_recv failed: %d", rc);
-		goto err;
+		return ERR_NETWORK;
 	}
 
 	PACK_OP_COMMON(0, &op_common);
 
 	if (op_common.version != USBIP_VERSION) {
-		dbg("version mismatch: %d %d", op_common.version, USBIP_VERSION);
-		goto err;
+		dbg("version mismatch: %d != %d", op_common.version, USBIP_VERSION);
+		return ERR_VERSION;
 	}
 
-	switch(*code) {
+	switch (*code) {
 	case OP_UNSPEC:
 		break;
 	default:
 		if (op_common.code != *code) {
 			dbg("unexpected pdu %#0x for %#0x", op_common.code, *code);
-			goto err;
+			return ERR_PROTOCOL;
 		}
 	}
 
@@ -173,14 +173,11 @@ int usbip_net_recv_op_common(SOCKET sockfd, uint16_t *code, int *pstatus)
 
 	if (op_common.status != ST_OK) {
 		dbg("request failed: status: %s", dbg_opcode_status(op_common.status));
-		goto err;
+		return ERR_STATUS;
 	}
 
 	*code = op_common.code;
-
 	return 0;
-err:
-	return -1;
 }
 
 int usbip_net_set_reuseaddr(SOCKET sockfd)

@@ -34,16 +34,6 @@ static const char usbip_list_usage_string[] =
 	"    -l, --local            List the local USB devices\n"
 	;
 
-typedef struct {
-	unsigned short	vendor, product;
-	unsigned char	devno;
-} usbdev_t;
-
-typedef struct {
-	int		n_usbdevs;
-	usbdev_t	*usbdevs;
-} usbdev_list_t;
-
 void usbip_list_usage(void)
 {
 	printf("usage: %s", usbip_list_usage_string);
@@ -59,10 +49,10 @@ int usbip_list(int argc, char *argv[])
 	};
 	BOOL parsable = FALSE;
 	int opt;
-	int ret = -1;
+	int ret = 1;
 
 	if (usbip_names_init() != 0)
-		err("failed to open usb id database");
+		dbg("failed to open usb id database");
 
 	for (;;) {
 		opt = getopt_long(argc, argv, "pr:l", opts, NULL);
@@ -81,11 +71,11 @@ int usbip_list(int argc, char *argv[])
 			ret = list_devices(parsable);
 			goto out;
 		default:
-			goto err_out;
+			break;
 		}
 	}
 
-err_out:
+	err("-r or -l option required");
 	usbip_list_usage();
 out:
 	usbip_names_free();

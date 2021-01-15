@@ -157,10 +157,22 @@ usbip_vhci_detach_device(HANDLE hdev, int port)
 {
 	ioctl_usbip_vhci_unplug  unplug;
 	unsigned long	unused;
+	DWORD	err;
 
 	unplug.addr = (char)port;
 	if (DeviceIoControl(hdev, IOCTL_USBIP_VHCI_UNPLUG_HARDWARE,
 		&unplug, sizeof(unplug), NULL, 0, &unused, NULL))
 		return 0;
-	return -1;
+
+	err = GetLastError();
+	dbg("unplug error: 0x%lx", err);
+
+	switch (err) {
+	case ERROR_FILE_NOT_FOUND:
+		return ERR_NOTEXIST;
+	case ERROR_INVALID_PARAMETER:
+		return ERR_INVARG;
+	default:
+		return ERR_GENERAL;
+	}
 }

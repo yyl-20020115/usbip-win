@@ -115,16 +115,20 @@ static const struct command cmds[] = {
 static int usbip_help(int argc, char *argv[])
 {
 	const struct command *cmd;
-	int i;
-	int ret = 0;
 
-	if (argc > 1 && argv++) {
+	if (argc > 1) {
+		int	i;
+
 		for (i = 0; cmds[i].name != NULL; i++)
-			if (!strcmp(cmds[i].name, argv[0]) && cmds[i].usage) {
-				cmds[i].usage();
-				goto done;
+			if (strcmp(cmds[i].name, argv[1]) == 0) {
+				if (cmds[i].usage)
+					cmds[i].usage();
+				else
+					printf("no help for command: %s\n", argv[1]);
+				return 0;
 			}
-		ret = -1;
+		err("no help for invalid command: %s", argv[1]);
+		return 1;
 	}
 
 	usbip_usage();
@@ -133,22 +137,18 @@ static int usbip_help(int argc, char *argv[])
 		if (cmd->help != NULL)
 			printf("  %-10s %s\n", cmd->name, cmd->help);
 	printf("\n");
-done:
-	return ret;
+	return 0;
 }
 
 static int usbip_version(int argc, char *argv[])
 {
-	(void) argc;
-	(void) argv;
-
 	printf(PROGNAME " (%s)\n", usbip_version_string);
 	return 0;
 }
 
 static int run_command(const struct command *cmd, int argc, char *argv[])
 {
-	dbg("running command: `%s'\n", cmd->name);
+	dbg("running command: %s", cmd->name);
 	return cmd->fn(argc, argv);
 }
 
@@ -160,14 +160,12 @@ int main(int argc, char *argv[])
 		{ NULL,       0,                 NULL,  0 }
 	};
 
-	char *cmd;
-	int opt;
-	int i, rc = -1;
-
-	if (init_socket())
-		return EXIT_FAILURE;
+	char	*cmd;
+	int	opt;
+	int	rc = 1;
 
 	usbip_use_stderr = 1;
+
 	opterr = 0;
 	for (;;) {
 		opt = getopt_long(argc, argv, "+dt:", opts, NULL);
@@ -183,17 +181,23 @@ int main(int argc, char *argv[])
 			usbip_setup_port_number(optarg);
 			break;
 		case '?':
-			printf("usbip: invalid option\n");
-			/* Terminate after printing error */
-			/* FALLTHRU */
+			err("invalid option: %c", opt);
+			/* fall through */
 		default:
 			usbip_usage();
-			goto out;
+			return 1;
 		}
+	}
+
+	if (init_socket() < 0) {
+		err("cannot setup windows socket");
+		return EXIT_FAILURE;
 	}
 
 	cmd = argv[optind];
 	if (cmd) {
+		int	i;
+
 		for (i = 0; cmds[i].name != NULL; i++)
 			if (!strcmp(cmds[i].name, cmd)) {
 				argc -= optind;
@@ -202,11 +206,14 @@ int main(int argc, char *argv[])
 				rc = run_command(&cmds[i], argc, argv);
 				goto out;
 			}
+		err("invalid command: %s", cmd);
+	}
+	else {
+		/* empty command */
+		usbip_help(0, NULL);
 	}
 
-	/* invalid command */
-	usbip_help(0, NULL);
 out:
 	cleanup_socket();
-	return (rc > -1 ? EXIT_SUCCESS : EXIT_FAILURE);
+	return rc;
 }

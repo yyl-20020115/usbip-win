@@ -41,7 +41,7 @@ create_usbdev_list(void)
 
 	usbdev_list = (usbdev_list_t *)malloc(sizeof(usbdev_list_t));
 	if (usbdev_list == NULL) {
-		err("create_usbdev_list: out of memory");
+		dbg("create_usbdev_list: out of memory");
 		return NULL;
 	}
 	usbdev_list->n_usbdevs = 0;
@@ -57,7 +57,7 @@ add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 	usbdev_t	*usbdevs, *usbdev;
 
 	if (usbdev_list->n_usbdevs == 255) {
-		err("%s: exceed maximum usb devices", __FUNCTION__);
+		dbg("%s: exceed maximum usb devices", __FUNCTION__);
 		return;
 	}
 	if (!get_usbdev_info(id_hw, &vendor, &product)) {
@@ -66,7 +66,7 @@ add_usbdev(usbdev_list_t *usbdev_list, const char *id_hw, devno_t devno)
 	}
 	usbdevs = (usbdev_t *)realloc(usbdev_list->usbdevs, sizeof(usbdev_t) * (usbdev_list->n_usbdevs + 1));
 	if (usbdevs == NULL) {
-		err("%s: out of memory", __FUNCTION__);
+		dbg("%s: out of memory", __FUNCTION__);
 		return;
 	}
 	usbdev_list->n_usbdevs++;
@@ -115,7 +115,7 @@ walker_list(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 
 	id_hw = get_id_hw(dev_info, pdev_info_data);
 	if (id_hw == NULL) {
-		err("%s: failed to get hw id\n", __FUNCTION__);
+		dbg("%s: failed to get hw id\n", __FUNCTION__);
 		return 0;
 	}
 
@@ -155,8 +155,10 @@ int list_devices(BOOL parsable)
 	int	i;
 
 	usbdev_list = usbip_list_usbdevs();
-	if (usbdev_list == NULL)
+	if (usbdev_list == NULL) {
+		err("out of memory");
 		return 2;
+	}
 
 	for (i = 0; i < usbdev_list->n_usbdevs; i++) {
 		list_device(usbdev_list->usbdevs + i, parsable);
