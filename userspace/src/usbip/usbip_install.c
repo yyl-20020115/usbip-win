@@ -64,11 +64,11 @@ get_abs_path(const char *fname)
 	char	*sep;
 
 	if (GetModuleFileName(NULL, exe_path, MAX_PATH) == 0) {
-		err("failed to get a executable path");
+		dbg("failed to get a executable path");
 		return NULL;
 	}
 	if ((sep = strrchr(exe_path, '\\')) == NULL) {
-		err("invalid executanle path: %s", exe_path);
+		dbg("invalid executanle path: %s", exe_path);
 		return NULL;
 	}
 	*sep = '\0';
@@ -104,7 +104,7 @@ is_driver_oem_inf(drv_info_t *pinfo, const char *inf_path)
 
 	hinf = SetupOpenInfFile(inf_path, NULL, INF_STYLE_WIN4, NULL);
 	if (hinf == INVALID_HANDLE_VALUE) {
-		err("cannot open inf file: %s", inf_path);
+		dbg("cannot open inf file: %s", inf_path);
 		return FALSE;
 	}
 
@@ -144,7 +144,7 @@ get_oem_inf(drv_info_t *pinfo)
 
 	oem_inf_pattern = get_oem_inf_pattern();
 	if (oem_inf_pattern == NULL) {
-		err("failed to get oem inf pattern");
+		dbg("failed to get oem inf pattern");
 		return NULL;
 	}
 
@@ -152,7 +152,7 @@ get_oem_inf(drv_info_t *pinfo)
 	free(oem_inf_pattern);
 
 	if (hFind == INVALID_HANDLE_VALUE) {
-		err("failed to get oem inf: 0x%lx", GetLastError());
+		dbg("failed to get oem inf: 0x%lx", GetLastError());
 		return NULL;
 	}
 
@@ -189,7 +189,7 @@ uninstall_driver_package(drv_info_t *pinfo)
 		return FALSE;
 
 	if (!SetupUninstallOEMInf(oem_inf_name, 0, NULL)) {
-		err("failed to uninstall a old %s driver package: 0x%lx", pinfo->name, GetLastError());
+		dbg("failed to uninstall a old %s driver package: 0x%lx", pinfo->name, GetLastError());
 		free(oem_inf_name);
 		return FALSE;
 	}
@@ -198,11 +198,11 @@ uninstall_driver_package(drv_info_t *pinfo)
 	return TRUE;
 }
 
-static BOOL
+static int
 install_driver_package(drv_info_t *pinfo)
 {
 	char	*inf_path;
-	BOOL	res = TRUE;
+	int	res = 0;
 
 	inf_path = get_source_inf_path(pinfo);
 	if (inf_path == NULL)
@@ -212,13 +212,18 @@ install_driver_package(drv_info_t *pinfo)
 		DWORD	err = GetLastError();
 		switch (err) {
 		case ERROR_FILE_NOT_FOUND:
-			err("usbip_%s.inf or usbip_vhci.sys file not found", pinfo->name);
+			res = ERR_NOTEXIST;
+			dbg("usbip_%s.inf or usbip_vhci.sys file not found", pinfo->name);
+			break;
+		case ERROR_ACCESS_DENIED:
+			res = ERR_ACCESS;
+			dbg("failed to install %s driver package: access denied", pinfo->name);
 			break;
 		default:
-			err("failed to install %s driver package: err:%lx", pinfo->name, err);
+			res = ERR_GENERAL;
+			dbg("failed to install %s driver package: err:%lx", pinfo->name, err);
 			break;
 		}
-		res = FALSE;
 	}
 	free(inf_path);
 	return res;
@@ -252,7 +257,7 @@ uninstall_device(drv_info_t *pinfo)
 
 	hdevinfoset = SetupDiCreateDeviceInfoList(NULL, NULL);
 	if (hdevinfoset == INVALID_HANDLE_VALUE) {
-		err("failed to create devinfoset");
+		dbg("failed to create devinfoset");
 		return FALSE;
 	}
 
@@ -264,81 +269,7 @@ uninstall_device(drv_info_t *pinfo)
 	}
 
 	if (!DiUninstallDevice(NULL, hdevinfoset, &devinfo, 0, NULL)) {
-		err("cannot uninstall root device: error: 0x%lx", GetLastError());
-		SetupDiDestroyDeviceInfoList(hdevinfoset);
-		return FALSE;
-	}
-	SetupDiDestroyDeviceInfoList(hdevinfoset);
-	return TRUE;
-}
-
-static BOOL
-create_devinfo(drv_info_t *pinfo, LPGUID pguid_system, HDEVINFO hdevinfoset, PSP_DEVINFO_DATA pdevinfo)
-{
-	DWORD	err;
-
-	memset(pdevinfo, 0, sizeof(SP_DEVINFO_DATA));
-	pdevinfo->cbSize = sizeof(SP_DEVINFO_DATA);
-	if (SetupDiCreateDeviceInfo(hdevinfoset, pinfo->device_id, pguid_system, NULL, NULL, 0, pdevinfo))
-		return TRUE;
-
-	err = GetLastError();
-	switch (err) {
-	case ERROR_ACCESS_DENIED:
-		err("access denied - make sure you are running as administrator");
-		return FALSE;
-	default:
-		err("failed to create a root device info: 0x%lx", err);
-		break;
-	}
-
-	return FALSE;
-}
-
-static BOOL
-setup_guid(LPCTSTR classname, LPGUID pguid)
-{
-	DWORD	reqsize;
-
-	if (!SetupDiClassGuidsFromName(classname, pguid, 1, &reqsize)) {
-		err("failed to get System setup class");
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static BOOL
-install_device(drv_info_t *pinfo)
-{
-	HDEVINFO	hdevinfoset;
-	SP_DEVINFO_DATA	devinfo;
-	GUID	guid_system;
-
-	setup_guid(pinfo->devclass, &guid_system);
-
-	hdevinfoset = SetupDiGetClassDevs(&guid_system, NULL, NULL, 0);
-	if (hdevinfoset == INVALID_HANDLE_VALUE) {
-		err("failed to create devinfoset");
-		return FALSE;
-	}
-
-	if (!create_devinfo(pinfo, &guid_system, hdevinfoset, &devinfo)) {
-		SetupDiDestroyDeviceInfoList(hdevinfoset);
-		return FALSE;
-	}
-
-	if (!SetupDiSetDeviceRegistryProperty(hdevinfoset, &devinfo, SPDRP_HARDWAREID, pinfo->hwid, (DWORD)(strlen(pinfo->hwid) + 2))) {
-		err("failed to set hw id: 0x%lx", GetLastError());
-		SetupDiDestroyDeviceInfoList(hdevinfoset);
-		return FALSE;
-	}
-	if (!SetupDiCallClassInstaller(DIF_REGISTERDEVICE, hdevinfoset, &devinfo)) {
-		err("failed to register: 0x%lx", GetLastError());
-		SetupDiDestroyDeviceInfoList(hdevinfoset);
-		return FALSE;
-	}
-	if (!DiInstallDevice(NULL, hdevinfoset, &devinfo, NULL, 0, NULL)) {
-		err("failed to install: 0x%lx", GetLastError());
+		dbg("cannot uninstall device: error: 0x%lx", GetLastError());
 		SetupDiDestroyDeviceInfoList(hdevinfoset);
 		return FALSE;
 	}
@@ -347,9 +278,84 @@ install_device(drv_info_t *pinfo)
 }
 
 static int
+create_devinfo(drv_info_t *pinfo, LPGUID pguid_system, HDEVINFO hdevinfoset, PSP_DEVINFO_DATA pdevinfo)
+{
+	DWORD	err;
+
+	memset(pdevinfo, 0, sizeof(SP_DEVINFO_DATA));
+	pdevinfo->cbSize = sizeof(SP_DEVINFO_DATA);
+	if (SetupDiCreateDeviceInfo(hdevinfoset, pinfo->device_id, pguid_system, NULL, NULL, 0, pdevinfo))
+		return 0;
+
+	err = GetLastError();
+	switch (err) {
+	case ERROR_ACCESS_DENIED:
+		dbg("failed to create device info: access denied");
+		return ERR_ACCESS;
+	default:
+		dbg("failed to create a device info: 0x%lx", err);
+		return ERR_GENERAL;
+	}
+}
+
+static BOOL
+setup_guid(LPCTSTR classname, LPGUID pguid)
+{
+	DWORD	reqsize;
+
+	if (!SetupDiClassGuidsFromName(classname, pguid, 1, &reqsize)) {
+		dbg("failed to get System setup class");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static int
+install_device(drv_info_t *pinfo)
+{
+	HDEVINFO	hdevinfoset;
+	SP_DEVINFO_DATA	devinfo;
+	GUID	guid_system;
+	int	ret;
+
+	setup_guid(pinfo->devclass, &guid_system);
+
+	hdevinfoset = SetupDiGetClassDevs(&guid_system, NULL, NULL, 0);
+	if (hdevinfoset == INVALID_HANDLE_VALUE) {
+		dbg("failed to create devinfoset");
+		return ERR_GENERAL;
+	}
+
+	ret = create_devinfo(pinfo, &guid_system, hdevinfoset, &devinfo);
+	if (ret) {
+		SetupDiDestroyDeviceInfoList(hdevinfoset);
+		return ret;
+	}
+
+	if (!SetupDiSetDeviceRegistryProperty(hdevinfoset, &devinfo, SPDRP_HARDWAREID, pinfo->hwid, (DWORD)(strlen(pinfo->hwid) + 2))) {
+		dbg("failed to set hw id: 0x%lx", GetLastError());
+		SetupDiDestroyDeviceInfoList(hdevinfoset);
+		return ERR_GENERAL;
+	}
+	if (!SetupDiCallClassInstaller(DIF_REGISTERDEVICE, hdevinfoset, &devinfo)) {
+		dbg("failed to register: 0x%lx", GetLastError());
+		SetupDiDestroyDeviceInfoList(hdevinfoset);
+		return ERR_GENERAL;
+	}
+	if (!DiInstallDevice(NULL, hdevinfoset, &devinfo, NULL, 0, NULL)) {
+		dbg("failed to install: 0x%lx", GetLastError());
+		SetupDiDestroyDeviceInfoList(hdevinfoset);
+		return ERR_GENERAL;
+	}
+	SetupDiDestroyDeviceInfoList(hdevinfoset);
+	return 0;
+}
+
+static int
 install_vhci(int type)
 {
 	drv_info_t	*pinfo = &drv_infos[type];
+	int	ret;
 
 	if (is_exist_device(pinfo)) {
 		if (force)
@@ -361,13 +367,28 @@ install_vhci(int type)
 		if (force)
 			uninstall_driver_package(pinfo);
 	}
-	if (!install_driver_package(pinfo)) {
-		err("cannot install %s driver package", pinfo->name);
+	ret = install_driver_package(pinfo);
+	if (ret < 0) {
+		switch (ret) {
+		case ERR_ACCESS:
+			err("access denied: make sure you are running as administrator");
+			break;
+		default:
+			err("cannot install %s driver package", pinfo->name);
+		}
 		return 2;
 	}
 
-	if (!install_device(pinfo)) {
-		err("cannot install %s device", pinfo->name);
+	ret = install_device(pinfo);
+	if (ret < 0) {
+		switch (ret) {
+		case ERR_ACCESS:
+			err("access denied: make sure you are running as administrator");
+			break;
+		default:
+			err("cannot install %s device", pinfo->name);
+			break;
+		}
 		return 4;
 	}
 
@@ -411,11 +432,19 @@ install_vhci_wdm(void)
 	int	ret;
 
 	if (!check_files_wdm(TRUE)) {
-		err("cannot install vhci(wdm) driver package");
+		err("cannot install vhci(wdm) driver");
 		return 2;
 	}
-	if (!install_driver_package(&drv_infos[DRIVER_VHCI_WDM])) {
-		err("cannot install vhci(wdm) driver package");
+	ret = install_driver_package(&drv_infos[DRIVER_VHCI_WDM]);
+	if (ret < 0) {
+		switch (ret) {
+		case ERR_ACCESS:
+			err("access denied: make sure you are running as administrator");
+			break;
+		default:
+			err("cannot install vhci driver package");
+			break;
+		}
 		return 5;
 	}
 	ret = install_vhci(DRIVER_ROOT);
@@ -432,7 +461,7 @@ install_vhci_ude(void)
 	int	ret;
 
 	if (!check_files_ude(TRUE)) {
-		err("cannot install vhci(ude) driver package");
+		err("cannot install vhci(ude) driver");
 		return 2;
 	}
 	ret = install_vhci(DRIVER_VHCI_UDE);
@@ -467,8 +496,9 @@ uninstall_vhci(int type)
 		}
 	}
 	else {
-		if (!uninstall_device(pinfo))
+		if (!uninstall_device(pinfo)) {
 			return 2;
+		}
 	}
 
 	if (!uninstall_driver_package(pinfo)) {

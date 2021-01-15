@@ -29,6 +29,7 @@
 #define ERR_NOTEXIST	(-8)
 #define ERR_DRIVER	(-9)
 #define ERR_PORTFULL	(-10)
+#define ERR_ACCESS	(-11)
 
 /* FIXME: how to sync with drivers/usbip_common.h ? */
 enum usbip_device_status{

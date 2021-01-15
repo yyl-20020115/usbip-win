@@ -23,6 +23,7 @@ static namecode_t	namecodes_err[] = {
 	K_V(ERR_NOTEXIST)
 	K_V(ERR_DRIVER)
 	K_V(ERR_PORTFULL)
+	K_V(ERR_ACCESS)
 	{0,0}
 };
 
