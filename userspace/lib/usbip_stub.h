@@ -10,5 +10,5 @@
 
 BOOL is_service_usbip_stub(HDEVINFO dev_info, SP_DEVINFO_DATA *dev_info_data);
 
-BOOL attach_stub_driver(devno_t devno);
-BOOL detach_stub_driver(devno_t devno);
+int attach_stub_driver(devno_t devno);
+int detach_stub_driver(devno_t devno);

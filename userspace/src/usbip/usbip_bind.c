@@ -38,10 +38,18 @@ walker_bind(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno, v
 	devno_t	*pdevno = (devno_t *)ctx;
 
 	if (devno == *pdevno) {
-		/* gotcha */
-		if (attach_stub_driver(devno)) {
-			restart_device(dev_info, pdev_info_data);
-			return -100;
+		int	ret;
+
+		ret = attach_stub_driver(devno);
+		switch (ret) {
+		case 0:
+			if (!restart_device(dev_info, pdev_info_data))
+				return ERR_DRIVER;
+			return 1;
+		case ERR_NOTEXIST:
+			return ERR_NOTEXIST;
+		default:
+			return ERR_GENERAL;
 		}
 	}
 	return 0;
@@ -54,13 +62,23 @@ bind_device(const char *busid)
 	int	rc;
 
 	devno = get_devno_from_busid(busid);
-
-	rc = traverse_usbdevs(walker_bind, TRUE, (void *)&devno);
-	if (rc != -100) {
-		err("%s: error binding device on busid %s: err: %d", __FUNCTION__, busid, rc);
-		return -1;
+	if (devno == 0) {
+		err("invalid bus id: %s", busid);
+		return 1;
 	}
-	info("%s: bind device on busid %s: complete", __FUNCTION__, busid);
+	rc = traverse_usbdevs(walker_bind, TRUE, (void *)&devno);
+	if (rc != 1) {
+		switch (rc) {
+		case 0:
+		case ERR_NOTEXIST:
+			err("no such device on busid %s", busid);
+			return 2;
+		default:
+			err("failed to bind device on busid %s", busid);
+			return 3;
+		}
+	}
+	info("bind device on busid %s: complete", busid);
 	return 0;
 }
 
@@ -72,7 +90,6 @@ int usbip_bind(int argc, char *argv[])
 	};
 
 	int opt;
-	int ret = -1;
 
 	for (;;) {
 		opt = getopt_long(argc, argv, "b:", opts, NULL);
@@ -82,15 +99,13 @@ int usbip_bind(int argc, char *argv[])
 
 		switch (opt) {
 		case 'b':
-			ret = bind_device(optarg);
-			goto out;
+			return bind_device(optarg);
 		default:
-			goto err_out;
+			break;
 		}
 	}
 
-err_out:
+	err("empty busid");
 	usbip_bind_usage();
-out:
-	return ret;
+	return 1;
 }

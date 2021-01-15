@@ -160,7 +160,6 @@ apply_stub_fdo(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 		return FALSE;
 	}
 
-
 	asprintf(&path_cat, "%s\\usbip_stub.cat", path_drvpkg);
 	if (!sign_file("USBIP Test", path_cat)) {
 		remove_dir_all(path_drvpkg);
@@ -174,7 +173,7 @@ apply_stub_fdo(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 	/* update driver */
 	asprintf(&path_inf, "%s\\usbip_stub.inf", path_drvpkg);
 	if (!UpdateDriverForPlugAndPlayDevicesA(NULL, id_hw, path_inf, INSTALLFLAG_NONINTERACTIVE | INSTALLFLAG_FORCE, &reboot_required)) {
-		err("failed to update driver %s ; %s ; errorcode: %lx", path_inf, id_hw, GetLastError());
+		dbg("failed to update driver %s ; %s ; errorcode: %lx", path_inf, id_hw, GetLastError());
 		free(path_inf);
 		free(id_hw);
 		remove_dir_all(path_drvpkg);
@@ -194,7 +193,7 @@ rollback_driver(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data)
 	BOOL	needReboot;
 
 	if (!DiRollbackDriver(dev_info, pdev_info_data, NULL, ROLLBACK_FLAG_NO_UI, &needReboot)) {
-		err("failed to rollback driver: %lx", GetLastError());
+		dbg("failed to rollback driver: %lx", GetLastError());
 		return FALSE;
 	}
 	return TRUE;
@@ -207,21 +206,23 @@ walker_attach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 
 	if (devno == *pdevno) {
 		if (!apply_stub_fdo(dev_info, pdev_info_data))
-			return -2;
-		return -1;
+			return ERR_GENERAL;
+		return 1;
 	}
 	return 0;
 }
 
-BOOL
+int
 attach_stub_driver(devno_t devno)
 {
 	int	ret;
 
 	ret = traverse_usbdevs(walker_attach, TRUE, &devno);
-	if (ret == -1)
-		return TRUE;
-	return FALSE;
+	if (ret == 1)
+		return 0;
+	if (ret == 0)
+		return ERR_NOTEXIST;
+	return ERR_GENERAL;
 }
 
 static int
@@ -231,19 +232,21 @@ walker_detach(HDEVINFO dev_info, PSP_DEVINFO_DATA pdev_info_data, devno_t devno,
 
 	if (devno == *pdevno) {
 		if (!rollback_driver(dev_info, pdev_info_data))
-			return -2;
+			return ERR_GENERAL;
 		return 1;
 	}
 	return 0;
 }
 
-BOOL
+int
 detach_stub_driver(devno_t devno)
 {
 	int	ret;
 
 	ret = traverse_usbdevs(walker_detach, TRUE, &devno);
 	if (ret == 1)
-		return TRUE;
-	return FALSE;
+		return 0;
+	if (ret == 0)
+		return ERR_NOTEXIST;
+	return ERR_GENERAL;
 }
