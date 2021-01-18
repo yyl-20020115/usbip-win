@@ -343,8 +343,11 @@ plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo)
 	if (vusb != NULL) {
 		WDFFILEOBJECT	fo = WdfRequestGetFileObject(req);
 		if (fo != NULL) {
-			pctx_vusb_t	*pvusb = TO_PVUSB(fo);
-			*pvusb = vusb;
+			pctx_safe_vusb_t	svusb = TO_SAFE_VUSB(fo);
+
+			svusb->vhci = vhci;
+			svusb->port = pluginfo->port;
+			svusb->vusb = vusb;
 		}
 		else {
 			TRE(PLUGIN, "empty fileobject. setup failed");

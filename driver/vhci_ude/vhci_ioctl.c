@@ -5,8 +5,6 @@
 
 NTSTATUS
 plugin_vusb(pctx_vhci_t vhci, WDFREQUEST req, pvhci_pluginfo_t pluginfo);
-NTSTATUS
-plugout_vusb(pctx_vhci_t vhci, CHAR port);
 
 static VOID
 get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_status)

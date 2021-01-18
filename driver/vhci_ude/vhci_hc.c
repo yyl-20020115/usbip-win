@@ -52,6 +52,40 @@ create_ucx_controller(WDFDEVICE hdev)
 	return TRUE;
 }
 
+static VOID
+create_fileobject(_In_ 	WDFDEVICE hdev, WDFREQUEST req, _In_ WDFFILEOBJECT fo)
+{
+	pctx_vhci_t	vhci = TO_VHCI(hdev);
+	pctx_safe_vusb_t	svusb = TO_SAFE_VUSB(fo);
+
+	TRD(VHCI, "Enter");
+
+	svusb->vhci = vhci;
+	svusb->vusb = NULL;
+
+	WdfRequestComplete(req, STATUS_SUCCESS);
+
+	TRD(VHCI, "Leave");
+}
+
+static VOID
+cleanup_fileobject(_In_ WDFFILEOBJECT fo)
+{
+	pctx_safe_vusb_t	svusb = TO_SAFE_VUSB(fo);
+
+	TRD(VHCI, "Enter");
+
+	/*
+	 * Not sure but the vusb maybe already be destroyed.
+	 * So after checked, proceed to plug out.
+	 */
+	if (svusb->vusb != NULL && svusb->vhci->vusbs[svusb->port] == svusb->vusb) {
+		plugout_vusb(svusb->vhci, (CHAR)svusb->port);
+	}
+
+	TRD(VHCI, "Leave");
+}
+
 static PAGEABLE VOID
 setup_fileobject(PWDFDEVICE_INIT dinit)
 {
@@ -60,8 +94,8 @@ setup_fileobject(PWDFDEVICE_INIT dinit)
 
 	PAGED_CODE();
 
-	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, pctx_vusb_t);
-	WDF_FILEOBJECT_CONFIG_INIT(&conf, NULL, NULL, NULL);
+	WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrs, ctx_safe_vusb_t);
+	WDF_FILEOBJECT_CONFIG_INIT(&conf, create_fileobject, NULL, cleanup_fileobject);
 	WdfDeviceInitSetFileObjectConfig(dinit, &conf, &attrs);
 }
 

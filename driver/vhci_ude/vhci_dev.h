@@ -69,7 +69,6 @@ typedef struct _ctx_vusb
 } ctx_vusb_t, *pctx_vusb_t;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_vusb_t, TO_VUSB)
-WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(pctx_vusb_t, TO_PVUSB)
 
 typedef struct _ctx_ep
 {
@@ -87,8 +86,19 @@ typedef struct _ctx_ep
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_ep_t, TO_EP)
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(pctx_ep_t, TO_PEP)
 
+typedef struct _ctx_safe_vusb
+{
+	pctx_vhci_t	vhci;
+	ULONG		port;
+	pctx_vusb_t	vusb;
+} ctx_safe_vusb_t, *pctx_safe_vusb_t;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(ctx_safe_vusb_t, TO_SAFE_VUSB)
+
 #define VUSB_CREATING	((pctx_vusb_t)-1)
 #define VUSB_DELETING	((pctx_vusb_t)1)
 #define VUSB_IS_VALID(vusb)	((vusb) != NULL && (vusb) != VUSB_CREATING && (vusb) != VUSB_DELETING)
+
+extern NTSTATUS plugout_vusb(pctx_vhci_t vhci, CHAR port);
 
 EXTERN_C_END

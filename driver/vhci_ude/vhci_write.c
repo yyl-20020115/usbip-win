@@ -68,13 +68,15 @@ out:
 VOID
 io_write(_In_ WDFQUEUE queue, _In_ WDFREQUEST req, _In_ size_t len)
 {
+	pctx_safe_vusb_t	svusb;
 	pctx_vusb_t	vusb;
 
 	UNREFERENCED_PARAMETER(queue);
 
 	TRD(WRITE, "Enter: len: %u", (ULONG)len);
 
-	vusb = *TO_PVUSB(WdfRequestGetFileObject(req));
+	svusb = TO_SAFE_VUSB(WdfRequestGetFileObject(req));
+	vusb = svusb->vusb;
 
 	write_vusb(vusb, req);
 

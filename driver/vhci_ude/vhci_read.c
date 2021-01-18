@@ -23,11 +23,14 @@ find_pending_urbr(pctx_vusb_t vusb)
 static VOID
 req_read_cancelled(WDFREQUEST req_read)
 {
+	pctx_safe_vusb_t	svusb;
 	pctx_vusb_t	vusb;
 
 	TRD(READ, "a pending read req cancelled");
 
-	vusb = *TO_PVUSB(WdfRequestGetFileObject(req_read));
+	svusb = TO_SAFE_VUSB(WdfRequestGetFileObject(req_read));
+	vusb = svusb->vusb;
+
 	WdfSpinLockAcquire(vusb->spin_lock);
 	if (vusb->pending_req_read == req_read) {
 		vusb->pending_req_read = NULL;
@@ -110,6 +113,7 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 VOID
 io_read(_In_ WDFQUEUE queue, _In_ WDFREQUEST req, _In_ size_t len)
 {
+	pctx_safe_vusb_t	svusb;
 	pctx_vusb_t	vusb;
 	NTSTATUS	status;
 
@@ -117,7 +121,9 @@ io_read(_In_ WDFQUEUE queue, _In_ WDFREQUEST req, _In_ size_t len)
 
 	TRD(READ, "Enter: len: %u", (ULONG)len);
 
-	vusb = *TO_PVUSB(WdfRequestGetFileObject(req));
+	svusb = TO_SAFE_VUSB(WdfRequestGetFileObject(req));
+	vusb = svusb->vusb;
+
 	if (vusb->invalid) {
 		TRD(READ, "vusb disconnected: port: %u", vusb->port);
 		status = STATUS_DEVICE_NOT_CONNECTED;
