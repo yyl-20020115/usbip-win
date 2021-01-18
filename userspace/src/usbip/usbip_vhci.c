@@ -91,7 +91,7 @@ usbip_vhci_get_free_port(HANDLE hdev)
 
 	if (usbip_vhci_get_ports_status(hdev, &status))
 		return -1;
-	for (i = 0; i < 127; i++) {
+	for (i = 0; i < status.n_max_ports; i++) {
 		if (!status.port_status[i])
 			return i;
 	}
@@ -99,7 +99,7 @@ usbip_vhci_get_free_port(HANDLE hdev)
 }
 
 static int
-get_n_used_ports(HANDLE hdev)
+get_n_max_ports(HANDLE hdev)
 {
 	ioctl_usbip_vhci_get_ports_status	status;
 	int	res;
@@ -107,23 +107,23 @@ get_n_used_ports(HANDLE hdev)
 	res = usbip_vhci_get_ports_status(hdev, &status);
 	if (res < 0)
 		return res;
-	return status.n_used_ports;
+	return status.n_max_ports;
 }
 
 int
 usbip_vhci_get_imported_devs(HANDLE hdev, pioctl_usbip_vhci_imported_dev_t *pidevs)
 {
 	ioctl_usbip_vhci_imported_dev	*idevs;
-	int	n_used_ports;
+	int	n_max_ports;
 	unsigned long	len_out, len_returned;
 
-	n_used_ports = get_n_used_ports(hdev);
-	if (n_used_ports < 0) {
-		dbg("failed to get the number of used ports: %s", dbg_errcode(n_used_ports));
+	n_max_ports = get_n_max_ports(hdev);
+	if (n_max_ports < 0) {
+		dbg("failed to get the number of used ports: %s", dbg_errcode(n_max_ports));
 		return ERR_GENERAL;
 	}
 
-	len_out = sizeof(ioctl_usbip_vhci_imported_dev) * (n_used_ports + 1);
+	len_out = sizeof(ioctl_usbip_vhci_imported_dev) * (n_max_ports + 1);
 	idevs = (ioctl_usbip_vhci_imported_dev *)malloc(len_out);
 	if (idevs == NULL) {
 		dbg("out of memory");
@@ -150,7 +150,7 @@ usbip_vhci_attach_device(HANDLE hdev, pvhci_pluginfo_t pluginfo)
 
 	if (!DeviceIoControl(hdev, IOCTL_USBIP_VHCI_PLUGIN_HARDWARE,
 		pluginfo, pluginfo->size, NULL, 0, &unused, NULL)) {
-		err("usbip_vhci_attach_device: DeviceIoControl failed: err: 0x%lx", GetLastError());
+		dbg("usbip_vhci_attach_device: DeviceIoControl failed: err: 0x%lx", GetLastError());
 		return -1;
 	}
 

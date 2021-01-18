@@ -176,7 +176,6 @@ vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 {
 	pvpdo_dev_t	vpdo;
 	PLIST_ENTRY	entry;
-	unsigned char	n_used_ports = 0;
 
 	PAGED_CODE();
 
@@ -191,12 +190,11 @@ vhub_get_ports_status(pvhub_dev_t vhub, ioctl_usbip_vhci_get_ports_status *st)
 			DBGE(DBG_VHUB, "strange port");
 			continue;
 		}
-		n_used_ports++;
 		st->port_status[vpdo->port] = 1;
 	}
 	ExReleaseFastMutex(&vhub->Mutex);
 
-	st->n_used_ports = n_used_ports;
+	st->n_max_ports = 127;
 	return STATUS_SUCCESS;
 }
 

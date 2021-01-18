@@ -214,6 +214,9 @@ attach_device(const char *host, const char *busid, const char *serial)
 		case ERR_NOTEXIST:
 			err("non-existent bus id: %s", busid);
 			break;
+		case ERR_PORTFULL:
+			err("no available port");
+			break;
 		default:
 			err("failed to attach");
 			break;

@@ -70,10 +70,11 @@ typedef struct _vhci_pluginfo
 	unsigned char	dscr_conf[9];
 } vhci_pluginfo_t, *pvhci_pluginfo_t;
 
+/* usbip-win assumes max port is 127 */
 typedef struct _ioctl_usbip_vhci_get_ports_status
 {
-	/* usbip-win assumes max port is 127 */
-	unsigned char n_used_ports;
+	/* maximum number of ports */
+	unsigned char n_max_ports;
 	unsigned char port_status[127];
 } ioctl_usbip_vhci_get_ports_status;
 

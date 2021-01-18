@@ -12,7 +12,6 @@ static VOID
 get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_status)
 {
 	ULONG	i;
-	unsigned char	n_used_ports = 0;
 
 	TRD(IOCTL, "Enter\n");
 
@@ -24,13 +23,12 @@ get_ports_status(pctx_vhci_t vhci, ioctl_usbip_vhci_get_ports_status *ports_stat
 		pctx_vusb_t	vusb = vhci->vusbs[i];
 		if (vusb != NULL) {
 			ports_status->port_status[i] = 1;
-			n_used_ports++;
 		}
 	}
 
 	WdfSpinLockRelease(vhci->spin_lock);
 
-	ports_status->n_used_ports = n_used_ports;
+	ports_status->n_max_ports = (UCHAR)vhci->n_max_ports;
 
 	TRD(IOCTL, "Leave\n");
 }

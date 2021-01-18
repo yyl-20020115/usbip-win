@@ -1,7 +1,7 @@
 #include "vhci_driver.h"
 #include "vhci_hc.tmh"
 
-#define MAX_HUB_PORTS		4
+#define MAX_HUB_PORTS		16
 
 #include "usbip_vhci_api.h"
 
