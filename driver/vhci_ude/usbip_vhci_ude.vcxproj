@@ -180,7 +180,7 @@
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
     </PostBuildEvent>
     <Inf>
-      <TimeStamp>0.3.2.0</TimeStamp>
+      <TimeStamp>0.3.3.0</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -200,7 +200,7 @@
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
     </PostBuildEvent>
     <Inf>
-      <TimeStamp>0.3.2.0</TimeStamp>
+      <TimeStamp>0.3.3.0</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -221,7 +221,7 @@
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
     </PostBuildEvent>
     <Inf>
-      <TimeStamp>0.3.2.0</TimeStamp>
+      <TimeStamp>0.3.3.0</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -241,7 +241,7 @@
       <Command>gencat.bat $(OutDir) 10_$(DDKPlatform) $(SolutionDir)\driver\usbip_test.pfx</Command>
     </PostBuildEvent>
     <Inf>
-      <TimeStamp>0.3.2.0</TimeStamp>
+      <TimeStamp>0.3.3.0</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemGroup>

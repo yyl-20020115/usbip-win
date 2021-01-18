@@ -417,7 +417,7 @@ read_devbuf(devbuf_t *rbuff, DWORD nreq)
 
 			bufnew = (char *)realloc(rbuff->bufp, rbuff->bufmaxp + nmore);
 			if (bufnew == NULL) {
-				dbg("%s: failed to reallocate buffer: %s", rbuff->desc);
+				dbg("failed to reallocate buffer: %s", rbuff->desc);
 				return FALSE;
 			}
 			rbuff->bufp = bufnew;
@@ -607,7 +607,7 @@ usbip_forward(HANDLE hdev_src, HANDLE hdev_dst, BOOL inbound)
 	}
 	if (!init_devbuf(&buff_dst, desc_dst, FALSE, swap_req_dst, hdev_dst, hEvent)) {
 		CloseHandle(hEvent);
-		dbg("%s: failed to initialize %s buffer", desc_dst);
+		dbg("failed to initialize %s buffer", desc_dst);
 		cleanup_devbuf(&buff_src);
 		return;
 	}
