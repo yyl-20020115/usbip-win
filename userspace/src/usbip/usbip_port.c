@@ -18,6 +18,16 @@
 #include "usbip_vhci.h"
 #include <stdlib.h>
 
+static const char usbip_port_usage_string[] =
+	"usbip port <args>\n"
+	"    -p, --port=<port>      list only given port(for port checking)\n";
+
+void
+usbip_port_usage(void)
+{
+	printf("usage: %s", usbip_port_usage_string);
+}
+
 static int
 usbip_vhci_imported_device_dump(pioctl_usbip_vhci_imported_dev_t idev)
 {
@@ -39,10 +49,11 @@ usbip_vhci_imported_device_dump(pioctl_usbip_vhci_imported_dev_t idev)
 }
 
 static int
-list_imported_devices(void)
+list_imported_devices(int port)
 {
 	HANDLE hdev;
 	ioctl_usbip_vhci_imported_dev	*idevs;
+	BOOL	found = FALSE;
 	int	res;
 	int	i;
 
@@ -69,6 +80,11 @@ list_imported_devices(void)
 	for (i = 0; i < 127; i++) {
 		if (idevs[i].port < 0)
 			break;
+		if (port >= 0) {
+			if (port != idevs[i].port)
+				continue;
+			found = TRUE;
+		}
 		usbip_vhci_imported_device_dump(&idevs[i]);
 	}
 
@@ -77,11 +93,41 @@ list_imported_devices(void)
 	usbip_vhci_driver_close(hdev);
 	usbip_names_free();
 
+	if (port >= 0 && !found) {
+		/* port check failed */
+		return 2;
+	}
 	return 0;
 }
 
 int
 usbip_port_show(int argc, char *argv[])
 {
-	return list_imported_devices();
+	static const struct option opts[] = {
+		{ "port", required_argument, NULL, 'p' },
+		{ NULL, 0, NULL, 0 }
+	};
+	int	port = -1;
+
+	for (;;) {
+		int	opt = getopt_long(argc, argv, "p:", opts, NULL);
+
+		if (opt == -1)
+			break;
+
+		switch (opt) {
+		case 'p':
+			if (sscanf_s(optarg, "%d", &port) != 1) {
+				err("invalid port: %s", optarg);
+				usbip_port_usage();
+				return 1;
+			}
+			break;
+		default:
+			err("invalid option: %c", opt);
+			usbip_port_usage();
+			return 1;
+		}
+	}
+	return list_imported_devices(port);
 }

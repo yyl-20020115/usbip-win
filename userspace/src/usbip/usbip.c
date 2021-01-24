@@ -107,7 +107,7 @@ static const struct command cmds[] = {
 		.name  = "port",
 		.fn    = usbip_port_show,
 		.help  = "Show imported USB devices",
-		.usage = NULL
+		.usage = usbip_port_usage
 	},
 	{ NULL, NULL, NULL, NULL }
 };
