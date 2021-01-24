@@ -32,7 +32,8 @@ static const char usbip_attach_usage_string[] =
 	"usbip attach <args>\n"
 	"    -r, --remote=<host>    The machine with exported USB devices\n"
 	"    -b, --busid=<busid>    Busid of the device on <host>\n"
-	"    -s, --serial=<USB serial>  (Optional) USB serial to be overwritten\n";
+	"    -s, --serial=<USB serial>  (Optional) USB serial to be overwritten\n"
+	"    -t, --terse            show port number as a result\n";
 
 void usbip_attach_usage(void)
 {
@@ -189,11 +190,90 @@ query_import_device(SOCKET sockfd, const char *busid, HANDLE *phdev, const char 
 	return rc;
 }
 
+static BOOL
+write_handle_value(HANDLE hInWrite, HANDLE handle)
+{
+	DWORD	nwritten;
+	BOOL	res;
+
+	res = WriteFile(hInWrite, &handle, sizeof(HANDLE), &nwritten, NULL);
+	if (!res || nwritten != sizeof(HANDLE)) {
+		dbg("failed to write handle value");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static BOOL
+create_pipe(HANDLE *phRead, HANDLE *phWrite)
+{
+	SECURITY_ATTRIBUTES	saAttr;
+
+	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+	saAttr.bInheritHandle = TRUE;
+	saAttr.lpSecurityDescriptor = NULL;
+
+	if (!CreatePipe(phRead, phWrite, &saAttr, 0)) {
+		dbg("failed to create stdin pipe: 0x%lx", GetLastError());
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static int
-attach_device(const char *host, const char *busid, const char *serial)
+execute_attacher(HANDLE hdev, SOCKET sockfd, int rhport)
+{
+	STARTUPINFO	si;
+	PROCESS_INFORMATION	pi;
+	HANDLE	hRead, hWrite;
+	HANDLE	hdev_attacher, sockfd_attacher;
+	BOOL	res;
+	int	ret = ERR_GENERAL;
+
+	if (!create_pipe(&hRead, &hWrite))
+		return ERR_GENERAL;
+
+	ZeroMemory(&si, sizeof(si));
+	si.cb = sizeof(si);
+	si.hStdInput = hRead;
+	si.dwFlags = STARTF_USESTDHANDLES;
+	ZeroMemory(&pi, sizeof(pi));
+
+	res = CreateProcess("attacher.exe", "attacher.exe", NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+	if (!res) {
+		DWORD	err = GetLastError();
+		if (err == ERROR_FILE_NOT_FOUND)
+			ret = ERR_NOTEXIST;
+		dbg("failed to create process: 0x%lx", err);
+		goto out;
+	}
+	res = DuplicateHandle(GetCurrentProcess(), hdev, pi.hProcess, &hdev_attacher, 0, FALSE, DUPLICATE_SAME_ACCESS);
+	if (!res) {
+		dbg("failed to dup hdev: 0x%lx", GetLastError());
+		goto out_proc;
+	}
+	res = DuplicateHandle(GetCurrentProcess(), (HANDLE)sockfd, pi.hProcess, &sockfd_attacher, 0, FALSE, DUPLICATE_SAME_ACCESS);
+	if (!res) {
+		dbg("failed to dup sockfd: 0x%lx", GetLastError());
+		goto out_proc;
+	}
+	if (!write_handle_value(hWrite, hdev_attacher) || !write_handle_value(hWrite, sockfd_attacher))
+		goto out_proc;
+	ret = 0;
+out_proc:
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+out:
+	CloseHandle(hRead);
+	CloseHandle(hWrite);
+	return ret;
+}
+
+static int
+attach_device(const char *host, const char *busid, const char *serial, BOOL terse)
 {
 	SOCKET	sockfd;
-	int	rhport;
+	int	rhport, ret;
 	HANDLE	hdev = INVALID_HANDLE_VALUE;
 
 	sockfd = usbip_net_tcp_connect(host, usbip_port_string);
@@ -224,15 +304,30 @@ attach_device(const char *host, const char *busid, const char *serial)
 		return 3;
 	}
 
-	usbip_forward(hdev, (HANDLE)sockfd, FALSE);
-
-	usbip_vhci_detach_device(hdev, rhport);
-
+	ret = execute_attacher(hdev, sockfd, rhport);
+	if (ret == 0) {
+		if (terse) {
+			printf("%d\n", rhport);
+		}
+		else {
+			printf("succesfully attached to port %d\n", rhport);
+		}
+	}
+	else {
+		switch (ret) {
+		case ERR_NOTEXIST:
+			err("attacher.exe not found");
+			break;
+		default:
+			err("failed to running attacher.exe");
+			break;
+		}
+		ret = 4;
+	}
 	usbip_vhci_driver_close(hdev);
-
 	closesocket(sockfd);
 
-	return 0;
+	return ret;
 }
 
 int usbip_attach(int argc, char *argv[])
@@ -241,14 +336,16 @@ int usbip_attach(int argc, char *argv[])
 		{ "remote", required_argument, NULL, 'r' },
 		{ "busid", required_argument, NULL, 'b' },
 		{ "serial", optional_argument, NULL, 's' },
+		{ "terse", required_argument, NULL, 't' },
 		{ NULL, 0, NULL, 0 }
 	};
-	char *host = NULL;
-	char *busid = NULL;
-	char *serial = NULL;
+	char	*host = NULL;
+	char	*busid = NULL;
+	char	*serial = NULL;
+	BOOL	terse = FALSE;
 
 	for (;;) {
-		int	opt = getopt_long(argc, argv, "r:b:s:", opts, NULL);
+		int	opt = getopt_long(argc, argv, "r:b:s:t", opts, NULL);
 
 		if (opt == -1)
 			break;
@@ -262,6 +359,9 @@ int usbip_attach(int argc, char *argv[])
 			break;
 		case 's':
 			serial = optarg;
+			break;
+		case 't':
+			terse = TRUE;
 			break;
 		default:
 			err("invalid option: %c", opt);
@@ -281,5 +381,5 @@ int usbip_attach(int argc, char *argv[])
 		return 1;
 	}
 
-	return attach_device(host, busid, serial);
+	return attach_device(host, busid, serial, terse);
 }
