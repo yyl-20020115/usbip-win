@@ -93,7 +93,7 @@ usbip.exe list -l
   - reboot the system to apply
 - Copy vhci driver files into a folder in target machine
 
-  - If you're testing vhci(ude), copy `usbip.exe`, `usbip_vhci_udf.sys`, `usbip_vhci_udf.inf`, `usbip_vhci_udf.cat` into a folder in target machine
+  - If you're testing vhci(ude), copy `usbip.exe`, `usbip_vhci_ude.sys`, `usbip_vhci_ude.inf`, `usbip_vhci_ude.cat` into a folder in target machine
   - If you're testing vhci(wdm), copy `usbip.exe`, `usbip_vhci.sys`, `usbip_vhci.inf`, `usbip_root.inf`, `usbip_vhci.cat` into a folder in target machine
   - You can find all files in output folder after build or on [release](https://github.com/cezanne/usbip-win/releases) page.
 - Install USB/IP VHCI driver
@@ -102,6 +102,8 @@ usbip.exe list -l
      - Run PowerShell or CMD as an Administrator
      - `PS> usbip.exe install`
      - Upper command will install a ude driver, a wdm driver or both depending on the available files
+     - `PS> usbip.exe install -u` if ude driver only
+     - `PS> usbip.exe install -w` if wdm driver only
   - Manual Installation for vhci(ude)
      - Run PowerShell or CMD as an Administrator
      - `PS> pnputil /add-driver usbip_vhci_ude.inf`
