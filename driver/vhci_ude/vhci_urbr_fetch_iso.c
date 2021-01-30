@@ -63,6 +63,10 @@ fetch_urbr_iso(PURB urb, struct usbip_header *hdr)
 		return STATUS_INVALID_PARAMETER;
 
 	urb_iso->ErrorCount = hdr->u.ret_submit.error_count;
+	/* The RET_SUBMIT packets of the OUT ISO transfer do not contain data buffer. */
+	if (!IS_TRANSFER_FLAGS_IN(urb_iso->TransferFlags))
+		return STATUS_SUCCESS;
+
 	buf = get_buf(urb_iso->TransferBuffer, urb_iso->TransferBufferMDL);
 	if (buf == NULL)
 		return STATUS_INVALID_PARAMETER;
