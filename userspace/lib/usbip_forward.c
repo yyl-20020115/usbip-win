@@ -98,7 +98,10 @@ dump_iso_pkts(struct usbip_header *hdr)
 		break;
 	case USBIP_RET_SUBMIT:
 		n_pkts = hdr->u.ret_submit.number_of_packets;
-		iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + hdr->u.ret_submit.actual_length);
+		if (hdr->base.direction)
+			iso_desc = (struct usbip_iso_packet_descriptor*)((char*)(hdr + 1) + hdr->u.ret_submit.actual_length);
+		else
+			iso_desc = (struct usbip_iso_packet_descriptor*)(hdr + 1);
 		break;
 	default:
 		return;
@@ -259,47 +262,57 @@ swap_iso_descs_endian(char *buf, int num)
 	}
 }
 
-#define OUT_Q_LEN 256
-static long out_q_seqnum_array[OUT_Q_LEN];
+/*
+ * This is a 'usbip_header_basic' cache to hold transfer direction of all
+ * OUT CMD_SUBMIT packets. Cache info is used when RET_SUBMIT packets with the
+ * same sequence number arrive.
+ * The transfer direction, EP address and device ID are not provided in return
+ * RET_SUBMIT packets from Linux, when used as an USBIP server.
+ *
+ * The transfer direction is needed to determine USBIP_RET_SUBMIT packet size
+ * in this example:
+ * The OUT ISOCHRONOUS transfer sends data buffer and its ISO descriptors towards
+ * the device in CMD_SUBMIT packets with 'actual_size' record set to define the
+ * data buffer size. However the return RET_SUBMIT packet of the same OUT transfer
+ * contain only ISO descriptor and the 'actual_size' is set to the sent size value.
+ *
+ * Each cache entry may be written or read many times, however the sequence
+ * number of a cache entry location is kept until current sequence number of
+ * packets increases its value for the number of all cache entries.
+ */
 
-static BOOL
-record_outq_seqnum(unsigned long seqnum)
+struct usbip_cached_hdr {
+	UINT32 seqnum;
+	// UINT32 devid;
+	UINT32 direction;
+	// UINT32 ep;
+};
+
+#define HDRS_CACHE_SIZE 1024
+static struct usbip_cached_hdr hdrs_cache[HDRS_CACHE_SIZE];
+
+static inline void hdrs_cache_insert(struct usbip_header* usbip_hdr)
 {
-	int	i;
+	int idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
 
-	for (i = 0; i < OUT_Q_LEN; i++) {
-		int	found_empty_slot;
-
-		/* record_outq_seqnum can be called multiple times.
-		 * seqnum should be checked if it was already marked.
-		 */
-		if (out_q_seqnum_array[i] == seqnum)
-			return TRUE;
-		if (out_q_seqnum_array[i])
-			continue;
-		found_empty_slot = i;
-		for (; i < OUT_Q_LEN; i++) {
-			if (out_q_seqnum_array[i] == seqnum)
-				return TRUE;
-		}
-		out_q_seqnum_array[found_empty_slot] = seqnum;
-		return TRUE;
-	}
-	return FALSE;
+	hdrs_cache[idx].seqnum = usbip_hdr->base.seqnum;
+	hdrs_cache[idx].direction = usbip_hdr->base.direction;
 }
 
-static BOOL
-is_outq_seqnum(unsigned long seqnum)
+static inline UINT32 hdrs_cache_direction(struct usbip_header* usbip_hdr)
 {
-	int	i;
+	int idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
 
-	for (i = 0; i < OUT_Q_LEN; i++) {
-		if (out_q_seqnum_array[i] != seqnum)
-			continue;
-		out_q_seqnum_array[i] = 0;
-		return TRUE;
+	if (usbip_hdr->base.seqnum == hdrs_cache[idx].seqnum) {
+		/* Restore packet direction! */
+		usbip_hdr->base.direction = hdrs_cache[idx].direction;
+		return hdrs_cache[idx].direction;
 	}
-	return FALSE;
+	/*
+	 * If not in cache, return IN direction, because we skip caching
+	 * IN transfers!
+	 */
+	return USBIP_DIR_IN;
 }
 
 static int
@@ -310,15 +323,13 @@ get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 			return 0;
 		if (hdr->base.direction)
 			return 0;
-		if (!record_outq_seqnum(hdr->base.seqnum)) {
-			dbg("failed to record. out queue full");
-		}
+		hdrs_cache_insert(hdr);
 		return hdr->u.cmd_submit.transfer_buffer_length;
 	}
 	else {
 		if (hdr->base.command == USBIP_RET_UNLINK)
 			return 0;
-		if (is_outq_seqnum(hdr->base.seqnum))
+		if (hdrs_cache_direction(hdr) == USBIP_DIR_OUT)
 			return 0;
 		return hdr->u.ret_submit.actual_length;
 	}
