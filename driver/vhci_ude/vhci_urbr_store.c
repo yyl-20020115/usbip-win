@@ -50,6 +50,10 @@ store_urbr_partial(WDFREQUEST req_read, purb_req_t urbr)
 
 	TRD(READ, "Enter: urbr: %!URBR!", urbr);
 
+	/* This request is sometimes NULL, which causes driver/system failure, if used. */
+	if (urbr->req == NULL)
+		return STATUS_SUCCESS;
+
 	WDF_REQUEST_PARAMETERS_INIT(&params);
 	WdfRequestGetParameters(urbr->req, &params);
 
