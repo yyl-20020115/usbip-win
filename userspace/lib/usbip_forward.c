@@ -309,10 +309,9 @@ static inline UINT32 hdrs_cache_direction(struct usbip_header* usbip_hdr)
 		return hdrs_cache[idx].direction;
 	}
 	/*
-	 * If not in cache, return IN direction, because we skip caching
-	 * IN transfers!
+	 * If not in cache, return what is in the header!
 	 */
-	return USBIP_DIR_IN;
+	return usbip_hdr->base.direction;
 }
 
 static int
@@ -321,9 +320,9 @@ get_xfer_len(BOOL is_req, struct usbip_header *hdr)
 	if (is_req) {
 		if (hdr->base.command == USBIP_CMD_UNLINK)
 			return 0;
+		hdrs_cache_insert(hdr);
 		if (hdr->base.direction)
 			return 0;
-		hdrs_cache_insert(hdr);
 		return hdr->u.cmd_submit.transfer_buffer_length;
 	}
 	else {
