@@ -10,6 +10,7 @@
 - x86/x64 platforms should be supported. However, we don't have an x86 setup for testing at the moment.
 - For Windows 7 users, change usbip\_stub and usbip\_vhci projects' Target OS version to Windows 7.
   - Right-click on the project > Properties > Driver Settings > Target OS version > Windows 7
+  - The recent tag version which supports is v0.1.0. All upper versions do not support Win7 or 8 because usbip-win started to use kernel libraries of Win10.
 
 ### Build Tools
 - Visual Studio 2019 Community(v142)
@@ -101,7 +102,8 @@ usbip.exe list -l
   - Using usbip.exe install command
      - Run PowerShell or CMD as an Administrator
      - `PS> usbip.exe install`
-     - Upper command will install a ude driver, a wdm driver or both depending on the available files
+     - Upper command will install a ude driver or a wdm driver depending on the available files
+       - (ude version first)
      - `PS> usbip.exe install -u` if ude driver only
      - `PS> usbip.exe install -w` if wdm driver only
   - Manual Installation for vhci(ude)
