@@ -95,7 +95,7 @@ fetch_urbr_urb(PURB urb, struct usbip_header *hdr)
 static VOID
 handle_urbr_error(purb_req_t urbr, struct usbip_header *hdr)
 {
-	PURB	urb = urbr->u.urb;
+	PURB	urb = urbr->u.urb.urb;
 
 	urb->UrbHeader.Status = to_usbd_status(hdr->u.ret_submit.status);
 	if (urb->UrbHeader.Status == USBD_STATUS_STALL_PID && urbr->ep->vusb->is_simple_ep_alloc) {
@@ -124,7 +124,7 @@ fetch_urbr(purb_req_t urbr, struct usbip_header *hdr)
 		if (hdr->u.ret_submit.status != 0)
 			handle_urbr_error(urbr, hdr);
 
-		status = fetch_urbr_urb(urbr->u.urb, hdr);
+		status = fetch_urbr_urb(urbr->u.urb.urb, hdr);
 	}
 
 	TRD(WRITE, "Leave: %!STATUS!", status);

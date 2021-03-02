@@ -50,10 +50,6 @@ store_urbr_partial(WDFREQUEST req_read, purb_req_t urbr)
 
 	TRD(READ, "Enter: urbr: %!URBR!", urbr);
 
-	/* This request is sometimes NULL, which causes driver/system failure, if used. */
-	if (urbr->req == NULL)
-		return STATUS_SUCCESS;
-
 	WDF_REQUEST_PARAMETERS_INIT(&params);
 	WdfRequestGetParameters(urbr->req, &params);
 
@@ -99,7 +95,7 @@ store_urbr_urb(WDFREQUEST req_read, purb_req_t urbr)
 	USHORT		urb_func;
 	NTSTATUS	status;
 
-	urb_func = urbr->u.urb->UrbHeader.Function;
+	urb_func = urbr->u.urb.urb->UrbHeader.Function;
 	TRD(READ, "%!URBR!", urbr);
 
 	switch (urb_func) {

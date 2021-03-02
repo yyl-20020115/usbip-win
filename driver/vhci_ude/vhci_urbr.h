@@ -22,7 +22,10 @@ typedef struct _urb_req {
 	urbr_type_t	type;
 	unsigned long	seq_num;
 	union {
-		PURB	urb;
+		struct {
+			PURB	urb;
+			BOOLEAN	cancelable;
+		} urb;
 		unsigned long	seq_num_unlink;
 		UCHAR	conf_value;
 		struct {

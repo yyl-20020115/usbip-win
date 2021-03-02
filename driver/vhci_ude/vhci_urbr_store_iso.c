@@ -57,7 +57,7 @@ get_iso_payload_len(struct _URB_ISOCH_TRANSFER *urb_iso)
 NTSTATUS
 store_urbr_iso_partial(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_ISOCH_TRANSFER	*urb_iso = &urbr->u.urb->UrbIsochronousTransfer;
+	struct _URB_ISOCH_TRANSFER	*urb_iso = &urbr->u.urb.urb->UrbIsochronousTransfer;
 	ULONG	len_iso;
 	PVOID	dst;
 
@@ -77,7 +77,7 @@ store_urbr_iso_partial(WDFREQUEST req_read, purb_req_t urbr)
 NTSTATUS
 store_urbr_iso(WDFREQUEST req_read, purb_req_t urbr)
 {
-	struct _URB_ISOCH_TRANSFER	*urb_iso = &urbr->u.urb->UrbIsochronousTransfer;
+	struct _URB_ISOCH_TRANSFER	*urb_iso = &urbr->u.urb.urb->UrbIsochronousTransfer;
 	struct usbip_header	*hdr;
 	int	in, type;
 

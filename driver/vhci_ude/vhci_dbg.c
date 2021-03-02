@@ -199,7 +199,7 @@ dbg_urbr(purb_req_t urbr)
 	else {
 		switch (urbr->type) {
 		case URBR_TYPE_URB:
-			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->u.urb->UrbHeader.Function));
+			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[urb,seq:%u,%s]", urbr->seq_num, dbg_urbfunc(urbr->u.urb.urb->UrbHeader.Function));
 			break;
 		case URBR_TYPE_UNLINK:
 			len_dbg_urbr = libdrv_snprintf(buf_dbg_urbr, 128, "[ulk,seq:%u,%u]", urbr->seq_num, urbr->u.seq_num_unlink);

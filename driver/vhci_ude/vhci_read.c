@@ -20,6 +20,25 @@ find_pending_urbr(pctx_vusb_t vusb)
 	return urbr;
 }
 
+static purb_req_t
+get_partial_urbr(pctx_vusb_t vusb)
+{
+	purb_req_t	urbr;
+
+	if (vusb->urbr_sent_partial == NULL)
+		return NULL;
+
+	urbr = vusb->urbr_sent_partial;
+	if (unmark_cancelable_urbr(urbr))
+		return urbr;
+	else {
+		/* There's on-going cancellation. It's enough to just clear out followings. */
+		vusb->urbr_sent_partial = NULL;
+		vusb->len_sent_partial = 0;
+		return NULL;
+	}
+}
+
 static VOID
 req_read_cancelled(WDFREQUEST req_read)
 {
@@ -54,9 +73,8 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 		WdfSpinLockRelease(vusb->spin_lock);
 		return STATUS_INVALID_DEVICE_REQUEST;
 	}
-	if (vusb->urbr_sent_partial != NULL) {
-		urbr = vusb->urbr_sent_partial;
-
+	urbr = get_partial_urbr(vusb);
+	if (urbr != NULL) {
 		WdfSpinLockRelease(vusb->spin_lock);
 
 		status = store_urbr_partial(req, urbr);
@@ -95,6 +113,7 @@ read_vusb(pctx_vusb_t vusb, WDFREQUEST req)
 		BOOLEAN	unmarked;
 		RemoveEntryListInit(&urbr->list_all);
 		unmarked = unmark_cancelable_urbr(urbr);
+		vusb->urbr_sent_partial = NULL;
 		WdfSpinLockRelease(vusb->spin_lock);
 
 		if (unmarked)
