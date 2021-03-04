@@ -12,7 +12,7 @@ Class=System
 ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
 Provider=%OpenSource%
 CatalogFile=usbip_stub.cat
-DriverVer = 01/15/2021,0.3.3.0
+DriverVer = 03/04/2021,0.3.4.0
 
 [Manufacturer]
 %StdMfg%=Standard,NTamd64
