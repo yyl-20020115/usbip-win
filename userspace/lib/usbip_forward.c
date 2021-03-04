@@ -99,9 +99,9 @@ dump_iso_pkts(struct usbip_header *hdr)
 	case USBIP_RET_SUBMIT:
 		n_pkts = hdr->u.ret_submit.number_of_packets;
 		if (hdr->base.direction)
-			iso_desc = (struct usbip_iso_packet_descriptor*)((char*)(hdr + 1) + hdr->u.ret_submit.actual_length);
+			iso_desc = (struct usbip_iso_packet_descriptor *)((char *)(hdr + 1) + hdr->u.ret_submit.actual_length);
 		else
-			iso_desc = (struct usbip_iso_packet_descriptor*)(hdr + 1);
+			iso_desc = (struct usbip_iso_packet_descriptor *)(hdr + 1);
 		break;
 	default:
 		return;
@@ -280,7 +280,6 @@ swap_iso_descs_endian(char *buf, int num)
  * number of a cache entry location is kept until current sequence number of
  * packets increases its value for the number of all cache entries.
  */
-
 struct usbip_cached_hdr {
 	UINT32 seqnum;
 	// UINT32 devid;
@@ -291,17 +290,19 @@ struct usbip_cached_hdr {
 #define HDRS_CACHE_SIZE 1024
 static struct usbip_cached_hdr hdrs_cache[HDRS_CACHE_SIZE];
 
-static inline void hdrs_cache_insert(struct usbip_header* usbip_hdr)
+static inline void
+hdrs_cache_insert(struct usbip_header *usbip_hdr)
 {
-	int idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
+	int	idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
 
 	hdrs_cache[idx].seqnum = usbip_hdr->base.seqnum;
 	hdrs_cache[idx].direction = usbip_hdr->base.direction;
 }
 
-static inline UINT32 hdrs_cache_direction(struct usbip_header* usbip_hdr)
+static inline UINT32
+hdrs_cache_direction(struct usbip_header *usbip_hdr)
 {
-	int idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
+	int	idx = usbip_hdr->base.seqnum % HDRS_CACHE_SIZE;
 
 	if (usbip_hdr->base.seqnum == hdrs_cache[idx].seqnum) {
 		/* Restore packet direction! */
