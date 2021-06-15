@@ -26,7 +26,7 @@
 - If VS 2017 is used, SDK version for userspace projects (`usbip`, `usbip_common`, `usbipd`, `stubctl`) should be adjusted.
 - Set certificate driver signing for `usbip_stub` and `usbip_vhci` projects
   - Right-click on the `Project > Properties > Driver Signing > Test Certificate`
-  - Browse to `driver/usbip_test.pfx`
+  - Browse to `driver/usbip_test.pfx` (password: usbip)
 - Build solution or desired project
 - All output files are created under {Debug,Release}/{x64,x86} folder.
 
