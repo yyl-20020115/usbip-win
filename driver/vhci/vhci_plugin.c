@@ -58,8 +58,9 @@ setup_vpdo_with_dsc_dev(pvpdo_dev_t vpdo, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 		vpdo->subclass = dsc_dev->bDeviceSubClass;
 		vpdo->protocol = dsc_dev->bDeviceProtocol;
 		vpdo->speed = (UCHAR)get_usb_speed(dsc_dev->bcdUSB);
-	}
-	else {
+		vpdo->num_configurations = dsc_dev->bNumConfigurations;
+	} else {
+		/* TODO: can happen? */
 		vpdo->vendor = 0;
 		vpdo->product = 0;
 		vpdo->revision = 0;
@@ -67,6 +68,7 @@ setup_vpdo_with_dsc_dev(pvpdo_dev_t vpdo, PUSB_DEVICE_DESCRIPTOR dsc_dev)
 		vpdo->subclass = 0;
 		vpdo->protocol = 0;
 		vpdo->speed = USB_SPEED_LOW;
+		vpdo->num_configurations = 1;
 	}
 }
 

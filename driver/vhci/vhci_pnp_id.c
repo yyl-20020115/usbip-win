@@ -163,6 +163,19 @@ setup_inst_id_or_serial(pvdev_t vdev, PIRP irp, BOOLEAN serial)
 	return STATUS_SUCCESS;
 }
 
+/*
+ * See https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/enumeration-of-the-composite-parent-device
+ */
+static BOOLEAN
+need_composite(vpdo_dev_t *vpdo)
+{
+	if ((IS_ZERO_CLASS(vpdo) || IS_IAD_DEVICE(vpdo)) && vpdo->inum > 1 && vpdo->num_configurations == 1) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 static NTSTATUS
 setup_compat_ids(pvdev_t vdev, PIRP irp)
 {
@@ -196,7 +209,7 @@ setup_compat_ids(pvdev_t vdev, PIRP irp)
 	/* Convert last semicolon */
 	ids_compat[33 + 25 + 13 + 14 - 1] = L'\0';
 
-	if (IS_ZERO_CLASS(vpdo) || IS_IAD_DEVICE(vpdo)) {
+	if (!need_composite(vpdo)) {
 		/* USB\COMPOSITE is dropped */
 		ids_compat[33 + 25 + 13 - 1] = L'\0';
 	}

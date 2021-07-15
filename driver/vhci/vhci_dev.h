@@ -170,7 +170,7 @@ typedef struct
 	BOOLEAN		plugged;
 
 	UCHAR	speed;
-	UCHAR	unused; /* 4 bytes alignment */
+	UCHAR	num_configurations; // Number of Possible Configurations
 
 	// a pending irp when no urb is requested
 	PIRP	pending_read_irp;
