@@ -4,7 +4,7 @@
 #include <usbdi.h>
 
 #define EPIPE		32
-#define EOVERFLOW	75
+#define EOVERFLOW_MY	75
 #define EREMOTEIO	121
 
 USBD_STATUS
@@ -16,7 +16,7 @@ to_usbd_status(int usbip_status)
 		/* I guess it */
 	case -EPIPE:
 		return USBD_STATUS_STALL_PID;
-	case -EOVERFLOW:
+	case -EOVERFLOW_MY:
 		return USBD_STATUS_DATA_OVERRUN;
 	case -EREMOTEIO:
 		return USBD_STATUS_ERROR_SHORT_TRANSFER;
