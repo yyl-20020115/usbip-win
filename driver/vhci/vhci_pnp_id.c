@@ -8,7 +8,7 @@
 #define DEVID_VHUB	L"USB\\ROOT_HUB"
 
 #define HWIDS_VHCI	HWID_VHCI L"\0"
-#define HWIDS_VHUB	HWID_VHUB L"\0USB\\ROOT_HUB&VID1209&PID8250\0USB\\ROOT_HUB\0"
+#define HWIDS_VHUB	HWID_VHUB L"\0USB\\ROOT_HUB&VID_1209&PID_8250\0USB\\ROOT_HUB\0"
 
 /* Device with zero class/subclass/protocol */
 #define IS_ZERO_CLASS(vpdo)	((vpdo)->usbclass == 0x00 && (vpdo)->subclass == 0x00 && (vpdo)->protocol == 0x00 && (vpdo)->inum > 1)
