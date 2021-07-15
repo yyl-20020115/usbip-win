@@ -2,45 +2,163 @@
 
 #include <usb.h>
 #include <usbdi.h>
+#include <errno.h>
 
-#define EPIPE		32
-#define EOVERFLOW_MY	75
-#define EREMOTEIO	121
+/*
+ * Linux error codes.
+ * See: include/uapi/asm-generic/errno-base.h, include/uapi/asm-generic/errno.h
+ */
+enum {
+	ENOENT_LNX = ENOENT,
+	ENXIO_LNX = ENXIO,
+	ENOMEM_LNX = ENOMEM,
+	EBUSY_LNX = EBUSY,
+	EXDEV_LNX = EXDEV,
+	ENODEV_LNX = ENODEV,
+	EINVAL_LNX = EINVAL,
+	ENOSPC_LNX = ENOSPC,
+	EPIPE_LNX = EPIPE,
+	ETIME_LNX = 62,
+	ENOSR_LNX = 63,
+	ECOMM_LNX = 70,
+	EPROTO_LNX = 71,
+	EOVERFLOW_LNX = 75,
+	EILSEQ_LNX = 84,
+	ECONNRESET_LNX = 104,
+	ESHUTDOWN_LNX = 108,
+	ETIMEDOUT_LNX = 110,
+	EINPROGRESS_LNX = 115,
+	EREMOTEIO_LNX = 121,
+};
 
+static_assert(ENOENT == 2, "assert");
+static_assert(ENXIO == 6, "assert");
+static_assert(ENOMEM == 12, "assert");
+static_assert(EBUSY == 16, "assert");
+static_assert(EXDEV == 18, "assert");
+static_assert(ENODEV == 19, "assert");
+static_assert(EINVAL == 22, "assert");
+static_assert(ENOSPC == 28, "assert");
+static_assert(EPIPE == 32, "assert");
+/* Below error macros are not defined in VS2019 old versions(10.1.5) */
+#if 0
+static_assert(ETIME_LNX != ETIME, "assert");
+static_assert(ENOSR_LNX != ENOSR, "assert");
+static_assert(ECOMM_LNX != ECOMM, "assert");
+static_assert(EPROTO_LNX != EPROTO, "assert");
+static_assert(EOVERFLOW_LNX != EOVERFLOW, "assert");
+static_assert(EILSEQ_LNX != EILSEQ, "assert");
+static_assert(ECONNRESET_LNX != ECONNRESET, "assert");
+static_assert(ESHUTDOWN_LNX != ESHUTDOWN, "assert");
+static_assert(ETIMEDOUT_LNX != ETIMEDOUT, "assert");
+static_assert(EINPROGRESS_LNX != EINPROGRESS, "assert");
+static_assert(EREMOTEIO_LNX != EREMOTEIO, "assert");
+#endif
+
+/*
+ * See:
+ * <kernel>/doc/Documentation/usb/error-codes.txt
+ * winddk, usb.h
+ */
 USBD_STATUS
 to_usbd_status(int usbip_status)
 {
-	switch (usbip_status) {
+	switch (abs(usbip_status)) {
 	case 0:
 		return USBD_STATUS_SUCCESS;
-		/* I guess it */
-	case -EPIPE:
-		return USBD_STATUS_STALL_PID;
-	case -EOVERFLOW_MY:
-		return USBD_STATUS_DATA_OVERRUN;
-	case -EREMOTEIO:
+	case EPIPE_LNX:
+		return USBD_STATUS_STALL_PID; /* USBD_STATUS_ENDPOINT_HALTED */
+	case EREMOTEIO_LNX:
 		return USBD_STATUS_ERROR_SHORT_TRANSFER;
-	default:
-		return USBD_STATUS_ERROR;
+	case ETIME_LNX:
+		return USBD_STATUS_DEV_NOT_RESPONDING;
+	case ETIMEDOUT_LNX:
+		return USBD_STATUS_TIMEOUT;
+	case ENOENT_LNX:
+	case ECONNRESET_LNX:
+		return USBD_STATUS_CANCELED;
+	case EINPROGRESS_LNX:
+		return USBD_STATUS_PENDING;
+	case EOVERFLOW_LNX:
+		return USBD_STATUS_BABBLE_DETECTED;
+	case ENODEV_LNX:
+	case ESHUTDOWN_LNX:
+		return USBD_STATUS_DEVICE_GONE;
+	case EILSEQ_LNX:
+		return USBD_STATUS_CRC;
+	case ECOMM_LNX:
+		return USBD_STATUS_DATA_OVERRUN;
+	case ENOSR_LNX:
+		return USBD_STATUS_DATA_UNDERRUN;
+	case ENOMEM_LNX:
+		return USBD_STATUS_INSUFFICIENT_RESOURCES;
+	case EPROTO_LNX:
+		return USBD_STATUS_BTSTUFF; /* USBD_STATUS_INTERNAL_HC_ERROR */
+	case ENOSPC_LNX:
+		return USBD_STATUS_NO_BANDWIDTH;
+	case EXDEV_LNX:
+		return USBD_STATUS_ISOCH_REQUEST_FAILED;
+	case ENXIO_LNX:
+		return USBD_STATUS_INTERNAL_HC_ERROR;
 	}
+
+	return USBD_STATUS_INVALID_PARAMETER;
 }
 
+/*
+ * See:
+ * winddk, usb.h
+ * <kernel>/doc/Documentation/usb/error-codes.txt
+ */
 int
 to_usbip_status(USBD_STATUS status)
 {
 	switch (status) {
-	case 0:
+	case USBD_STATUS_SUCCESS:
 		return 0;
 	case USBD_STATUS_STALL_PID:
-		return -EPIPE;
-	default:
-		return -1;
+	case USBD_STATUS_ENDPOINT_HALTED:
+		return -EPIPE_LNX;
+	case USBD_STATUS_ERROR_SHORT_TRANSFER:
+		return -EREMOTEIO_LNX;
+	case USBD_STATUS_TIMEOUT:
+		return -ETIMEDOUT_LNX; /* ETIME */
+	case USBD_STATUS_CANCELED:
+		return -ECONNRESET_LNX; /* ENOENT */
+	case USBD_STATUS_PENDING:
+		return -EINPROGRESS_LNX;
+	case USBD_STATUS_BABBLE_DETECTED:
+		return -EOVERFLOW_LNX;
+	case USBD_STATUS_DEVICE_GONE:
+		return -ENODEV_LNX;
+	case USBD_STATUS_CRC:
+		return -EILSEQ_LNX;
+	case USBD_STATUS_DATA_OVERRUN:
+		return -ECOMM_LNX;
+	case USBD_STATUS_DATA_UNDERRUN:
+		return -ENOSR_LNX;
+	case USBD_STATUS_INSUFFICIENT_RESOURCES:
+		return -ENOMEM_LNX;
+	case USBD_STATUS_BTSTUFF:
+	case USBD_STATUS_INTERNAL_HC_ERROR:
+	case USBD_STATUS_HUB_INTERNAL_ERROR:
+	case USBD_STATUS_DEV_NOT_RESPONDING:
+		return -EPROTO_LNX;
+	case USBD_STATUS_ERROR_BUSY:
+		return -EBUSY_LNX;
 	}
+
+	return status < 0 ? -EINVAL_LNX : 0; /* see USBD_ERROR */
 }
 
-#define URB_SHORT_NOT_OK	0x0001
-#define URB_ISO_ASAP		0x0002
-#define URB_DIR_IN		0x0200
+/*
+ * include/linux/usb.h
+ */
+enum {
+	URB_SHORT_NOT_OK = 0x0001,
+	URB_ISO_ASAP = 0x0002,
+	URB_DIR_IN = 0x0200
+};
 
 ULONG
 to_usbd_flags(int flags)
