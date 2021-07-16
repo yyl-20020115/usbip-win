@@ -165,7 +165,7 @@ to_usbd_flags(int flags)
 {
 	ULONG	usbd_flags = 0;
 
-	if (flags & URB_SHORT_NOT_OK)
+	if (!(flags & URB_SHORT_NOT_OK))
 		usbd_flags |= USBD_SHORT_TRANSFER_OK;
 	if (flags & URB_ISO_ASAP)
 		usbd_flags |= USBD_START_ISO_TRANSFER_ASAP;
