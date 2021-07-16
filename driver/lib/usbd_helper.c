@@ -152,7 +152,7 @@ to_usbip_status(USBD_STATUS status)
 }
 
 /*
- * include/linux/usb.h
+ * <linux/usb.h>, urb->transfer_flags
  */
 enum {
 	URB_SHORT_NOT_OK = 0x0001,
@@ -175,69 +175,59 @@ to_usbd_flags(int flags)
 }
 
 void
-to_usbd_iso_descs(ULONG n_pkts, USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs, struct usbip_iso_packet_descriptor *iso_descs, BOOLEAN as_result)
+to_usbd_iso_descs(ULONG n_pkts, USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs, const struct usbip_iso_packet_descriptor *iso_descs, BOOLEAN as_result)
 {
 	USBD_ISO_PACKET_DESCRIPTOR	*usbd_iso_desc;
-	struct usbip_iso_packet_descriptor	*iso_desc;
+	const struct usbip_iso_packet_descriptor	*iso_desc;
 	ULONG	i;
 
-	usbd_iso_desc = usbd_iso_descs;
-	iso_desc = iso_descs;
-	for (i = 0; i < n_pkts; i++) {
+	for (usbd_iso_desc = usbd_iso_descs, iso_desc = iso_descs, i = 0; i < n_pkts; usbd_iso_desc++, iso_desc++, i++) {
 		usbd_iso_desc->Offset = iso_desc->offset;
 		if (as_result) {
 			usbd_iso_desc->Length = iso_desc->actual_length;
 			usbd_iso_desc->Status = to_usbd_status(iso_desc->status);
 		}
-		usbd_iso_desc++;
-		iso_desc++;
 	}
 }
 
 void
-to_iso_descs(ULONG n_pkts, struct usbip_iso_packet_descriptor *iso_descs, USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs, BOOLEAN as_result)
+to_iso_descs(ULONG n_pkts, struct usbip_iso_packet_descriptor *iso_descs, const USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs, BOOLEAN as_result)
 {
-	USBD_ISO_PACKET_DESCRIPTOR	*usbd_iso_desc;
+	const USBD_ISO_PACKET_DESCRIPTOR	*usbd_iso_desc;
 	struct usbip_iso_packet_descriptor	*iso_desc;
 	ULONG	i;
 
-	iso_desc = iso_descs;
-	usbd_iso_desc = usbd_iso_descs;
-	for (i = 0; i < n_pkts; i++) {
+	for (iso_desc = iso_descs, usbd_iso_desc = usbd_iso_descs, i = 0; i < n_pkts; iso_desc++, usbd_iso_desc++, i++) {
 		iso_desc->offset = usbd_iso_desc->Offset;
 		if (as_result) {
 			iso_desc->actual_length = usbd_iso_desc->Length;
 			iso_desc->status = to_usbip_status(usbd_iso_desc->Status);
 		}
-		usbd_iso_desc++;
-		iso_desc++;
 	}
 }
 
 ULONG
-get_iso_descs_len(ULONG n_pkts, struct usbip_iso_packet_descriptor *iso_descs, BOOLEAN is_actual)
+get_iso_descs_len(ULONG n_pkts, const struct usbip_iso_packet_descriptor *iso_descs, BOOLEAN is_actual)
 {
 	ULONG	len = 0;
-	struct usbip_iso_packet_descriptor	*iso_desc = iso_descs;
+	const struct usbip_iso_packet_descriptor	*iso_desc;
 	ULONG	i;
 
-	for (i = 0; i < n_pkts; i++) {
+	for (iso_desc = iso_descs, i = 0; i < n_pkts; iso_desc++, i++) {
 		len += (is_actual ? iso_desc->actual_length: iso_desc->length);
-		iso_desc++;
 	}
 	return len;
 }
 
 ULONG
-get_usbd_iso_descs_len(ULONG n_pkts, USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs)
+get_usbd_iso_descs_len(ULONG n_pkts, const USBD_ISO_PACKET_DESCRIPTOR *usbd_iso_descs)
 {
 	ULONG	len = 0;
-	USBD_ISO_PACKET_DESCRIPTOR	*usbd_iso_desc = usbd_iso_descs;
+	const USBD_ISO_PACKET_DESCRIPTOR	*usbd_iso_desc;
 	ULONG	i;
 
-	for (i = 0; i < n_pkts; i++) {
+	for (usbd_iso_desc = usbd_iso_descs, i = 0; i < n_pkts; usbd_iso_desc++, i++) {
 		len += usbd_iso_desc->Length;
-		usbd_iso_desc++;
 	}
 	return len;
 }
