@@ -383,7 +383,7 @@ set_feature(usbip_stub_dev_t *devstub, USHORT func, USHORT feature, USHORT index
 	return -1;
 }
 
-BOOLEAN
+int
 submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UCHAR reservedBits, UCHAR request, USHORT value, USHORT index, PVOID data, PULONG plen)
 {
 	URB		Urb;
@@ -396,9 +396,15 @@ submit_class_vendor_req(usbip_stub_dev_t *devstub, BOOLEAN is_in, USHORT cmd, UC
 	status = call_usbd(devstub, &Urb);
 	if (NT_SUCCESS(status)) {
 		*plen = Urb.UrbControlVendorClassRequest.TransferBufferLength;
-		return TRUE;
+		return 0;
 	}
-	return FALSE;
+	/*
+	 * TODO: apply STALL error like as set_feature.
+	 * Should be checked that this error might be better handled in call_usbd().
+	 */
+	if (status == STATUS_UNSUCCESSFUL && Urb.UrbHeader.Status == USBD_STATUS_STALL_PID)
+		return to_usbip_status(Urb.UrbHeader.Status);
+	return -1;
 }
 
 static void
