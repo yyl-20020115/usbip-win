@@ -215,6 +215,17 @@ create_pipe(HANDLE *phRead, HANDLE *phWrite)
 	return TRUE;
 }
 
+static char* get_exe_path(const char* name) {
+	char buffer[4096] = { 0 };
+	GetModuleFileNameA(0, buffer, sizeof(buffer));
+	char* p = strrchr(buffer, '\\');
+	if (p != 0) {
+		*(p + 1) = '\0';
+	}
+	strcat_s(buffer, sizeof(buffer), name);
+	return _strdup(buffer);
+}
+
 static int
 execute_attacher(HANDLE hdev, SOCKET sockfd, int rhport)
 {
@@ -222,7 +233,7 @@ execute_attacher(HANDLE hdev, SOCKET sockfd, int rhport)
 	PROCESS_INFORMATION	pi;
 	HANDLE	hRead, hWrite;
 	HANDLE	hdev_attacher, sockfd_attacher;
-	BOOL	res;
+	BOOL	res = 0;
 	int	ret = ERR_GENERAL;
 
 	if (!create_pipe(&hRead, &hWrite))
@@ -234,7 +245,10 @@ execute_attacher(HANDLE hdev, SOCKET sockfd, int rhport)
 	si.dwFlags = STARTF_USESTDHANDLES;
 	ZeroMemory(&pi, sizeof(pi));
 
-	res = CreateProcess(ATTACHER, ATTACHER, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+	char* attacher = get_exe_path(ATTACHER);
+
+	res = CreateProcess(attacher, 0, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+
 	if (!res) {
 		DWORD	err = GetLastError();
 		if (err == ERROR_FILE_NOT_FOUND)
@@ -261,6 +275,9 @@ out_proc:
 out:
 	CloseHandle(hRead);
 	CloseHandle(hWrite);
+	if (attacher != 0) {
+		free(attacher);
+	}
 	return ret;
 }
 
@@ -329,10 +346,13 @@ static BOOL
 check_attacher(void)
 {
 	DWORD	bintype;
+	char* buffer = get_exe_path(ATTACHER);
 
-	if (!GetBinaryType(ATTACHER, &bintype))
-		return FALSE;
-	return TRUE;
+	BOOL d = GetBinaryType(buffer, &bintype);
+	if (buffer != 0) {
+		free(buffer);
+	}
+	return d;
 }
 
 int usbip_attach(int argc, char *argv[])
