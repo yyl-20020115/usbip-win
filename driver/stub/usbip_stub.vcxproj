@@ -208,9 +208,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="usbip_stub.inx">
+    <CopyFileToFolders Include="usbip_stub.inx">
       <FileType>Document</FileType>
-    </None>
+    </CopyFileToFolders>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
